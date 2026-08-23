@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -411,6 +412,55 @@ export const messages = pgTable(
     check(
       "messages_idempotency_key_length_check",
       sql`${table.idempotencyKey} is null or char_length(${table.idempotencyKey}) between 1 and 256`,
+    ),
+  ],
+);
+
+export const messageAttachments = pgTable(
+  "message_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    contentSha256: text("content_sha256").notNull(),
+    storageKey: text("storage_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("message_attachments_storage_key_unique").on(
+      table.storageKey,
+    ),
+    uniqueIndex("message_attachments_message_id_position_unique").on(
+      table.messageId,
+      table.position,
+    ),
+    index("message_attachments_message_id_idx").on(table.messageId),
+    check(
+      "message_attachments_position_check",
+      sql`${table.position} between 0 and 99`,
+    ),
+    check(
+      "message_attachments_byte_size_check",
+      sql`${table.byteSize} between 1 and 10485760`,
+    ),
+    check(
+      "message_attachments_content_sha256_check",
+      sql`${table.contentSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "message_attachments_filename_length_check",
+      sql`char_length(${table.filename}) between 1 and 255`,
+    ),
+    check(
+      "message_attachments_content_type_check",
+      sql`${table.contentType} ~ '^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$'`,
     ),
   ],
 );

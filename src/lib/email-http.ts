@@ -1,4 +1,5 @@
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
+import { AttachmentStorageError } from "@/lib/attachment-storage";
 import { DomainError } from "@/lib/domain-core";
 import { EmailError } from "@/lib/email-core";
 import type { QueuedMessageRecord } from "@/lib/messages";
@@ -25,6 +26,24 @@ export function emailJson(
 
 export function describeEmailFailure(error: unknown) {
   if (error instanceof EmailError) {
+    if (error.code === "ATTACHMENTS_TOO_LARGE") {
+      return {
+        body: {
+          error: {
+            code: "attachment_size_exceeded",
+            fields: [
+              {
+                field: "attachments",
+                message: "Attachments must total at most 10 MiB.",
+              },
+            ],
+            message: "Reduce the attachment size and try again.",
+          },
+        },
+        status: 413,
+      };
+    }
+
     if (error.code === "IDEMPOTENCY_CONFLICT") {
       return {
         body: {
@@ -63,6 +82,19 @@ export function describeEmailFailure(error: unknown) {
         },
       },
       status: 422,
+    };
+  }
+
+  if (error instanceof AttachmentStorageError) {
+    return {
+      body: {
+        error: {
+          code: "attachment_storage_unavailable",
+          message:
+            "Attachment storage is unavailable. Ask the PaperBoy operator to check its private storage configuration.",
+        },
+      },
+      status: 503,
     };
   }
 

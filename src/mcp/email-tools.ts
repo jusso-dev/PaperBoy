@@ -1,8 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
+import { AttachmentStorageError } from "@/lib/attachment-storage";
 import { DomainError } from "@/lib/domain-core";
-import { EmailError } from "@/lib/email-core";
+import {
+  EmailError,
+  MAX_ATTACHMENT_BYTES,
+} from "@/lib/email-core";
 import type {
   QueuedMessageBatchItem,
   QueuedMessageRecord,
@@ -51,6 +55,20 @@ const tag = z
     value: z.string().min(1).max(256),
   })
   .strict();
+const attachment = z
+  .object({
+    content: z
+      .string()
+      .min(1)
+      .max(Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4),
+    content_type: z
+      .string()
+      .min(3)
+      .max(127)
+      .regex(/^[A-Z0-9!#$&^_.+-]+\/[A-Z0-9!#$&^_.+-]+$/i),
+    filename: z.string().min(1).max(255),
+  })
+  .strict();
 
 const sendEmailPayloadSchema = z
   .object({
@@ -65,6 +83,7 @@ const sendEmailPayloadSchema = z
 
 const sendEmailInputSchema = z
   .object({
+    attachments: z.array(attachment).max(100).optional(),
     from: address,
     html: z.string().max(2 * 1024 * 1024).optional(),
     idempotencyKey: z.string().min(1).max(256).optional(),
@@ -148,7 +167,18 @@ function errorDetails(error: unknown) {
 
   if (error instanceof EmailError) {
     details =
-      error.code === "IDEMPOTENCY_CONFLICT"
+      error.code === "ATTACHMENTS_TOO_LARGE"
+        ? {
+            code: "attachment_size_exceeded",
+            fields: [
+              {
+                field: "attachments",
+                message: "Attachments must total at most 10 MiB.",
+              },
+            ],
+            message: "Reduce the attachment size and try again.",
+          }
+        : error.code === "IDEMPOTENCY_CONFLICT"
         ? {
             code: "idempotency_conflict",
             message:
@@ -169,6 +199,12 @@ function errorDetails(error: unknown) {
         error.code === "INVALID_DOMAIN"
           ? "The From address must use a valid sending domain."
           : "Verify the From domain before sending with a live API key.",
+    };
+  } else if (error instanceof AttachmentStorageError) {
+    details = {
+      code: "attachment_storage_unavailable",
+      message:
+        "Attachment storage is unavailable. Ask the PaperBoy operator to check its private storage configuration.",
     };
   }
 

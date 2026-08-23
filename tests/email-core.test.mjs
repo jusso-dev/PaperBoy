@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   EmailError,
@@ -18,6 +19,7 @@ test("Resend-shaped email input is normalized without building MIME", () => {
   });
 
   assert.deepEqual(parsed, {
+    attachments: [],
     from: "PaperBoy <News@xn--mnchen-3ya.example>",
     fromAddress: "News@xn--mnchen-3ya.example",
     fromDomain: "xn--mnchen-3ya.example",
@@ -28,6 +30,7 @@ test("Resend-shaped email input is normalized without building MIME", () => {
     to: ["Reader <reader@example.com>"],
   });
   assert.deepEqual(Object.keys(parsed).sort(), [
+    "attachments",
     "from",
     "fromAddress",
     "fromDomain",
@@ -57,7 +60,7 @@ test("missing from and to return field-specific validation issues", () => {
   );
 });
 
-test("header injection and out-of-scope fields are rejected", () => {
+test("header injection is rejected while attachments are a supported field", () => {
   assert.throws(
     () =>
       parseSendEmailInput({
@@ -71,7 +74,7 @@ test("header injection and out-of-scope fields are rejected", () => {
       assert.equal(error instanceof EmailError, true);
       assert.deepEqual(
         new Set(error.issues.map((issue) => issue.field)),
-        new Set(["attachments", "from", "subject"]),
+        new Set(["from", "subject"]),
       );
       return true;
     },
@@ -97,6 +100,21 @@ test("idempotency keys and canonical request hashes are deterministic", () => {
   assert.equal(normalizeIdempotencyKey("order-123"), "order-123");
   assert.equal(normalizeIdempotencyKey(null), null);
   assert.equal(emailRequestHash(first), emailRequestHash(second));
+  assert.equal(
+    emailRequestHash(first),
+    createHash("sha256")
+      .update(
+        JSON.stringify({
+          from: first.from,
+          html: first.html,
+          subject: first.subject,
+          tags: first.tags,
+          text: first.text,
+          to: first.to,
+        }),
+      )
+      .digest("hex"),
+  );
   assert.match(emailRequestHash(first), /^[0-9a-f]{64}$/);
   assert.throws(() => normalizeIdempotencyKey("contains a space"), EmailError);
 });

@@ -124,12 +124,12 @@ const resourceDefinitions = [
 const configurationDocument = `# PaperBoy MCP configuration
 
 - Remote agents use Streamable HTTP at \`/api/mcp\` with \`Authorization: Bearer <PaperBoy API key>\`.
-- Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\`, \`PAPERBOY_API_KEY\`, and \`PAPERBOY_DKIM_ENCRYPTION_KEY\` injected through the process environment.
+- Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\`, \`PAPERBOY_API_KEY\`, \`PAPERBOY_DKIM_ENCRYPTION_KEY\`, and the private \`PAPERBOY_ATTACHMENT_STORAGE_PATH\` injected through the process environment.
 - Never put an API key in a tool argument, URL, command-line argument, source file, or diagnostic log.
 - A key is bound to one organization and one environment (\`live\` or \`test\`).
 - Domain mutations re-check the key creator's current organization role.
 - DKIM tools return public DNS material only. PaperBoy private keys remain encrypted at rest and never enter tool output.
-- paperboy_send_email and paperboy_send_email_batch use the same validation, domain authorization, and queue services as their HTTP peers. Test keys always select the test sink; batch results preserve input order and report failures per item.
+- paperboy_send_email and paperboy_send_email_batch use the same validation, domain authorization, and queue services as their HTTP peers. Single sends can persist private attachments outside PostgreSQL; batch sends reject them. Tool output never includes attachment content. Test keys always select the test sink; batch results preserve input order and report failures per item.
 - Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
 - Revocation denies the next authenticated HTTP request or stdio tool call. Reconnect with a newly issued key.

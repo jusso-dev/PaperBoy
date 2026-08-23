@@ -17,7 +17,16 @@ export type EmailTag = {
   value: string;
 };
 
+export type EmailAttachment = {
+  content: Buffer;
+  contentSha256: string;
+  contentType: string;
+  filename: string;
+  size: number;
+};
+
 export type SendEmailInput = {
+  attachments: EmailAttachment[];
   from: string;
   fromAddress: string;
   fromDomain: string;
@@ -34,6 +43,7 @@ export type EmailValidationIssue = {
 };
 
 export type EmailErrorCode =
+  | "ATTACHMENTS_TOO_LARGE"
   | "IDEMPOTENCY_CONFLICT"
   | "VALIDATION_ERROR";
 
@@ -48,14 +58,28 @@ export class EmailError extends Error {
 }
 
 const MAX_ADDRESS_LENGTH = 254;
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENTS = 100;
 const MAX_BODY_LENGTH = 2 * 1024 * 1024;
 const MAX_RECIPIENTS = 50;
 const MAX_SUBJECT_LENGTH = 998;
 const MAX_TAGS = 75;
 const MAX_TAG_LENGTH = 256;
-const SEND_FIELDS = new Set(["from", "to", "subject", "html", "text", "tags"]);
+const SEND_FIELDS = new Set([
+  "attachments",
+  "from",
+  "to",
+  "subject",
+  "html",
+  "text",
+  "tags",
+]);
 const LOCAL_PART_PATTERN = /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/i;
 const TAG_PATTERN = /^[A-Z0-9_-]+$/i;
+const CONTENT_TYPE_PATTERN =
+  /^[A-Z0-9!#$&^_.+-]+\/[A-Z0-9!#$&^_.+-]+$/i;
+const MAX_ATTACHMENT_BASE64_LENGTH =
+  Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -155,7 +179,7 @@ function parseTags(
 
   const tags: EmailTag[] = [];
 
-  value.forEach((candidate, index) => {
+  value.slice(0, MAX_TAGS).forEach((candidate, index) => {
     if (
       !isRecord(candidate) ||
       Object.keys(candidate).some((key) => key !== "name" && key !== "value")
@@ -203,7 +227,128 @@ function parseTags(
   return tags;
 }
 
-export function parseSendEmailInput(value: unknown): SendEmailInput {
+function parseAttachments(
+  value: unknown,
+  issues: EmailValidationIssue[],
+): EmailAttachment[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    issues.push({ field: "attachments", message: "Must be an array." });
+    return [];
+  }
+
+  if (value.length > MAX_ATTACHMENTS) {
+    issues.push({
+      field: "attachments",
+      message: `Must contain at most ${MAX_ATTACHMENTS} files.`,
+    });
+  }
+
+  const attachments: EmailAttachment[] = [];
+  let totalBytes = 0;
+
+  value.slice(0, MAX_ATTACHMENTS).forEach((candidate, index) => {
+    if (
+      !isRecord(candidate) ||
+      Object.keys(candidate).some(
+        (key) =>
+          key !== "content" &&
+          key !== "content_type" &&
+          key !== "filename",
+      )
+    ) {
+      issues.push({
+        field: `attachments.${index}`,
+        message: "Must contain only content, content_type, and filename.",
+      });
+      return;
+    }
+
+    const content = candidate.content;
+    const contentType = candidate.content_type;
+    const filename = candidate.filename;
+    let decoded: Buffer | null = null;
+
+    if (typeof content !== "string" || content.length === 0) {
+      issues.push({
+        field: `attachments.${index}.content`,
+        message: "Provide canonical Base64 file content.",
+      });
+    } else if (content.length > MAX_ATTACHMENT_BASE64_LENGTH) {
+      throw new EmailError("ATTACHMENTS_TOO_LARGE");
+    } else {
+      decoded = Buffer.from(content, "base64");
+
+      if (
+        decoded.length === 0 ||
+        decoded.toString("base64") !== content
+      ) {
+        issues.push({
+          field: `attachments.${index}.content`,
+          message: "Provide canonical Base64 file content.",
+        });
+        decoded = null;
+      }
+    }
+
+    if (
+      typeof filename !== "string" ||
+      filename.length === 0 ||
+      filename !== filename.trim() ||
+      Buffer.byteLength(filename, "utf8") > 255 ||
+      /[\\/\u0000-\u001f\u007f]/.test(filename) ||
+      filename === "." ||
+      filename === ".."
+    ) {
+      issues.push({
+        field: `attachments.${index}.filename`,
+        message:
+          "Use a filename of at most 255 bytes without paths or control characters.",
+      });
+    }
+
+    if (
+      typeof contentType !== "string" ||
+      contentType.length > 127 ||
+      !CONTENT_TYPE_PATTERN.test(contentType)
+    ) {
+      issues.push({
+        field: `attachments.${index}.content_type`,
+        message: "Use a MIME type such as application/pdf or image/png.",
+      });
+    }
+
+    if (
+      decoded &&
+      typeof filename === "string" &&
+      typeof contentType === "string"
+    ) {
+      totalBytes += decoded.length;
+
+      if (totalBytes > MAX_ATTACHMENT_BYTES) {
+        throw new EmailError("ATTACHMENTS_TOO_LARGE");
+      }
+
+      attachments.push({
+        content: decoded,
+        contentSha256: createHash("sha256").update(decoded).digest("hex"),
+        contentType: contentType.toLowerCase(),
+        filename,
+        size: decoded.length,
+      });
+    }
+  });
+
+  return attachments;
+}
+
+export function parseSendEmailInput(
+  value: unknown,
+  options: { allowAttachments?: boolean } = {},
+): SendEmailInput {
   if (!isRecord(value)) {
     throw new EmailError("VALIDATION_ERROR", [
       { field: "body", message: "Must be a JSON object." },
@@ -217,6 +362,18 @@ export function parseSendEmailInput(value: unknown): SendEmailInput {
       issues.push({ field, message: "This field is not supported." });
     }
   }
+
+  if (value.attachments !== undefined && options.allowAttachments === false) {
+    issues.push({
+      field: "attachments",
+      message: "Attachments are not supported by the batch endpoint.",
+    });
+  }
+
+  const attachments =
+    options.allowAttachments === false
+      ? []
+      : parseAttachments(value.attachments, issues);
 
   const parsedFrom = parseAddress(value.from);
 
@@ -288,6 +445,7 @@ export function parseSendEmailInput(value: unknown): SendEmailInput {
   }
 
   return {
+    attachments,
     from: parsedFrom.formatted,
     fromAddress: parsedFrom.address,
     fromDomain: parsedFrom.domain,
@@ -331,6 +489,16 @@ export function emailRequestHash(input: SendEmailInput): string {
         tags: input.tags,
         text: input.text,
         to: input.to,
+        ...(input.attachments.length === 0
+          ? {}
+          : {
+              attachments: input.attachments.map((attachment) => ({
+                contentSha256: attachment.contentSha256,
+                contentType: attachment.contentType,
+                filename: attachment.filename,
+                size: attachment.size,
+              })),
+            }),
       }),
     )
     .digest("hex");

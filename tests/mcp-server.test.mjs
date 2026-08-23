@@ -209,6 +209,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_domains: [],
       paperboy_rotate_domain_dkim: ["domainId"],
       paperboy_send_email: [
+        "attachments",
         "from",
         "html",
         "idempotencyKey",
@@ -427,6 +428,13 @@ test("sending is a first-class tenant-bound MCP operation with UTC metadata", as
     async (client) => {
       const result = await client.callTool({
         arguments: {
+          attachments: [
+            {
+              content: "cHJpdmF0ZQ==",
+              content_type: "text/plain",
+              filename: "private.txt",
+            },
+          ],
           from: "sender@example.com",
           idempotencyKey: "message-123",
           subject: "Hello",
@@ -441,6 +449,13 @@ test("sending is a first-class tenant-bound MCP operation with UTC metadata", as
       assert.deepEqual(received, {
         idempotencyKey: "message-123",
         payload: {
+          attachments: [
+            {
+              content: "cHJpdmF0ZQ==",
+              content_type: "text/plain",
+              filename: "private.txt",
+            },
+          ],
           from: "sender@example.com",
           subject: "Hello",
           tags: [{ name: "kind", value: "receipt" }],
@@ -460,6 +475,7 @@ test("sending is a first-class tenant-bound MCP operation with UTC metadata", as
         status: "queued",
       });
       assert.equal(JSON.stringify(result).includes("Body"), false);
+      assert.equal(JSON.stringify(result).includes("cHJpdmF0ZQ=="), false);
     },
   );
 });

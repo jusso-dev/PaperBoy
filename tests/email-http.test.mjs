@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { generateApiKey } from "../src/lib/api-key-crypto.ts";
+import { AttachmentStorageError } from "../src/lib/attachment-storage.ts";
 import {
   EmailError,
   emailRequestHash,
@@ -158,4 +159,41 @@ test("invalid JSON and an invalid bearer key fail without queueing", async () =>
   assert.equal(unauthorized.status, 401);
   assert.match(unauthorized.headers.get("WWW-Authenticate"), /Bearer/);
   assert.equal(queued.length, 0);
+});
+
+test("oversized attachment errors return 413", async () => {
+  const { dependencies } = testDependencies();
+  dependencies.queue = async () => {
+    throw new EmailError("ATTACHMENTS_TOO_LARGE");
+  };
+  const response = await handleSendEmailRequest(
+    request(validBody),
+    dependencies,
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 413);
+  assert.equal(body.error.code, "attachment_size_exceeded");
+  assert.deepEqual(body.error.fields, [
+    {
+      field: "attachments",
+      message: "Attachments must total at most 10 MiB.",
+    },
+  ]);
+});
+
+test("private attachment storage failures return an actionable 503", async () => {
+  const { dependencies } = testDependencies();
+  dependencies.queue = async () => {
+    throw new AttachmentStorageError("WRITE_FAILED");
+  };
+  const response = await handleSendEmailRequest(
+    request(validBody),
+    dependencies,
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 503);
+  assert.equal(body.error.code, "attachment_storage_unavailable");
+  assert.equal(JSON.stringify(body).includes("WRITE_FAILED"), false);
 });
