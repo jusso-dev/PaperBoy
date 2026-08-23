@@ -1,0 +1,24 @@
+:root {
+  --paper: #f7f3ea;
+  --ink: #1a1a1a;
+  --accent: #7eb8da;
+  --rule: #d8d2c4;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family:
+    ui-serif, Georgia, "Times New Roman", Times, serif;
+}
+
+a {
+  color: inherit;
+}
