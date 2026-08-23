@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   jsonb,
   pgTable,
@@ -29,6 +31,12 @@ export const users = pgTable(
     emailVerified: boolean("email_verified").default(false).notNull(),
     image: text("image"),
     timezone: text("timezone").default("UTC").notNull(),
+    defaultOrgId: uuid("default_org_id").references(() => orgs.id, {
+      onDelete: "set null",
+    }),
+    activeOrgId: uuid("active_org_id").references(() => orgs.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -37,7 +45,83 @@ export const users = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [uniqueIndex("users_email_unique").on(table.email)],
+  (table) => [
+    uniqueIndex("users_email_unique").on(table.email),
+    uniqueIndex("users_default_org_id_unique").on(table.defaultOrgId),
+    index("users_active_org_id_idx").on(table.activeOrgId),
+  ],
+);
+
+export const orgMembers = pgTable(
+  "org_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").default("member").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("org_members_org_id_user_id_unique").on(
+      table.orgId,
+      table.userId,
+    ),
+    index("org_members_org_id_idx").on(table.orgId),
+    index("org_members_user_id_idx").on(table.userId),
+    check(
+      "org_members_role_check",
+      sql`${table.role} in ('owner', 'admin', 'member')`,
+    ),
+  ],
+);
+
+export const orgInvites = pgTable(
+  "org_invites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role").default("member").notNull(),
+    invitedByUserId: text("invited_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    acceptedByUserId: text("accepted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("org_invites_org_id_email_unique").on(
+      table.orgId,
+      table.email,
+    ),
+    index("org_invites_org_id_idx").on(table.orgId),
+    index("org_invites_email_idx").on(table.email),
+    check(
+      "org_invites_role_check",
+      sql`${table.role} in ('admin', 'member')`,
+    ),
+  ],
 );
 
 export const sessions = pgTable(

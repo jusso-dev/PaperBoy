@@ -5,6 +5,7 @@ import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
+import { ensureDefaultOrganization } from "@/lib/organizations";
 import { normalizeTimeZone } from "@/lib/time";
 
 const secret = process.env.BETTER_AUTH_SECRET;
@@ -30,8 +31,49 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user, context) => {
+          try {
+            await ensureDefaultOrganization({
+              activeOrgId:
+                typeof user.activeOrgId === "string" ? user.activeOrgId : null,
+              defaultOrgId:
+                typeof user.defaultOrgId === "string"
+                  ? user.defaultOrgId
+                  : null,
+              id: user.id,
+              name: user.name,
+            });
+          } catch (error) {
+            if (context) {
+              context.context.logger.error(
+                "Failed to provision a default organization; the next authenticated request will retry",
+                error,
+              );
+            } else {
+              console.error(
+                "Failed to provision a default organization; the next authenticated request will retry",
+              );
+            }
+          }
+        },
+      },
+    },
+  },
   user: {
     additionalFields: {
+      activeOrgId: {
+        type: "string",
+        input: false,
+        required: false,
+      },
+      defaultOrgId: {
+        type: "string",
+        input: false,
+        required: false,
+      },
       timezone: {
         type: "string",
         defaultValue: "UTC",

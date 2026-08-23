@@ -124,6 +124,20 @@ h3 {
   padding-top: 18px;
 }
 
+.session-organization {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-weight: 700;
+}
+
+.session-role {
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
 .session-name {
   font-family: Georgia, "Times New Roman", Times, serif;
   font-weight: 700;
@@ -215,6 +229,12 @@ h3 {
   box-shadow: none;
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.btn-compact {
+  box-shadow: 1px 1px 0 rgba(26, 26, 26, 0.2);
+  font-size: 13px;
+  padding: 4px 10px;
 }
 
 /* ---- Forms ------------------------------------------------------------ */
@@ -336,6 +356,90 @@ select:focus-visible {
   margin-top: 18px;
 }
 
+/* ---- Organizations ---------------------------------------------------- */
+
+.invitation-card {
+  border-left: 4px solid var(--accent);
+}
+
+.invitation-row,
+.organization-heading,
+.inline-form {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.invitation-row + .invitation-row {
+  border-top: 1px solid var(--rule);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.organization-name {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 21px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.organization-switcher {
+  min-width: min(100%, 340px);
+}
+
+.organization-switcher label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.inline-form select {
+  flex: 1;
+}
+
+.invite-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(200px, 1fr) 160px auto;
+  margin-top: 18px;
+}
+
+.invite-form .field {
+  margin-bottom: 0;
+}
+
+.pending-invitations {
+  border-top: 1px solid var(--rule);
+  margin-top: 22px;
+  padding-top: 16px;
+}
+
+.pending-invitations h3 {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.pending-invitations ul {
+  list-style: none;
+}
+
+.pending-invitations li {
+  display: flex;
+  font-size: 14px;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 5px 0;
+}
+
+.pending-invitations li span:last-child {
+  color: var(--ink-soft);
+  text-align: right;
+}
+
 /* ---- Tables ------------------------------------------------------------ */
 
 .table {
@@ -438,5 +542,26 @@ select:focus-visible {
 
   .auth-card {
     padding: 22px 18px;
+  }
+
+  .invitation-row,
+  .organization-heading,
+  .inline-form,
+  .pending-invitations li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .invite-form {
+    grid-template-columns: 1fr;
+  }
+
+  .organization-switcher {
+    margin-top: 12px;
+    width: 100%;
+  }
+
+  .pending-invitations li span:last-child {
+    text-align: left;
   }
 }

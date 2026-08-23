@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { signOutAction } from "./actions";
-import { requireSession } from "@/lib/session";
+import { requireOrganization } from "@/lib/session";
 
 const navItems = [
   { href: "/app", label: "Overview" },
   { href: "/app/send", label: "Send" },
   { href: "/app/logs", label: "Logs" },
   { href: "/app/domains", label: "Domains" },
+  { href: "/app/organization", label: "Organization" },
   { href: "/app/settings", label: "Settings" },
 ];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireSession();
+  const { organization, session } = await requireOrganization();
 
   return (
     <div className="shell">
@@ -27,6 +28,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </ul>
         </nav>
         <div className="session-controls">
+          <p className="session-organization">{organization.name}</p>
+          <p className="session-role">{organization.role}</p>
           <p className="session-name">{session.user.name}</p>
           <p className="session-email">{session.user.email}</p>
           <form action={signOutAction}>
