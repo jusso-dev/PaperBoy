@@ -57,6 +57,9 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 2.0.0
         version: 2.0.0
+      '@redocly/cli':
+        specifier: 2.47.0
+        version: 2.47.0
       '@types/mailparser':
         specifier: 3.4.6
         version: 3.4.6
@@ -87,6 +90,8 @@ importers:
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
+
+  packages/sdk: {}
 
 packages:
 
@@ -1090,6 +1095,11 @@ packages:
 
   '@postalsys/vmc@1.1.5':
     resolution: {integrity: sha512-WwleGWC51o/VWQFTId6xMiO9aqkIVCM7ODy6UWfzFoQ6UzXewsNrm3ANa4HbBcyYaTK6YPvp4Gt0U+1cXLTbzw==}
+
+  '@redocly/cli@2.47.0':
+    resolution: {integrity: sha512-4sv638LZxiUSsNGqfWPzA2hrNM4KrNRc9jOaH9igqDJlZimiGCYliVpbdrWvfL/YlaSnIBpJE1O1CveXDYTTWw==}
+    engines: {node: '>=22.12.0 || >=20.19.0 <21.0.0', npm: '>=10'}
+    hasBin: true
 
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
@@ -3668,6 +3678,8 @@ snapshots:
       '@peculiar/asn1-schema': 2.8.0
       '@peculiar/asn1-x509': 2.8.0
       '@peculiar/asn1-x509-logotype': 2.8.0
+
+  '@redocly/cli@2.47.0': {}
 
   '@rtsao/scc@1.1.0': {}
 

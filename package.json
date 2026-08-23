@@ -10,6 +10,8 @@
     "start": "next start",
     "lint": "eslint .",
     "mcp:stdio": "tsx src/mcp/stdio.ts",
+    "openapi:lint": "redocly lint openapi.yaml",
+    "sdk:build": "tsc -p packages/sdk/tsconfig.json",
     "worker": "tsx src/worker.ts",
     "test": "tsx --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
@@ -37,6 +39,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@modelcontextprotocol/client": "2.0.0",
+    "@redocly/cli": "2.47.0",
     "@types/mailparser": "3.4.6",
     "@types/node": "^24.3.0",
     "@types/nodemailer": "8.0.1",

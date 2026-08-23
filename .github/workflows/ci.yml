@@ -48,11 +48,17 @@ jobs:
       - name: Start Mailpit
         run: docker compose -f compose.dev.yml up -d --wait mailpit
 
+      - name: Lint OpenAPI
+        run: pnpm openapi:lint
+
       - name: Lint
         run: pnpm lint
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Build TypeScript SDK
+        run: pnpm sdk:build
 
       - name: Migrate test database
         run: pnpm db:migrate

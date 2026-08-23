@@ -1,0 +1,794 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: PaperBoy HTTP API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Tenant-bound transactional email API. API keys select one organization and
+    one live or test environment. Stored instants and HTTP timestamps are RFC
+    3339 UTC. The queue is provider-neutral: self-hosted SMTP and Cloudflare
+    Email Service use the same messages, limits, suppressions, and event model.
+servers:
+  - url: /
+    description: Same origin as the PaperBoy deployment
+security:
+  - bearerAuth: []
+tags:
+  - name: Emails
+    description: Queue one message and inspect its environment-scoped state.
+  - name: Events
+    description: Read one message's ordered delivery lifecycle.
+  - name: Webhooks
+    description: Configure the organization's signed event destination.
+x-paperboy-mcp:
+  description: >-
+    MCP is a peer interface over the same tenant-bound services. Protocol
+    timestamps remain UTC and organization context always comes from the key.
+  equivalents:
+    sendEmail: paperboy_send_email
+    getEmail: paperboy_get_delivery_status
+    listEmailEvents: paperboy_list_message_events
+    getWebhook: paperboy_get_webhook
+    configureWebhook: paperboy_configure_webhook
+paths:
+  /api/v1/emails:
+    post:
+      operationId: sendEmail
+      tags: [Emails]
+      summary: Queue one email
+      description: >-
+        Validates and stores one provider-neutral message. Test keys always use
+        the isolated test sink. Live keys require a verified organization domain
+        and active DKIM state. Cloudflare Email Service remains responsible for
+        provider-owned DKIM and ARC signatures.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendEmailInput'
+      responses:
+        '200':
+          description: Message accepted or safely replayed under the same idempotency key.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueuedEmail'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The idempotency key was already used with a different request.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413':
+          description: Decoded attachments exceed the 10 MiB per-message limit.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          description: The organization reached its fixed UTC-minute environment limit.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Retry-After:
+              description: Whole seconds until the shared organization window resets.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/v1/emails/{emailId}:
+    parameters:
+      - $ref: '#/components/parameters/EmailId'
+    get:
+      operationId: getEmail
+      tags: [Emails]
+      summary: Get one email
+      description: >-
+        Returns one message from the organization and environment selected by
+        the bearer key. Attachment metadata is safe; stored bytes, hashes, and
+        storage keys are never returned.
+      responses:
+        '200':
+          description: Current message state and semantic content.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Email'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/emails/{emailId}/events:
+    parameters:
+      - $ref: '#/components/parameters/EmailId'
+    get:
+      operationId: listEmailEvents
+      tags: [Events]
+      summary: List one email's events
+      description: >-
+        Returns the stable UTC lifecycle ordered by creation instant and an
+        internal sequence. The internal sequence is not exposed.
+      responses:
+        '200':
+          description: Ordered message event list.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MessageEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/webhooks:
+    get:
+      operationId: getWebhook
+      tags: [Webhooks]
+      summary: Read webhook configuration
+      description: Returns safe endpoint metadata and never returns signing secret material.
+      responses:
+        '200':
+          description: Current configuration, or null when none exists.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookReadEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: configureWebhook
+      tags: [Webhooks]
+      summary: Configure webhook delivery
+      description: >-
+        Creates or replaces the organization endpoint. A signing secret is
+        returned only on first creation; later configuration returns null.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookConfigurationInput'
+      responses:
+        '200':
+          description: Saved endpoint and one-time signing secret state.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookConfigurationEnvelope'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+webhooks:
+  messageEvent:
+    post:
+      operationId: receiveMessageEvent
+      tags: [Webhooks]
+      summary: Receive a signed message event
+      description: >-
+        PaperBoy posts this request to the configured endpoint. Verify the raw
+        request body before JSON parsing. Compute Base64 HMAC-SHA256 over
+        `<webhook-id>.<webhook-timestamp>.<raw-body>` using the Base64-decoded
+        portion of the `whsec_` secret, compare in constant time, and reject
+        timestamps outside five minutes.
+      security: []
+      parameters:
+        - name: webhook-id
+          in: header
+          required: true
+          description: Stable event UUID; unchanged across retries.
+          schema:
+            type: string
+            format: uuid
+        - name: webhook-timestamp
+          in: header
+          required: true
+          description: Unix timestamp in whole seconds for this attempt.
+          schema:
+            type: integer
+            minimum: 0
+        - name: webhook-signature
+          in: header
+          required: true
+          description: Versioned signature in `v1,<Base64 HMAC-SHA256>` form.
+          schema:
+            type: string
+            pattern: '^v1,[A-Za-z0-9+/]+={0,2}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookEvent'
+      responses:
+        2XX:
+          description: Any 2xx response acknowledges the event and stops retries.
+        '400':
+          description: Receiver rejected an invalid or stale signed request.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: pb_live_... or pb_test_...
+      description: >-
+        Organization- and environment-bound PaperBoy API key. Keep it in a
+        protected server environment and never place it in a URL.
+  parameters:
+    EmailId:
+      name: emailId
+      in: path
+      required: true
+      description: PaperBoy message UUID.
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        Optional 1-256 visible ASCII characters. Reusing it with the normalized
+        same request returns the original message ID.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+        pattern: '^[!-~]+$'
+  headers:
+    NoStore:
+      description: Private API responses are never cacheable.
+      schema:
+        type: string
+        const: no-store
+  responses:
+    InvalidJson:
+      description: Request body is not valid JSON.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: Bearer key is missing, malformed, or revoked.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+        WWW-Authenticate:
+          description: PaperBoy bearer challenge.
+          schema:
+            type: string
+            example: Bearer realm="PaperBoy"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: The API-key creator's current membership or role no longer permits the operation.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: The tenant- or environment-scoped resource does not exist.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ValidationFailed:
+      description: One or more request fields are invalid or the recipient/domain is unavailable.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalError:
+      description: PaperBoy could not complete the operation.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unavailable:
+      description: Required operator configuration or private storage is unavailable.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    SendEmailInput:
+      oneOf:
+        - $ref: '#/components/schemas/InlineEmailInput'
+        - $ref: '#/components/schemas/TemplateEmailInput'
+    InlineEmailInput:
+      type: object
+      additionalProperties: false
+      required: [from, to, subject]
+      anyOf:
+        - required: [html]
+          properties:
+            html:
+              type: string
+              minLength: 1
+        - required: [text]
+          properties:
+            text:
+              type: string
+              minLength: 1
+      properties:
+        from:
+          $ref: '#/components/schemas/Sender'
+        to:
+          $ref: '#/components/schemas/Recipients'
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 998
+          pattern: '^(?=.*\S)[^\r\n]*$'
+        html:
+          type: string
+          maxLength: 2097152
+        text:
+          type: string
+          maxLength: 2097152
+        tags:
+          $ref: '#/components/schemas/EmailTags'
+        attachments:
+          $ref: '#/components/schemas/EmailAttachments'
+    TemplateEmailInput:
+      type: object
+      additionalProperties: false
+      required: [from, to, template_id]
+      properties:
+        from:
+          $ref: '#/components/schemas/Sender'
+        to:
+          $ref: '#/components/schemas/Recipients'
+        template_id:
+          type: string
+          format: uuid
+        data:
+          type: object
+          additionalProperties: true
+          default: {}
+        tags:
+          $ref: '#/components/schemas/EmailTags'
+        attachments:
+          $ref: '#/components/schemas/EmailAttachments'
+    Sender:
+      type: string
+      minLength: 3
+      maxLength: 320
+      description: Plain address or `Display name <address@example.com>` form.
+      examples:
+        - PaperBoy <news@mail.example.com>
+    Recipients:
+      oneOf:
+        - type: string
+          minLength: 3
+          maxLength: 320
+        - type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            minLength: 3
+            maxLength: 320
+    EmailTags:
+      type: array
+      maxItems: 75
+      items:
+        $ref: '#/components/schemas/EmailTag'
+      default: []
+    EmailTag:
+      type: object
+      additionalProperties: false
+      required: [name, value]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[A-Za-z0-9_-]+$'
+        value:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[A-Za-z0-9_-]+$'
+    EmailAttachments:
+      type: array
+      maxItems: 100
+      description: Decoded bytes across all items may total at most 10 MiB.
+      items:
+        $ref: '#/components/schemas/EmailAttachment'
+      default: []
+    EmailAttachment:
+      type: object
+      additionalProperties: false
+      required: [content, filename, content_type]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          contentEncoding: base64
+          description: Canonical Base64 file bytes.
+        filename:
+          type: string
+          minLength: 1
+          description: At most 255 UTF-8 bytes; paths and control characters are rejected.
+        content_type:
+          type: string
+          minLength: 3
+          maxLength: 127
+          pattern: '^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$'
+    QueuedEmail:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+    Email:
+      type: object
+      additionalProperties: false
+      required:
+        - attachments
+        - attempt_count
+        - created_at
+        - delivery_mode
+        - domain_id
+        - environment
+        - failed_at
+        - failure_reason
+        - from
+        - html
+        - id
+        - last_attempt_at
+        - last_error_code
+        - next_attempt_at
+        - object
+        - open_tracking_enabled
+        - sent_at
+        - status
+        - subject
+        - tags
+        - text
+        - to
+        - updated_at
+      properties:
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoredAttachment'
+        attempt_count:
+          type: integer
+          minimum: 0
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        delivery_mode:
+          type: string
+          enum: [live, test-sink]
+        domain_id:
+          type: [string, 'null']
+          format: uuid
+        environment:
+          type: string
+          enum: [live, test]
+        failed_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        failure_reason:
+          type: [string, 'null']
+        from:
+          type: string
+        html:
+          type: [string, 'null']
+        id:
+          type: string
+          format: uuid
+        last_attempt_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        last_error_code:
+          type: [string, 'null']
+        next_attempt_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        object:
+          type: string
+          const: email
+        open_tracking_enabled:
+          type: boolean
+        sent_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        status:
+          type: string
+          enum: [queued, sending, sent, failed]
+        subject:
+          type: string
+        tags:
+          $ref: '#/components/schemas/EmailTags'
+        text:
+          type: [string, 'null']
+        to:
+          type: array
+          items:
+            type: string
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    StoredAttachment:
+      type: object
+      additionalProperties: false
+      required: [content_type, filename, id, size]
+      properties:
+        content_type:
+          type: string
+        filename:
+          type: string
+        id:
+          type: string
+          format: uuid
+        size:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+    MessageEvent:
+      type: object
+      additionalProperties: false
+      required: [created_at, data, id, message_id, type]
+      properties:
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        data:
+          type: object
+          additionalProperties: true
+        id:
+          type: string
+          format: uuid
+        message_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [queued, delivered, bounced, complained, opened]
+    WebhookConfigurationInput:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: HTTPS URL without embedded credentials or a fragment.
+    WebhookEndpoint:
+      type: object
+      additionalProperties: false
+      required: [created_at, id, updated_at, url]
+      properties:
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        id:
+          type: string
+          format: uuid
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        url:
+          type: string
+          format: uri
+    WebhookReadEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/WebhookEndpoint'
+            - type: 'null'
+    WebhookConfigurationEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/WebhookConfiguredEndpoint'
+    WebhookConfiguredEndpoint:
+      type: object
+      additionalProperties: false
+      required: [created_at, id, signing_secret, updated_at, url]
+      properties:
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        id:
+          type: string
+          format: uuid
+        signing_secret:
+          type: [string, 'null']
+          description: Returned only on first creation and never by GET.
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        url:
+          type: string
+          format: uri
+    WebhookEvent:
+      type: object
+      additionalProperties: false
+      required: [created_at, data, type]
+      properties:
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        data:
+          type: object
+          additionalProperties: false
+          required: [email_id, environment]
+          properties:
+            email_id:
+              type: string
+              format: uuid
+            environment:
+              type: string
+              enum: [live, test]
+        type:
+          type: string
+          enum:
+            - email.queued
+            - email.delivered
+            - email.bounced
+            - email.complained
+            - email.opened
+    UtcDateTime:
+      type: string
+      format: date-time
+      description: RFC 3339 UTC instant. PaperBoy serializes this with a trailing `Z`.
+      examples:
+        - '2026-08-24T00:00:00.000Z'
+    NullableUtcDateTime:
+      oneOf:
+        - $ref: '#/components/schemas/UtcDateTime'
+        - type: 'null'
+    ValidationIssue:
+      type: object
+      additionalProperties: false
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            fields:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidationIssue'
+            environment:
+              type: string
+              enum: [live, test]
+            limit:
+              type: integer
+              minimum: 1
+            retry_after_seconds:
+              type: integer
+              minimum: 1
+    RateLimitErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - environment
+            - limit
+            - message
+            - retry_after_seconds
+          properties:
+            code:
+              type: string
+              const: rate_limit_exceeded
+            environment:
+              type: string
+              enum: [live, test]
+            limit:
+              type: integer
+              minimum: 1
+            message:
+              type: string
+            retry_after_seconds:
+              type: integer
+              minimum: 1

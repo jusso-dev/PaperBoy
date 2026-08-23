@@ -112,6 +112,12 @@ The queue stores semantic `from`, `to`, subject, HTML/text, tags, and private at
 
 Message and event instants are PostgreSQL `timestamptz` values. REST and MCP expose them as RFC 3339 UTC; console presentation uses the signed-in user's persisted IANA timezone.
 
+### OpenAPI and TypeScript SDK
+
+[`openapi.yaml`](openapi.yaml) is the linted OpenAPI 3.1 contract for single-message send/detail/events, webhook configuration, and raw-body signature verification. It also records each operation's first-class MCP equivalent. Validate it with `pnpm openapi:lint`.
+
+The handwritten [`@paperboy/sdk`](packages/sdk/README.md) exposes `send()` and `get(id)` over the same HTTP surface using platform `fetch` and no runtime dependencies. Build JavaScript and declarations with `pnpm sdk:build`; generated `packages/sdk/dist` output is ignored and must not be committed. SDK and MCP timestamps remain UTC, with explicit IANA timezones applied only by presentation clients. Self-hosted SMTP and Cloudflare Email Service consume the same provider-neutral queued message; Cloudflare remains responsible for its provider-owned DKIM/ARC signatures.
+
 ## Outbound worker
 
 Run a supervised worker beside the web process after applying migrations:
