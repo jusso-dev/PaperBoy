@@ -4,6 +4,7 @@ export type OrgRole = (typeof ORG_ROLES)[number];
 
 export const ORG_PERMISSIONS = [
   "apiKeys.create",
+  "apiKeys.read",
   "apiKeys.revoke",
   "domains.create",
   "domains.delete",
@@ -18,6 +19,7 @@ const rolePermissions: Record<OrgRole, ReadonlySet<OrgPermission>> = {
   owner: new Set(ORG_PERMISSIONS),
   admin: new Set([
     "apiKeys.create",
+    "apiKeys.read",
     "apiKeys.revoke",
     "domains.create",
     "domains.delete",

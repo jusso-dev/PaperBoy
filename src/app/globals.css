@@ -440,6 +440,58 @@ select:focus-visible {
   text-align: right;
 }
 
+/* ---- API keys --------------------------------------------------------- */
+
+.api-key-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(200px, 1fr) 150px auto;
+  margin-top: 18px;
+}
+
+.api-key-form .field {
+  margin-bottom: 0;
+}
+
+.key-secret {
+  background: #e2eee5;
+  border: 1px solid #7e9d86;
+  margin-top: 18px;
+  padding: 16px;
+}
+
+.key-secret-title {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.key-secret code {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-heavy);
+  display: block;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+  padding: 10px;
+  user-select: all;
+}
+
+.key-secret-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.key-secret-actions span {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.api-key-table code {
+  overflow-wrap: anywhere;
+}
+
 /* ---- Tables ------------------------------------------------------------ */
 
 .table {
@@ -553,6 +605,10 @@ select:focus-visible {
   }
 
   .invite-form {
+    grid-template-columns: 1fr;
+  }
+
+  .api-key-form {
     grid-template-columns: 1fr;
   }
 

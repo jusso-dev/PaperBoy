@@ -12,6 +12,7 @@ const matrix = {
   owner: new Set(ORG_PERMISSIONS),
   admin: new Set([
     "apiKeys.create",
+    "apiKeys.read",
     "apiKeys.revoke",
     "domains.create",
     "domains.delete",

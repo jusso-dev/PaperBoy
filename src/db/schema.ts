@@ -215,6 +215,7 @@ export const apiKeys = pgTable(
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    keyId: text("key_id").notNull(),
     keyHash: text("key_hash").notNull(),
     environment: text("environment").default("live").notNull(),
     createdByUserId: text("created_by_user_id").references(() => users.id, {
@@ -227,8 +228,13 @@ export const apiKeys = pgTable(
       .notNull(),
   },
   (table) => [
+    uniqueIndex("api_keys_key_id_unique").on(table.keyId),
     uniqueIndex("api_keys_key_hash_unique").on(table.keyHash),
     index("api_keys_org_id_idx").on(table.orgId),
+    check(
+      "api_keys_environment_check",
+      sql`${table.environment} in ('live', 'test')`,
+    ),
   ],
 );
 
