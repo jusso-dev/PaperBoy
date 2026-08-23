@@ -29,6 +29,7 @@ Dark SaaS chrome, generic Tailwind zinc dashboards, marketing-ESP campaign build
 - Keep copy concise, direct, and in Australian English.
 - Persist each user’s IANA timezone and use it for every console, log, and scheduling display. Keep stored instants and public protocol timestamps explicitly UTC.
 - Treat HTTP, console, and MCP as peer interfaces over the same tenant-safe domain services and authorization rules.
+- Treat self-hosted SMTP, AWS SES, Azure Email, and Cloudflare Email as first-class transport choices. Respect provider-managed authentication and never double-sign mail.
 
 ## Accessibility & Inclusion
 

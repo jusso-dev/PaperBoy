@@ -16,6 +16,7 @@ const matrix = {
     "apiKeys.revoke",
     "domains.create",
     "domains.delete",
+    "domains.manageDkim",
     "domains.read",
     "domains.verify",
     "members.invite",

@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { DomainDnsCheckSnapshot } from "@/lib/domain-core";
+import type { DkimKeyStatus } from "@/lib/dkim-core";
 
 export const orgs = pgTable("orgs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -271,6 +272,59 @@ export const domains = pgTable(
     check(
       "domains_status_check",
       sql`${table.status} in ('pending', 'verified')`,
+    ),
+  ],
+);
+
+export const domainDkimKeys = pgTable(
+  "domain_dkim_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    domainId: uuid("domain_id")
+      .notNull()
+      .references(() => domains.id, { onDelete: "cascade" }),
+    selector: text("selector").notNull(),
+    publicKey: text("public_key").notNull(),
+    encryptedPrivateKey: text("encrypted_private_key"),
+    status: text("status").$type<DkimKeyStatus>().default("pending").notNull(),
+    dnsStatus: text("dns_status").default("unchecked").notNull(),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("domain_dkim_keys_domain_id_selector_unique").on(
+      table.domainId,
+      table.selector,
+    ),
+    uniqueIndex("domain_dkim_keys_domain_id_active_unique")
+      .on(table.domainId)
+      .where(sql`${table.status} = 'active'`),
+    uniqueIndex("domain_dkim_keys_domain_id_pending_unique")
+      .on(table.domainId)
+      .where(sql`${table.status} = 'pending'`),
+    uniqueIndex("domain_dkim_keys_domain_id_retiring_unique")
+      .on(table.domainId)
+      .where(sql`${table.status} = 'retiring'`),
+    index("domain_dkim_keys_domain_id_idx").on(table.domainId),
+    check(
+      "domain_dkim_keys_status_check",
+      sql`${table.status} in ('pending', 'active', 'retiring', 'retired')`,
+    ),
+    check(
+      "domain_dkim_keys_dns_status_check",
+      sql`${table.dnsStatus} in ('unchecked', 'matched', 'missing', 'error', 'pending')`,
+    ),
+    check(
+      "domain_dkim_keys_private_key_state_check",
+      sql`(${table.status} = 'retired' and ${table.encryptedPrivateKey} is null) or (${table.status} <> 'retired' and ${table.encryptedPrivateKey} is not null)`,
     ),
   ],
 );

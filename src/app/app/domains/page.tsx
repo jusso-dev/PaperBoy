@@ -1,6 +1,9 @@
 import {
   createDomainAction,
   deleteDomainAction,
+  finalizeDkimRotationAction,
+  rotateDkimAction,
+  setupDkimAction,
   verifyDomainAction,
 } from "./actions";
 import { can } from "@/lib/authorization";
@@ -18,8 +21,13 @@ type DomainsPageProps = {
 const savedMessages: Record<string, string> = {
   checked:
     "DNS check finished. Publish every required record, wait for propagation, then check again.",
-  created: "Domain added. Publish the required DNS records below.",
+  created: "Domain and its first DKIM selector are ready. Publish the required DNS records below.",
   deleted: "Domain deleted.",
+  "dkim-ready": "A DKIM selector is ready to publish.",
+  "rotation-finalised":
+    "DKIM rotation finalised. The retired private key has been destroyed.",
+  "rotation-started":
+    "A new DKIM selector is ready. Publish it, then check DNS to switch without downtime.",
   verified: "Required DNS records matched. Live sending is now allowed for this domain.",
 };
 
@@ -38,6 +46,7 @@ export default async function DomainsPage({ searchParams }: DomainsPageProps) {
   ]);
   const canCreate = can(organization.role, "domains.create");
   const canDelete = can(organization.role, "domains.delete");
+  const canManageDkim = can(organization.role, "domains.manageDkim");
   const canRead = can(organization.role, "domains.read");
   const canVerify = can(organization.role, "domains.verify");
   const sendingDomains = canRead
@@ -114,6 +123,18 @@ export default async function DomainsPage({ searchParams }: DomainsPageProps) {
           {sendingDomains.map((domain) => {
             const records = domainDnsRecords(domain);
             const verified = domain.status === "verified";
+            const activeKey = domain.dkimKeys.find(
+              (key) => key.status === "active",
+            );
+            const pendingKey = domain.dkimKeys.find(
+              (key) => key.status === "pending",
+            );
+            const retiringKey = domain.dkimKeys.find(
+              (key) => key.status === "retiring",
+            );
+            const configuredKeys = domain.dkimKeys.filter(
+              (key) => key.status !== "retired",
+            );
 
             return (
               <article className="card domain-card" key={domain.id}>
@@ -137,10 +158,13 @@ export default async function DomainsPage({ searchParams }: DomainsPageProps) {
 
                 <div className="domain-explainer">
                   <p>
-                    Ownership and SPF are required for verification. DMARC is
-                    recommended. DKIM becomes required when signing lands in
-                    the next setup step. The starter SPF policy assumes your
+                    Ownership, SPF, and the active DKIM selector are required.
+                    DMARC is recommended. The starter SPF policy assumes your
                     outbound host is authorised by this domain&apos;s MX records.
+                    Cloudflare Email Routing users must merge{" "}
+                    <code>include:_spf.mx.cloudflare.net</code> into this one
+                    SPF record; PaperBoy&apos;s <code>pb…</code> selectors coexist
+                    with Cloudflare&apos;s selectors.
                   </p>
                   {domain.verifiedAt ? (
                     <p>
@@ -163,10 +187,11 @@ export default async function DomainsPage({ searchParams }: DomainsPageProps) {
                     </thead>
                     <tbody>
                       {records.map((record) => {
-                        const check = domain.dnsChecks[record.key];
+                        const check =
+                          record.status ?? domain.dnsChecks[record.key];
 
                         return (
-                          <tr key={record.key}>
+                          <tr key={record.name}>
                             <td>
                               <strong>{record.key.toUpperCase()}</strong>
                               <br />
@@ -178,8 +203,13 @@ export default async function DomainsPage({ searchParams }: DomainsPageProps) {
                                 {record.required
                                   ? "Required"
                                   : record.key === "dkim" && !record.value
-                                    ? "Next setup step"
-                                    : "Recommended"}
+                                    ? "Setup required"
+                                    : record.key === "dkim" &&
+                                        record.lifecycle === "retiring"
+                                      ? "Keep during rotation"
+                                      : record.key === "dkim"
+                                        ? "Rotation candidate"
+                                        : "Recommended"}
                               </span>
                             </td>
                             <td>{record.type}</td>
@@ -209,6 +239,48 @@ export default async function DomainsPage({ searchParams }: DomainsPageProps) {
                   </table>
                 </div>
 
+                <div className="domain-explainer">
+                  <p>
+                    <strong>DKIM key lifecycle</strong>
+                  </p>
+                  {domain.dkimKeys.length === 0 ? (
+                    <p>No signing key exists yet.</p>
+                  ) : (
+                    <ul>
+                      {domain.dkimKeys.map((key) => (
+                        <li key={key.id}>
+                          <code>{key.selector}</code> — {key.status}; created{" "}
+                          {formatDateTime(key.createdAt, session.user.timezone)}
+                          {key.activatedAt ? (
+                            <>
+                              ; activated{" "}
+                              {formatDateTime(
+                                key.activatedAt,
+                                session.user.timezone,
+                              )}
+                            </>
+                          ) : null}
+                          {key.retiredAt ? (
+                            <>
+                              ; retired{" "}
+                              {formatDateTime(
+                                key.retiredAt,
+                                session.user.timezone,
+                              )}
+                            </>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p>
+                    Private keys are encrypted at rest and are never shown in
+                    the console, API, or MCP output. Cloudflare Email Sending
+                    uses Cloudflare-managed DKIM instead; PaperBoy does not add
+                    its signature to that provider path.
+                  </p>
+                </div>
+
                 <div className="domain-actions">
                   {canVerify ? (
                     <form action={verifyDomainAction}>
@@ -220,6 +292,40 @@ export default async function DomainsPage({ searchParams }: DomainsPageProps) {
                   ) : (
                     <p>Owners and admins run DNS checks.</p>
                   )}
+
+                  {canManageDkim && configuredKeys.length === 0 ? (
+                    <form action={setupDkimAction}>
+                      <input name="domainId" type="hidden" value={domain.id} />
+                      <button className="btn" type="submit">
+                        Generate DKIM key
+                      </button>
+                    </form>
+                  ) : null}
+
+                  {canManageDkim && activeKey && !pendingKey && !retiringKey ? (
+                    <form action={rotateDkimAction}>
+                      <input name="domainId" type="hidden" value={domain.id} />
+                      <button className="btn" type="submit">
+                        Start DKIM rotation
+                      </button>
+                    </form>
+                  ) : null}
+
+                  {canManageDkim && activeKey && retiringKey && !pendingKey ? (
+                    <details className="domain-delete">
+                      <summary>Finalise DKIM rotation</summary>
+                      <p>
+                        Confirm only after receivers can resolve the active
+                        selector. PaperBoy destroys the retired private key.
+                      </p>
+                      <form action={finalizeDkimRotationAction}>
+                        <input name="domainId" type="hidden" value={domain.id} />
+                        <button className="btn btn-danger" type="submit">
+                          Confirm finalise
+                        </button>
+                      </form>
+                    </details>
+                  ) : null}
 
                   {canDelete ? (
                     <details className="domain-delete">

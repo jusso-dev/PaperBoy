@@ -40,8 +40,11 @@ export type DomainDnsRecordKey = keyof DomainDnsCheckSnapshot;
 export type DomainDnsRecord = {
   description: string;
   key: DomainDnsRecordKey;
+  lifecycle?: "active" | "pending" | "retired" | "retiring";
   name: string;
   required: boolean;
+  selector?: string;
+  status?: DnsCheckStatus;
   type: "TXT";
   value: string | null;
 };
@@ -162,16 +165,12 @@ export function buildDomainDnsRecords(input: {
       type: "TXT",
       value: spfValue,
     },
-    {
-      description: input.dkim
-        ? "Publishes the public key used to sign PaperBoy mail."
-        : "Reserved for PaperBoy signing. The publishable value appears after DKIM setup.",
-      key: "dkim",
-      name: `${input.dkim?.selector ?? "paperboy"}._domainkey.${input.domain}`,
+    buildDkimDnsRecord({
+      domain: input.domain,
       required: Boolean(input.dkim),
-      type: "TXT",
+      selector: input.dkim?.selector,
       value: input.dkim?.value ?? null,
-    },
+    }),
     {
       description:
         "Starts DMARC in monitoring mode. Confirm the reporting mailbox exists before publishing.",
@@ -182,6 +181,32 @@ export function buildDomainDnsRecords(input: {
       value: starterDmarcRecord(input.domain),
     },
   ];
+}
+
+export function buildDkimDnsRecord(input: {
+  description?: string;
+  domain: string;
+  lifecycle?: "active" | "pending" | "retired" | "retiring";
+  required: boolean;
+  selector?: string;
+  status?: DnsCheckStatus;
+  value: string | null;
+}): DomainDnsRecord {
+  return {
+    description:
+      input.description ??
+      (input.value
+        ? "Publishes the public key used to sign PaperBoy mail."
+        : "Reserved for PaperBoy signing. The publishable value appears after DKIM setup."),
+    key: "dkim",
+    lifecycle: input.lifecycle,
+    name: `${input.selector ?? "paperboy"}._domainkey.${input.domain}`,
+    required: input.required,
+    selector: input.selector,
+    status: input.status,
+    type: "TXT",
+    value: input.value,
+  };
 }
 
 function statusFromDnsError(error: unknown): DnsCheckStatus {
@@ -195,7 +220,7 @@ function statusFromDnsError(error: unknown): DnsCheckStatus {
     : "error";
 }
 
-async function checkTxtRecord(
+export async function checkDomainDnsRecord(
   record: DomainDnsRecord,
   resolveTxt: TxtResolver,
 ): Promise<DnsCheckStatus> {
@@ -219,7 +244,7 @@ export async function verifyDomainDns(
   const results = await Promise.all(
     records.map(async (record) => [
       record.key,
-      await checkTxtRecord(record, resolveTxt),
+      await checkDomainDnsRecord(record, resolveTxt),
     ] as const),
   );
   const checks = normalizeDnsChecks(Object.fromEntries(results));
@@ -230,17 +255,35 @@ export async function verifyDomainDns(
   return { checks, verified };
 }
 
+export function decideDkimVerification(input: {
+  active: DnsCheckStatus | null;
+  infrastructureMatched: boolean;
+  pending: DnsCheckStatus | null;
+}) {
+  const activatePending =
+    input.infrastructureMatched && input.pending === "matched";
+  const verified =
+    input.infrastructureMatched &&
+    (activatePending || input.active === "matched");
+  const dkimCheck = activatePending
+    ? "matched"
+    : input.active ?? input.pending ?? "pending";
+
+  return { activatePending, dkimCheck, verified };
+}
+
 export type DomainDeliveryMode = "blocked" | "live" | "test-sink";
 
 export function domainDeliveryMode(
   environment: unknown,
   status: unknown,
+  hasActiveDkim: boolean = false,
 ): DomainDeliveryMode {
   if (environment === "test") {
     return "test-sink";
   }
 
-  return environment === "live" && status === "verified"
+  return environment === "live" && status === "verified" && hasActiveDkim
     ? "live"
     : "blocked";
 }

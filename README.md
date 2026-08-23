@@ -37,9 +37,19 @@ The console mints `pb_live_` and `pb_test_` bearer keys. A key contains a public
 
 ## Sending domains
 
-Add a domain in the console or through MCP to get exact ownership and SPF TXT records, plus starter DMARC guidance. PaperBoy checks DNS from the application host. Ownership and SPF must both match before the domain becomes verified; a later failed check returns it to pending so live delivery cannot continue on stale state.
+Add a domain in the console or through MCP to get exact ownership, SPF, and DKIM TXT records, plus starter DMARC guidance. PaperBoy checks DNS from the application host. Ownership, SPF, and an active DKIM selector must match before the domain becomes verified; a later failed check returns it to pending so live delivery cannot continue on stale state.
 
-The default SPF value is `v=spf1 mx ~all`. Operators whose outbound host is not authorized by the domain's MX records must set `PAPERBOY_SPF_RECORD` to their exact policy before adding or checking domains. Publish only one SPF record. DKIM shows a reserved selector but no fake key: #9 generates the publishable public key and makes it part of verification.
+The default SPF value is `v=spf1 mx ~all`. Operators whose outbound host is not authorised by the domain's MX records must set `PAPERBOY_SPF_RECORD` to their exact policy before adding or checking domains. Publish only one SPF record.
+
+Set `PAPERBOY_DKIM_ENCRYPTION_KEY` to a base64-encoded 32-byte random value before adding domains or managing DKIM. For example, generate it in the deployment secret store with `openssl rand -base64 32`; do not put the result in source control, command-line arguments, or logs. PaperBoy stores each RSA private key in PostgreSQL inside a context-bound AES-256-GCM envelope. Console, API, and MCP responses expose only selector/public DNS material.
+
+Rotation is staged: PaperBoy keeps signing with the active selector while the replacement is pending. A DNS check activates the replacement only after its public key resolves, moves the old selector to retiring, and keeps both DNS instructions visible. Finalising rotation destroys the retiring encrypted private key. Stored lifecycle instants are UTC; console presentation uses the signed-in user's persisted IANA timezone.
+
+### Cloudflare Email compatibility
+
+Cloudflare DNS and [Email Routing](https://developers.cloudflare.com/email-service/configuration/domains/) can coexist with PaperBoy signing. PaperBoy selectors start with `pb` and do not collide with Cloudflare's `cf-bounce` or `cf2024-1` selectors. Keep both providers' DKIM TXT records. If Email Routing manages the root SPF record, merge PaperBoy's sending mechanism into a single record; for an MX-authorised PaperBoy MTA the value is `v=spf1 mx include:_spf.mx.cloudflare.net ~all`. Set that complete value in `PAPERBOY_SPF_RECORD`; never publish two `v=spf1` records.
+
+[Cloudflare Email Sending](https://developers.cloudflare.com/email-service/reference/headers/) is different: Cloudflare controls `Date` and `DKIM-Signature` and signs with its provider-managed selector. The Cloudflare transport boundary therefore rejects a pre-signed or pre-dated raw message and does not decrypt a PaperBoy key. SMTP/self-hosted MTA delivery uses PaperBoy's verified active key. This keeps both paths valid without double-signing or leaking private material.
 
 Shared delivery policy blocks live keys unless the normalized From domain is verified in that key's organization. Test keys always resolve to the isolated test sink and never bypass into live delivery.
 
@@ -60,7 +70,8 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
       "args": ["--dir", "/absolute/path/to/PaperBoy", "mcp:stdio"],
       "env": {
         "DATABASE_URL": "<injected database URL>",
-        "PAPERBOY_API_KEY": "<injected PaperBoy API key>"
+        "PAPERBOY_API_KEY": "<injected PaperBoy API key>",
+        "PAPERBOY_DKIM_ENCRYPTION_KEY": "<injected base64-encoded 32-byte key>"
       }
     }
   }
@@ -69,7 +80,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 
 Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
 
-The contract exposes capability/account context plus first-class domain list/create/verify/delete tools and authenticated configuration/operator-safety resources. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Domain mutations re-read the key creator's current membership and role, and deletion requires an explicit confirmation argument. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly.
+The contract exposes capability/account context plus first-class domain list/create/verify/delete and DKIM setup/rotate/finalise tools, with authenticated configuration/operator-safety resources. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Domain and DKIM mutations re-read the key creator's current membership and role; destructive deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
 
 HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
 

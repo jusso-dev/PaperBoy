@@ -1,12 +1,16 @@
 import { resolveTxt } from "node:dns/promises";
-import { and, asc, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { domains, orgMembers } from "@/db/schema";
+import { domainDkimKeys, domains, orgMembers } from "@/db/schema";
 import type { ApiKeyEnvironment } from "@/lib/api-key-crypto";
 import {
   DEFAULT_SPF_RECORD,
   DomainError,
+  buildDkimDnsRecord,
   buildDomainDnsRecords,
+  checkDomainDnsRecord,
+  decideDkimVerification,
   domainDeliveryMode,
   isDomainStatus,
   normalizeDnsChecks,
@@ -17,6 +21,14 @@ import {
   type DomainStatus,
   type TxtResolver,
 } from "@/lib/domain-core";
+import {
+  dkimDnsValue,
+  prepareEncryptedDkimKey,
+} from "@/lib/dkim-core";
+import {
+  dkimKeysByDomainIds,
+  type DkimKeyRecord,
+} from "@/lib/dkim";
 import {
   isOrgRole,
   requirePermission,
@@ -29,6 +41,7 @@ export type { DomainErrorCode } from "@/lib/domain-core";
 
 export type SendingDomainRecord = {
   createdAt: Date;
+  dkimKeys: DkimKeyRecord[];
   dnsChecks: DomainDnsCheckSnapshot;
   id: string;
   lastCheckedAt: Date | null;
@@ -67,19 +80,23 @@ export function configuredSpfRecord(): string {
   return configured;
 }
 
-function normalizeDomainRow(row: {
-  createdAt: Date;
-  dnsChecks: unknown;
-  id: string;
-  lastCheckedAt: Date | null;
-  name: string;
-  status: string;
-  updatedAt: Date;
-  verificationToken: string;
-  verifiedAt: Date | null;
-}): SendingDomainRecord {
+function normalizeDomainRow(
+  row: {
+    createdAt: Date;
+    dnsChecks: unknown;
+    id: string;
+    lastCheckedAt: Date | null;
+    name: string;
+    status: string;
+    updatedAt: Date;
+    verificationToken: string;
+    verifiedAt: Date | null;
+  },
+  dkimKeys: DkimKeyRecord[] = [],
+): SendingDomainRecord {
   return {
     ...row,
+    dkimKeys,
     dnsChecks: normalizeDnsChecks(row.dnsChecks),
     status: isDomainStatus(row.status) ? row.status : "pending",
   };
@@ -145,15 +162,71 @@ async function getDomainAccess(input: {
 
   requirePermission(row.role, input.permission);
 
-  return { ...normalizeDomainRow(row), role: row.role };
+  const keys = await dkimKeysByDomainIds([row.id]);
+
+  return {
+    ...normalizeDomainRow(row, keys.get(row.id) ?? []),
+    role: row.role,
+  };
 }
 
-export function domainDnsRecords(domain: SendingDomainRecord): DomainDnsRecord[] {
+function currentSigningKey(domain: SendingDomainRecord): DkimKeyRecord | undefined {
+  const keys = domain.dkimKeys.filter((key) => key.status !== "retired");
+  return (
+    keys.find((key) => key.status === "active") ??
+    keys.find((key) => key.status === "pending")
+  );
+}
+
+function domainVerificationRecords(
+  domain: SendingDomainRecord,
+): DomainDnsRecord[] {
+  const primary = currentSigningKey(domain);
+
   return buildDomainDnsRecords({
+    dkim: primary
+      ? {
+          selector: primary.selector,
+          value: dkimDnsValue(primary.publicKey),
+        }
+      : null,
     domain: domain.name,
     spfValue: configuredSpfRecord(),
     verificationToken: domain.verificationToken,
   });
+}
+
+export function domainDnsRecords(domain: SendingDomainRecord): DomainDnsRecord[] {
+  const keys = domain.dkimKeys.filter((key) => key.status !== "retired");
+  const primary = currentSigningKey(domain);
+  const records = domainVerificationRecords(domain);
+  const primaryRecord = records.find((record) => record.key === "dkim");
+
+  if (primaryRecord && primary) {
+    primaryRecord.lifecycle = primary.status;
+    primaryRecord.status = primary.dnsStatus;
+  }
+
+  const extraRecords = keys
+    .filter((key) => key.id !== primary?.id)
+    .map((key) =>
+      buildDkimDnsRecord({
+        description:
+          key.status === "pending"
+            ? "Publish this next selector. PaperBoy keeps signing with the active key until it matches."
+            : "Keep this retiring selector published until rotation is finalised.",
+        domain: domain.name,
+        lifecycle: key.status,
+        required: false,
+        selector: key.selector,
+        status: key.dnsStatus,
+        value: dkimDnsValue(key.publicKey),
+      }),
+    );
+  const dmarcIndex = records.findIndex((record) => record.key === "dmarc");
+  records.splice(dmarcIndex, 0, ...extraRecords);
+
+  return records;
 }
 
 export async function createDomain(input: {
@@ -167,8 +240,16 @@ export async function createDomain(input: {
     throw new DomainError("INVALID_DOMAIN");
   }
 
+  await requireOrganizationRole({
+    actorUserId: input.actorUserId,
+    orgId: input.orgId,
+    permission: "domains.create",
+  });
+  const domainId = randomUUID();
+  const preparedKey = await prepareEncryptedDkimKey({ domainId });
+
   try {
-    return await db.transaction(async (tx) => {
+    const created = await db.transaction(async (tx) => {
       const [membership] = await tx
         .select({ role: orgMembers.role })
         .from(orgMembers)
@@ -188,7 +269,7 @@ export async function createDomain(input: {
 
       const [created] = await tx
         .insert(domains)
-        .values({ name, orgId: input.orgId })
+        .values({ id: domainId, name, orgId: input.orgId })
         .returning({
           createdAt: domains.createdAt,
           dnsChecks: domains.dnsChecks,
@@ -205,8 +286,19 @@ export async function createDomain(input: {
         throw new DomainError("DOMAIN_NOT_FOUND");
       }
 
-      return normalizeDomainRow(created);
+      await tx.insert(domainDkimKeys).values({
+        domainId,
+        encryptedPrivateKey: preparedKey.encryptedPrivateKey,
+        id: preparedKey.id,
+        publicKey: preparedKey.publicKey,
+        selector: preparedKey.selector,
+        status: "pending",
+      });
+
+      return created;
     });
+    const keys = await dkimKeysByDomainIds([created.id]);
+    return normalizeDomainRow(created, keys.get(created.id) ?? []);
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new DomainError("DOMAIN_EXISTS");
@@ -242,7 +334,8 @@ export async function listDomains(input: {
     .where(eq(domains.orgId, input.orgId))
     .orderBy(asc(domains.name));
 
-  return rows.map(normalizeDomainRow);
+  const keys = await dkimKeysByDomainIds(rows.map((row) => row.id));
+  return rows.map((row) => normalizeDomainRow(row, keys.get(row.id) ?? []));
 }
 
 export async function getDomain(input: {
@@ -268,10 +361,40 @@ export async function verifyDomain(input: {
     ...input,
     permission: "domains.verify",
   });
-  const records = domainDnsRecords(domain);
-  const result = await verifyDomainDns(records, input.resolveTxt ?? resolveTxt);
+  const resolver = input.resolveTxt ?? resolveTxt;
+  const verificationRecords = domainVerificationRecords(domain);
+  const result = await verifyDomainDns(verificationRecords, resolver);
+  const primary = currentSigningKey(domain);
+  const currentKeys = domain.dkimKeys.filter((key) => key.status !== "retired");
+  const keyChecks = new Map(
+    await Promise.all(
+      currentKeys.map(async (key) => [
+        key.id,
+        key.id === primary?.id
+          ? result.checks.dkim
+          : await checkDomainDnsRecord(
+              buildDkimDnsRecord({
+                domain: domain.name,
+                required: false,
+                selector: key.selector,
+                value: dkimDnsValue(key.publicKey),
+              }),
+              resolver,
+            ),
+      ] as const),
+    ),
+  );
+  const active = currentKeys.find((key) => key.status === "active");
+  const pending = currentKeys.find((key) => key.status === "pending");
+  const infrastructureMatched =
+    result.checks.ownership === "matched" && result.checks.spf === "matched";
+  const { activatePending, dkimCheck, verified } = decideDkimVerification({
+    active: active ? keyChecks.get(active.id) ?? "unchecked" : null,
+    infrastructureMatched,
+    pending: pending ? keyChecks.get(pending.id) ?? "pending" : null,
+  });
   const checkedAt = new Date();
-  const status: DomainStatus = result.verified ? "verified" : "pending";
+  const status: DomainStatus = verified ? "verified" : "pending";
   const updated = await db.transaction(async (tx) => {
     const [current] = await tx
       .select({ role: orgMembers.role, verifiedAt: domains.verifiedAt })
@@ -294,14 +417,80 @@ export async function verifyDomain(input: {
 
     requirePermission(current.role, "domains.verify");
 
+    const lockedKeys = await tx
+      .select({ id: domainDkimKeys.id, status: domainDkimKeys.status })
+      .from(domainDkimKeys)
+      .where(
+        and(
+          eq(domainDkimKeys.domainId, input.domainId),
+          ne(domainDkimKeys.status, "retired"),
+        ),
+      )
+      .for("update");
+
+    if (
+      lockedKeys.length !== currentKeys.length ||
+      lockedKeys.some(
+        (key) =>
+          !currentKeys.some(
+            (original) =>
+              original.id === key.id && original.status === key.status,
+          ),
+      )
+    ) {
+      throw new DomainError("DOMAIN_NOT_FOUND");
+    }
+
+    for (const [keyId, dnsStatus] of keyChecks) {
+      await tx
+        .update(domainDkimKeys)
+        .set({ dnsStatus, lastCheckedAt: checkedAt, updatedAt: checkedAt })
+        .where(
+          and(
+            eq(domainDkimKeys.id, keyId),
+            eq(domainDkimKeys.domainId, input.domainId),
+          ),
+        );
+    }
+
+    if (activatePending && pending) {
+      if (active) {
+        await tx
+          .update(domainDkimKeys)
+          .set({ status: "retiring", updatedAt: checkedAt })
+          .where(
+            and(
+              eq(domainDkimKeys.id, active.id),
+              eq(domainDkimKeys.domainId, input.domainId),
+              eq(domainDkimKeys.status, "active"),
+            ),
+          );
+      }
+
+      await tx
+        .update(domainDkimKeys)
+        .set({
+          activatedAt: checkedAt,
+          status: "active",
+          updatedAt: checkedAt,
+        })
+        .where(
+          and(
+            eq(domainDkimKeys.id, pending.id),
+            eq(domainDkimKeys.domainId, input.domainId),
+            eq(domainDkimKeys.status, "pending"),
+          ),
+        );
+    }
+
     const [saved] = await tx
       .update(domains)
       .set({
-        dnsChecks: result.checks,
+        dnsChecks: { ...result.checks, dkim: dkimCheck },
         lastCheckedAt: checkedAt,
         status,
         updatedAt: checkedAt,
-        verifiedAt: result.verified ? current.verifiedAt ?? checkedAt : null,
+        verifiedAt: verified ? current.verifiedAt ?? checkedAt : null,
       })
       .where(
         and(eq(domains.id, input.domainId), eq(domains.orgId, input.orgId)),
@@ -325,7 +514,9 @@ export async function verifyDomain(input: {
     throw new DomainError("DOMAIN_NOT_FOUND");
   }
 
-  return { domain: normalizeDomainRow(updated), records };
+  const keys = await dkimKeysByDomainIds([updated.id]);
+  const savedDomain = normalizeDomainRow(updated, keys.get(updated.id) ?? []);
+  return { domain: savedDomain, records: domainDnsRecords(savedDomain) };
 }
 
 export async function deleteDomain(input: {
@@ -384,12 +575,30 @@ export async function authorizeSendingDomain(input: {
   }
 
   const [domain] = await db
-    .select({ id: domains.id, status: domains.status })
+    .select({
+      dkimKeyId: domainDkimKeys.id,
+      id: domains.id,
+      status: domains.status,
+    })
     .from(domains)
+    .innerJoin(
+      domainDkimKeys,
+      and(
+        eq(domainDkimKeys.domainId, domains.id),
+        eq(domainDkimKeys.status, "active"),
+      ),
+    )
     .where(and(eq(domains.orgId, input.orgId), eq(domains.name, name)))
     .limit(1);
 
-  if (!domain || domainDeliveryMode(input.environment, domain.status) !== "live") {
+  if (
+    !domain ||
+    domainDeliveryMode(
+      input.environment,
+      domain.status,
+      Boolean(domain.dkimKeyId),
+    ) !== "live"
+  ) {
     throw new DomainError("DOMAIN_NOT_VERIFIED");
   }
 

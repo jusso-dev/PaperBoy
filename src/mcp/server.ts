@@ -109,10 +109,12 @@ const resourceDefinitions = [
 const configurationDocument = `# PaperBoy MCP configuration
 
 - Remote agents use Streamable HTTP at \`/api/mcp\` with \`Authorization: Bearer <PaperBoy API key>\`.
-- Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\` and \`PAPERBOY_API_KEY\` in the process environment.
+- Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\`, \`PAPERBOY_API_KEY\`, and \`PAPERBOY_DKIM_ENCRYPTION_KEY\` injected through the process environment.
 - Never put an API key in a tool argument, URL, command-line argument, source file, or diagnostic log.
 - A key is bound to one organization and one environment (\`live\` or \`test\`).
 - Domain mutations re-check the key creator's current organization role.
+- DKIM tools return public DNS material only. PaperBoy private keys remain encrypted at rest and never enter tool output.
+- Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
 - Revocation denies the next authenticated HTTP request or stdio tool call. Reconnect with a newly issued key.
 `;

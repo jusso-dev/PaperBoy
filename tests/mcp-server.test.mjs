@@ -26,6 +26,20 @@ const firstPrincipal = {
 };
 const firstDomain = {
   createdAt: fixedNow,
+  dkimKeys: [
+    {
+      activatedAt: null,
+      createdAt: fixedNow,
+      dnsStatus: "unchecked",
+      id: "55555555-5555-4555-8555-555555555555",
+      lastCheckedAt: null,
+      publicKey: "public-key-only",
+      retiredAt: null,
+      selector: "pb20260823a1b2c3d4",
+      status: "pending",
+      updatedAt: fixedNow,
+    },
+  ],
   dnsChecks: {
     dkim: "pending",
     dmarc: "unchecked",
@@ -45,8 +59,11 @@ function domainServices(overrides = {}) {
   return {
     create: async () => firstDomain,
     delete: async () => undefined,
+    finalizeDkimRotation: async () => firstDomain,
     list: async () => [firstDomain],
     records: () => [],
+    rotateDkim: async () => firstDomain,
+    setupDkim: async () => firstDomain,
     verify: async () => firstDomain,
     ...overrides,
   };
@@ -100,6 +117,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
       ],
+      paperboy_finalize_domain_dkim_rotation: [
+        "domain",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
       paperboy_get_account_context: [
         "credential",
         "observedAt",
@@ -121,6 +144,18 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
       ],
+      paperboy_rotate_domain_dkim: [
+        "domain",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
+      paperboy_setup_domain_dkim: [
+        "domain",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
       paperboy_verify_domain: [
         "domain",
         "observedAt",
@@ -131,17 +166,26 @@ test("initializes and publishes versioned tool schemas", async () => {
     const inputSchemaSnapshots = {
       paperboy_create_domain: ["name"],
       paperboy_delete_domain: ["confirm", "domainId"],
+      paperboy_finalize_domain_dkim_rotation: ["confirm", "domainId"],
       paperboy_get_account_context: [],
       paperboy_list_capabilities: [],
       paperboy_list_domains: [],
+      paperboy_rotate_domain_dkim: ["domainId"],
+      paperboy_setup_domain_dkim: ["domainId"],
       paperboy_verify_domain: ["domainId"],
     };
     const annotationSnapshots = {
       paperboy_create_domain: { destructive: false, readOnly: false },
       paperboy_delete_domain: { destructive: true, readOnly: false },
+      paperboy_finalize_domain_dkim_rotation: {
+        destructive: true,
+        readOnly: false,
+      },
       paperboy_get_account_context: { destructive: false, readOnly: true },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
+      paperboy_rotate_domain_dkim: { destructive: false, readOnly: false },
+      paperboy_setup_domain_dkim: { destructive: false, readOnly: false },
       paperboy_verify_domain: { destructive: false, readOnly: false },
     };
 
@@ -296,10 +340,44 @@ test("domain tools pass the authenticated tenant and actor to shared services", 
       assert.equal(result.isError, undefined);
       assert.equal(result.structuredContent.domain.name, firstDomain.name);
       assert.equal(result.structuredContent.protocolTimeZone, "UTC");
+      assert.equal(
+        result.structuredContent.domain.dkimKeys[0].dnsName,
+        "pb20260823a1b2c3d4._domainkey.mail.example.com",
+      );
+      assert.equal(JSON.stringify(result).includes("private"), false);
       assert.deepEqual(received, {
         name: "mail.example.com",
         principal: firstPrincipal,
       });
+    },
+  );
+});
+
+test("DKIM rotation is a first-class tenant-bound MCP operation", async () => {
+  let received = null;
+
+  await withClient(
+    dependencies({
+      domains: domainServices({
+        rotateDkim: async (principal, domainId) => {
+          received = { domainId, principal };
+          return firstDomain;
+        },
+      }),
+    }),
+    async (client) => {
+      const result = await client.callTool({
+        arguments: { domainId: firstDomain.id },
+        name: "paperboy_rotate_domain_dkim",
+      });
+
+      assert.equal(result.isError, undefined);
+      assert.deepEqual(received, {
+        domainId: firstDomain.id,
+        principal: firstPrincipal,
+      });
+      assert.equal(result.structuredContent.protocolTimeZone, "UTC");
+      assert.equal(JSON.stringify(result).includes("encryptedPrivateKey"), false);
     },
   );
 });

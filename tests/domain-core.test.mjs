@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   DEFAULT_SPF_RECORD,
   buildDomainDnsRecords,
+  decideDkimVerification,
   domainDeliveryMode,
   normalizeDnsChecks,
   normalizeSendingDomain,
@@ -95,6 +96,44 @@ test("verification joins chunked TXT answers and requires ownership plus SPF", a
   });
 });
 
+test("a configured PaperBoy DKIM selector is required and remains distinct", async () => {
+  const records = buildDomainDnsRecords({
+    dkim: {
+      selector: "pb20260823a1b2c3d4",
+      value: "v=DKIM1; k=rsa; p=public-key",
+    },
+    domain: "example.com",
+    spfValue: "v=spf1 mx include:_spf.mx.cloudflare.net ~all",
+    verificationToken: "token",
+  });
+  const dkim = records.find((record) => record.key === "dkim");
+
+  assert.equal(dkim.required, true);
+  assert.equal(
+    dkim.name,
+    "pb20260823a1b2c3d4._domainkey.example.com",
+  );
+  assert.equal(dkim.name.startsWith("cf-bounce."), false);
+  assert.equal(
+    records.find((record) => record.key === "spf").value,
+    "v=spf1 mx include:_spf.mx.cloudflare.net ~all",
+  );
+
+  const result = await verifyDomainDns(records, async (hostname) => {
+    if (hostname === dkim.name) {
+      const error = new Error("missing");
+      error.code = "ENODATA";
+      throw error;
+    }
+
+    const record = records.find((candidate) => candidate.name === hostname);
+    return [[record.value]];
+  });
+
+  assert.equal(result.verified, false);
+  assert.equal(result.checks.dkim, "missing");
+});
+
 test("resolver failures remain distinct from missing DNS", async () => {
   const records = buildDomainDnsRecords({
     domain: "example.com",
@@ -122,9 +161,37 @@ test("stored DNS snapshots are narrowed defensively", () => {
 });
 
 test("live delivery requires verification while test delivery always sinks", () => {
-  assert.equal(domainDeliveryMode("live", "verified"), "live");
-  assert.equal(domainDeliveryMode("live", "pending"), "blocked");
+  assert.equal(domainDeliveryMode("live", "verified", true), "live");
+  assert.equal(domainDeliveryMode("live", "verified", false), "blocked");
+  assert.equal(domainDeliveryMode("live", "pending", true), "blocked");
   assert.equal(domainDeliveryMode("test", "pending"), "test-sink");
   assert.equal(domainDeliveryMode("test", null), "test-sink");
   assert.equal(domainDeliveryMode("unknown", "verified"), "blocked");
+});
+
+test("DKIM rotation keeps a matched active selector live until replacement matches", () => {
+  assert.deepEqual(
+    decideDkimVerification({
+      active: "matched",
+      infrastructureMatched: true,
+      pending: "missing",
+    }),
+    { activatePending: false, dkimCheck: "matched", verified: true },
+  );
+  assert.deepEqual(
+    decideDkimVerification({
+      active: "matched",
+      infrastructureMatched: true,
+      pending: "matched",
+    }),
+    { activatePending: true, dkimCheck: "matched", verified: true },
+  );
+  assert.deepEqual(
+    decideDkimVerification({
+      active: null,
+      infrastructureMatched: true,
+      pending: "missing",
+    }),
+    { activatePending: false, dkimCheck: "missing", verified: false },
+  );
 });
