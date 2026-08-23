@@ -19,6 +19,7 @@ export function apiKeyUnauthorizedResponse() {
     },
     {
       headers: {
+        "Cache-Control": "no-store",
         "WWW-Authenticate": 'Bearer realm="PaperBoy"',
       },
       status: 401,

@@ -35,6 +35,36 @@ The matching SQL in `drizzle/down/` exists only to prove rollback on a throwaway
 
 The console mints `pb_live_` and `pb_test_` bearer keys. A key contains a public identifier and a 256-bit secret; PostgreSQL stores the identifier and SHA-256 hash, never the raw key. The raw value is shown once. Revocation is enforced by the shared HTTP/MCP authentication boundary on the next request.
 
+## MCP server
+
+PaperBoy exposes the same organization-safe application services to agents through two MCP transports:
+
+- Streamable HTTP at `https://<paperboy-host>/api/mcp`
+- stdio with `pnpm mcp:stdio`
+
+Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Local stdio clients provide `DATABASE_URL` and `PAPERBOY_API_KEY` through the child process environment:
+
+```json
+{
+  "mcpServers": {
+    "paperboy": {
+      "command": "pnpm",
+      "args": ["--dir", "/absolute/path/to/PaperBoy", "mcp:stdio"],
+      "env": {
+        "DATABASE_URL": "<injected database URL>",
+        "PAPERBOY_API_KEY": "<injected PaperBoy API key>"
+      }
+    }
+  }
+}
+```
+
+Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
+
+The first contract exposes `paperboy_list_capabilities`, `paperboy_get_account_context`, and authenticated configuration/operator-safety resources. Every tool schema carries `paperboy/schemaVersion`. The account context comes from the key; callers cannot select another organization. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly.
+
+HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
+
 ## What v1 does
 
 Send transactional mail through an API that looks familiar if you have used Resend: API keys, domains, templates, events, webhooks. You run the MTA. PaperBoy does not sell you someone else's SMTP.
