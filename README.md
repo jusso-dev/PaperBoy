@@ -10,7 +10,7 @@ Self-hosted transactional email. A cheaper Resend you run on your own box.
 - Instant navigation (no full reloads on dashboard routes)
 - Drizzle ORM + Postgres
 - Better Auth
-- Self-hosted runners: `runs-on: [self-hosted]`
+- CI on GitHub-hosted runners (`ubuntu-latest`) — repo is public, no self-hosted runners exposed to PRs
 
 ## Theme
 

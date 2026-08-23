@@ -6,12 +6,12 @@ on:
   pull_request:
 
 concurrency:
-  group: paperboy-self-hosted
+  group: paperboy-ci-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   ci:
-    runs-on: [self-hosted]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
