@@ -10,6 +10,7 @@ Self-hosted transactional email. A cheaper Resend you run on your own box.
 - Instant navigation (no full reloads on dashboard routes)
 - Drizzle ORM + Postgres
 - Better Auth
+- First-class MCP server over the same domain services as HTTP and the console
 - CI on GitHub-hosted runners (`ubuntu-latest`) — repo is public, no self-hosted runners exposed to PRs
 
 ## Theme
@@ -25,6 +26,8 @@ pnpm db:migrate
 ```
 
 Generate a migration after changing `src/db/schema.ts` with `pnpm db:generate`.
+
+All stored instants and public protocol timestamps are UTC. Each user has a persisted IANA timezone that controls console, log, and scheduling presentation.
 
 The matching SQL in `drizzle/down/` exists only to prove rollback on a throwaway database. Do not run it against a database containing PaperBoy data.
 

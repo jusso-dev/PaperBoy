@@ -12,6 +12,8 @@ concurrency:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    env:
+      TZ: UTC
     steps:
       - uses: actions/checkout@v4
 
@@ -33,3 +35,7 @@ jobs:
 
       - name: Build
         run: pnpm build
+        env:
+          DATABASE_URL: postgres://paperboy:paperboy@127.0.0.1:5432/paperboy
+          BETTER_AUTH_SECRET: paperboy-ci-only-secret-32-characters
+          BETTER_AUTH_URL: http://127.0.0.1:3000

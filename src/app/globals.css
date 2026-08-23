@@ -79,6 +79,8 @@ h3 {
 
 .sidebar {
   border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
   padding: 24px 20px;
 }
 
@@ -114,6 +116,28 @@ h3 {
 
 .sidebar nav a:hover {
   background: var(--paper-deep);
+}
+
+.session-controls {
+  border-top: 1px solid var(--rule);
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+.session-name {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-weight: 700;
+}
+
+.session-email {
+  color: var(--ink-soft);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.session-sign-out {
+  margin-top: 12px;
+  width: 100%;
 }
 
 .console-main {
@@ -228,6 +252,90 @@ select:focus-visible {
   outline-offset: 0;
 }
 
+.field-help {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.form-error,
+.form-success {
+  border-left: 3px solid var(--ink);
+  margin: 14px 0;
+  padding: 8px 10px;
+}
+
+.form-error {
+  background: #f5e3dc;
+  border-left-color: #8e3f2d;
+}
+
+.form-success {
+  background: #e2eee5;
+  border-left-color: #376847;
+}
+
+/* ---- Authentication --------------------------------------------------- */
+
+.auth-shell {
+  display: grid;
+  min-height: 100vh;
+  padding: 48px 20px;
+  place-items: center;
+}
+
+.auth-page {
+  width: min(100%, 440px);
+}
+
+.auth-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  box-shadow: 4px 4px 0 rgba(26, 26, 26, 0.08);
+  margin-top: 28px;
+  padding: 28px;
+}
+
+.auth-card h1 {
+  font-size: 28px;
+}
+
+.auth-kicker {
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.auth-intro {
+  color: var(--ink-soft);
+  margin: 8px 0 22px;
+}
+
+.auth-submit {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.auth-switch {
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+  margin-top: 22px;
+  padding-top: 16px;
+}
+
+/* ---- Settings --------------------------------------------------------- */
+
+.settings-card {
+  max-width: 680px;
+}
+
+.settings-form {
+  margin-top: 18px;
+}
+
 /* ---- Tables ------------------------------------------------------------ */
 
 .table {
@@ -301,6 +409,14 @@ select:focus-visible {
     padding: 18px 20px 14px;
   }
 
+  .session-controls {
+    margin-top: 14px;
+  }
+
+  .session-sign-out {
+    width: auto;
+  }
+
   .sidebar nav ul {
     display: flex;
     flex-wrap: wrap;
@@ -314,5 +430,13 @@ select:focus-visible {
 
   .table {
     min-width: 560px;
+  }
+
+  .auth-shell {
+    padding: 28px 16px;
+  }
+
+  .auth-card {
+    padding: 22px 18px;
   }
 }

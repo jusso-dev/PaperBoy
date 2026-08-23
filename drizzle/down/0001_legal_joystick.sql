@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS "verifications";
+DROP TABLE IF EXISTS "sessions";
+DROP TABLE IF EXISTS "accounts";
+ALTER TABLE "users" DROP COLUMN IF EXISTS "timezone";
+ALTER TABLE "users" DROP COLUMN IF EXISTS "image";
+ALTER TABLE "users" DROP COLUMN IF EXISTS "email_verified";
+ALTER TABLE "users" ALTER COLUMN "name" DROP NOT NULL;

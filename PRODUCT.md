@@ -10,7 +10,7 @@ Developers and infrastructure operators running their own transactional email st
 
 ## Product Purpose
 
-PaperBoy provides a familiar, Resend-shaped control plane for self-hosted transactional email: API keys, sending domains, templates, message events, and webhooks. Success means operators can understand system state quickly, complete routine delivery work confidently, and retain ownership of infrastructure and data.
+PaperBoy provides a familiar, Resend-shaped control plane for self-hosted transactional email: API keys, sending domains, templates, message events, webhooks, and a first-class MCP server for agent-operated workflows. Success means operators can understand system state quickly, complete routine delivery work confidently, and retain ownership of infrastructure and data.
 
 ## Brand Personality
 
@@ -27,6 +27,8 @@ Dark SaaS chrome, generic Tailwind zinc dashboards, marketing-ESP campaign build
 - Let the paper-and-ink identity add warmth without reducing density or clarity.
 - Explain delivery mechanics plainly and preserve operator control.
 - Keep copy concise, direct, and in Australian English.
+- Persist each user’s IANA timezone and use it for every console, log, and scheduling display. Keep stored instants and public protocol timestamps explicitly UTC.
+- Treat HTTP, console, and MCP as peer interfaces over the same tenant-safe domain services and authorization rules.
 
 ## Accessibility & Inclusion
 
