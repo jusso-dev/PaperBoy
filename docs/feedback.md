@@ -64,6 +64,12 @@ pnpm exec tsx --test tests/feedback-core.test.mjs
 
 Cloudflare Email Sending replaces `Return-Path` with its provider-managed `cf-bounce` domain and performs its own bounce processing and suppression checks. Keep that boundary: do not point Cloudflare's `cf-bounce` MX records at this Postfix hook and do not replace its return path. Cloudflare SMTP submission remains compatible with PaperBoy's provider-neutral queue, message events, and signed webhooks. PaperBoy can ingest a standard report only when it is separately routed to the configured hook; this Postfix path does not claim to replace Cloudflare's provider analytics or suppression pipeline.
 
+## Amazon SES
+
+Amazon SES feedback uses configuration-set event publishing, not the Postfix pipe. Add delivery, delivery-delay, bounce, and complaint event types to an SNS or EventBridge destination. `SendEmail` and `SendBulkEmail` attach the stable `paperboy_message_id` tag, and PaperBoy also verifies the returned SES message ID before accepting an event for one organization message.
+
+Use the signed public SNS callback only with the exact per-organization topic ARN and SNS signature version 2. EventBridge API Destinations use the authenticated SES event REST endpoint; an owner/admin can use the first-class `paperboy_ingest_outbound_provider_event` MCP peer for the same bounded service. Raw AWS payloads are never stored. Permanent bounces and complaints add suppressions, while transient bounces and delivery delays record content-free events without suppression. Exact provider-event replays are idempotent.
+
 All stored instants and API/MCP timestamps remain RFC 3339 UTC. Convert only presentation using the signed-in user's persisted IANA timezone.
 
-References: [RFC 3464 DSNs](https://www.rfc-editor.org/rfc/rfc3464), [RFC 5965 ARFs](https://www.rfc-editor.org/rfc/rfc5965), [Nodemailer DSN options](https://nodemailer.com/message/dsn), [Postfix transport tables](https://www.postfix.org/transport.5.html), [Postfix pipe delivery](https://www.postfix.org/pipe.8.html), and [Cloudflare Email Sending lifecycle](https://developers.cloudflare.com/email-service/concepts/email-lifecycle/).
+References: [RFC 3464 DSNs](https://www.rfc-editor.org/rfc/rfc3464), [RFC 5965 ARFs](https://www.rfc-editor.org/rfc/rfc5965), [Nodemailer DSN options](https://nodemailer.com/message/dsn), [Postfix transport tables](https://www.postfix.org/transport.5.html), [Postfix pipe delivery](https://www.postfix.org/pipe.8.html), [Cloudflare Email Sending lifecycle](https://developers.cloudflare.com/email-service/concepts/email-lifecycle/), and [Amazon SES event publishing](https://docs.aws.amazon.com/ses/latest/dg/monitor-using-event-publishing.html).

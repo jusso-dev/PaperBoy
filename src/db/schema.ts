@@ -929,7 +929,14 @@ export const events = pgTable(
       .notNull()
       .references(() => messages.id, { onDelete: "cascade" }),
     type: text("type")
-      .$type<"queued" | "delivered" | "bounced" | "complained" | "opened">()
+      .$type<
+        | "queued"
+        | "delivered"
+        | "deferred"
+        | "bounced"
+        | "complained"
+        | "opened"
+      >()
       .notNull(),
     data: jsonb("data")
       .$type<Record<string, unknown>>()
@@ -950,7 +957,7 @@ export const events = pgTable(
       .where(sql`${table.type} = 'opened'`),
     check(
       "events_type_check",
-      sql`${table.type} in ('queued', 'delivered', 'bounced', 'complained', 'opened')`,
+      sql`${table.type} in ('queued', 'delivered', 'deferred', 'bounced', 'complained', 'opened')`,
     ),
     check(
       "events_data_object_check",
@@ -1013,6 +1020,57 @@ export const feedbackIngestions = pgTable(
     check(
       "feedback_ingestions_status_check",
       sql`${table.status} is null or ${table.status} ~ '^[245]\\.[0-9]{1,3}\\.[0-9]{1,3}$'`,
+    ),
+  ],
+);
+
+export const providerEventIngestions = pgTable(
+  "provider_event_ingestions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    provider: text("provider").$type<LiveOutboundProvider>().notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    payloadSha256: text("payload_sha256").notNull(),
+    suppressionCount: integer("suppression_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("provider_event_ingestions_event_id_unique").on(table.eventId),
+    uniqueIndex("provider_event_ingestions_provider_event_unique").on(
+      table.orgId,
+      table.provider,
+      table.providerEventId,
+    ),
+    index("provider_event_ingestions_message_created_at_idx").on(
+      table.messageId,
+      table.createdAt,
+    ),
+    check(
+      "provider_event_ingestions_provider_check",
+      sql`${table.provider} in ('smtp', 'cloudflare-email', 'aws-ses', 'azure-email')`,
+    ),
+    check(
+      "provider_event_ingestions_provider_event_id_check",
+      sql`char_length(${table.providerEventId}) between 1 and 1000 and ${table.providerEventId} !~ '[[:cntrl:]]'`,
+    ),
+    check(
+      "provider_event_ingestions_payload_sha256_check",
+      sql`${table.payloadSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "provider_event_ingestions_suppression_count_check",
+      sql`${table.suppressionCount} between 0 and 50`,
     ),
   ],
 );

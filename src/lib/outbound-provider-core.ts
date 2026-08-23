@@ -61,11 +61,28 @@ export type OutboundSendResult = {
   providerMessageId: string | null;
 };
 
+export type OutboundProviderConnectionDetails = {
+  accountMode: "production" | "sandbox";
+  region: string;
+  sendingEnabled: boolean;
+};
+
+export type OutboundProviderSuppression = {
+  email: string;
+  reason: "bounced" | "complained";
+};
+
 export type OutboundProviderEvent = {
   data: Record<string, unknown>;
-  messageId: string;
+  messageId: string | null;
   occurredAt: Date;
-  type: Extract<MessageEventType, "bounced" | "complained" | "delivered">;
+  providerEventId?: string;
+  providerMessageId?: string;
+  suppressions?: OutboundProviderSuppression[];
+  type: Extract<
+    MessageEventType,
+    "bounced" | "complained" | "deferred" | "delivered"
+  >;
 };
 
 export type OutboundProviderAdapter = {
@@ -84,7 +101,7 @@ export type OutboundProviderAdapter = {
   sendBatch?: (
     messages: OutboundDeliveryMessage[],
   ) => Promise<OutboundSendResult[]>;
-  testConnection: () => Promise<void>;
+  testConnection: () => Promise<OutboundProviderConnectionDetails | null>;
 };
 
 export class OutboundProviderContractError extends Error {

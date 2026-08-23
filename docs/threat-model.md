@@ -2,9 +2,9 @@
 
 ## Overview
 
-PaperBoy is a multi-tenant transactional email service. Its console, REST API, and Model Context Protocol (MCP) server use the same domain services and authorization rules. Live messages leave through an operator-controlled SMTP service or Cloudflare Email Service; test-key messages remain in the isolated test sink. PostgreSQL is the source of truth for tenants, authorization, rate limits, queue state, message metadata, and delivery events. Attachment bytes live in a private operator-controlled filesystem.
+PaperBoy is a multi-tenant transactional email service. Its console, REST API, and Model Context Protocol (MCP) server use the same domain services and authorization rules. Live messages leave through an operator-controlled SMTP service, Cloudflare Email Service, or Amazon SES; test-key messages remain in the isolated test sink. PostgreSQL is the source of truth for tenants, authorization, rate limits, queue state, message metadata, and delivery events. Attachment bytes live in a private operator-controlled filesystem.
 
-This model covers the repository at source revision `d4390fd5695dd3e956064c8933cc937845066874`. It focuses on API keys, sessions, DKIM material, SMTP and Cloudflare credentials, webhook secrets, attachment storage, outbound delivery, MCP, CI, and date/time handling. It is a design and operations boundary, not a claim that secret scanning or application controls can compensate for a compromised host, database administrator, provider account, source-control account, or mail transfer agent (MTA).
+This model covers the maintained repository implementation. It focuses on API keys, sessions, DKIM material, SMTP, Cloudflare, and AWS credentials, provider-event authenticity, webhook secrets, attachment storage, outbound delivery, MCP, CI, and date/time handling. It is a design and operations boundary, not a claim that secret scanning or application controls can compensate for a compromised host, database administrator, provider account, source-control account, or mail transfer agent (MTA).
 
 Security invariants:
 
@@ -13,6 +13,7 @@ Security invariants:
 - Stored instants and REST/MCP timestamps are UTC. Calendar boundaries and console presentation use the authenticated user's persisted IANA timezone, so process-local time cannot silently change authorization, rate-limit, idempotency, or scheduling behavior.
 - Raw API keys and webhook secrets are returned only at creation. API-key hashes and context-bound encrypted DKIM/webhook material are stored instead of plaintext secrets.
 - Cloudflare structured messages omit PaperBoy-owned `Date`, DKIM, and ARC headers. Cloudflare remains the signing authority. Self-hosted SMTP signs only in the self-hosted path.
+- Amazon SES receives unsigned raw MIME and owns Easy DKIM. Signed SNS or authenticated EventBridge events must correlate both the PaperBoy UUID and SES message ID before they can create events or suppressions.
 - Attachments are private, root-confined, integrity-checked blobs. Public APIs and MCP expose metadata, not bytes, hashes, or storage keys.
 - Queue creation, rate limiting, and idempotency decisions are transactional. Delivery remains at least once.
 - Fork pull requests never execute on the self-hosted CI runner. Secret scanning runs against full Git history before dependency installation or repository code execution.
@@ -23,7 +24,7 @@ Security invariants:
 
 - PaperBoy bearer API keys, Better Auth sessions and secret, and MCP process credentials.
 - DKIM private keys; webhook signing secrets; webhook/DKIM encryption keys; unsubscribe and open-tracking signing keys.
-- SMTP usernames/passwords and Cloudflare Email Service API tokens injected through operator-default or per-organization provider secret variables.
+- SMTP usernames/passwords, Cloudflare Email Service API tokens, and AWS access keys, session tokens, IAM role configuration, and external IDs injected through operator-default or per-organization provider variables.
 - PostgreSQL tenant, membership, domain, recipient, template, message, event, suppression, queue, and idempotency data.
 - Private attachment bytes and their integrity metadata.
 - Sending-domain DNS, DKIM/SPF records, provider account, IP/domain reputation, and suppression state.
@@ -42,6 +43,8 @@ Security invariants:
 | Console/REST/MCP to provider settings | Current tenant membership and role are rechecked; secret values are never accepted | Provider IDs, safe readiness, domain overrides, UTC timestamps |
 | Worker to self-hosted SMTP/MTA | Operator must enforce authentication, relay policy, TLS, egress, and reputation controls | Secret-store credentials and raw MIME, optionally PaperBoy DKIM-signed |
 | Worker to Cloudflare Email Service | Cloudflare account, API token, TLS endpoint, and provider controls are trusted | SMTP MIME or future structured payload; Cloudflare owns final DKIM/ARC and `cf-bounce` behavior |
+| Worker to Amazon SES v2 | AWS account, region, least-privilege IAM credentials, verified identities, configuration set, and SES controls are trusted | Raw MIME or compatible bulk template data; SES owns final Easy DKIM and returns provider message IDs |
+| Amazon SNS to public SES callback | Untrusted until the exact per-organization topic, AWS-hosted certificate URL, and cryptographic SNS signature validate | Bounded SNS envelope and embedded SES event; no PaperBoy bearer key |
 | Worker to webhook receiver | Receiver identity and HTTPS endpoint are configured by an organization owner/admin | Minimal event body plus timestamped HMAC signature |
 | PaperBoy/operator to DNS | Registrar, DNS provider, and change-control accounts are trusted | SPF and DKIM public records, domain verification |
 | GitHub to self-hosted CI runner | Same-repository contributors and workflow definitions are trusted to run code | Source, actions, service containers, runner token, Docker access |
@@ -54,7 +57,7 @@ The deployment assumptions are explicit:
 - Web, MCP, and worker processes use `TZ=UTC`. Every signed-in account stores a canonical IANA timezone. Provider timestamps are normalized to UTC before persistence or protocol output.
 - PostgreSQL, attachment storage, backups, and observability stay in the approved region with least-privilege access, encryption, recovery testing, and retention controls.
 - SMTP submission requires authenticated TLS. Cloudflare Email Service uses the literal `api_token` username, an URL-encoded API token, implicit TLS on port 465, and a narrowly scoped token.
-- Production egress policy limits SMTP, Cloudflare, DNS, and webhook traffic. DNS resolution and connection targets are monitored to reduce private-network access and DNS-rebinding risk.
+- Production egress policy limits SMTP, Cloudflare, AWS APIs, AWS SNS certificate/confirmation hosts, DNS, and webhook traffic. DNS resolution and connection targets are monitored to reduce private-network access and DNS-rebinding risk.
 - Repository and branch protections restrict same-repository workflow changes. Self-hosted runners are disposable, isolated from production secrets and networks, and hold no durable credentials after a job.
 
 ## Attack Surface, Mitigations, and Attacker Stories
@@ -67,7 +70,7 @@ The honest limit is that hashing protects the database copy, not an active beare
 
 A forged navigation cookie may pass the lightweight route guard, but protected data access still requires the server-side Better Auth session. Account takeover, a leaked Better Auth secret, or a compromised source-control/operator account remains capable of crossing the intended boundary.
 
-### DKIM, SMTP, and Cloudflare Email Service
+### DKIM, SMTP, Cloudflare Email Service, and Amazon SES
 
 An attacker may try to extract or substitute a DKIM private key. PaperBoy generates 2048-bit RSA material, encrypts private keys with AES-256-GCM, uses a random IV, authenticates the ciphertext, and binds the envelope to the domain/key identifiers as additional authenticated data. The encryption key stays outside PostgreSQL. Self-hosted signing rejects duplicate protected headers and signs a bounded header set.
 
@@ -78,6 +81,14 @@ PaperBoy cannot prevent an open relay, sender spoofing, plaintext submission, or
 Provider settings persist only identifiers: one organization default, nullable domain overrides, and a message snapshot. Secrets stay in operator injection. Missing or malformed credentials fail before queue insertion, while an adapter that becomes unavailable after queueing fails the snapshotted message without downgrade or fallback. This prevents a provider-selection change from silently moving sensitive mail to another jurisdiction or trust boundary.
 
 Cloudflare Email Service is a first-class live-provider boundary, not a special bypass. Its SMTP credential is supplied through `CLOUDFLARE_EMAIL_SMTP_URL`, an organization-scoped equivalent, or a compatible Cloudflare-hosted `SMTP_URL`; the same queue/rate-limit/suppression path applies, and Cloudflare remains responsible for provider-owned DKIM, ARC, bounce, and suppression behavior. A successful PaperBoy submission is not proof of final delivery. Cloudflare can reject, suppress, delay, or reclassify a message after acceptance. The future structured adapter must continue omitting `Date`, DKIM, and ARC headers so PaperBoy does not double-sign provider messages.
+
+Amazon SES is also a first-class boundary. Credential fields are resolved from one complete organization scope or an operator default; PaperBoy never combines a partial tenant key with a global secret. IAM role assumption supports an optional external ID, while use of the workload credential chain requires an explicit opt-in. The role and source credentials still need least-privilege `ses:SendEmail`, `ses:SendBulkEmail`, `ses:GetAccount`, and, when assumed, `sts:AssumeRole` policy. An AWS account, role trust policy, access key, verified identity, configuration set, or DNS compromise can bypass PaperBoy's intended controls and damage quota or reputation.
+
+SES `SendEmail` receives bounded raw MIME and `SendBulkEmail` receives one common attachment/template shape with per-entry values and tags. Worker delivery stores the SES message ID; the bulk provider method returns its per-entry IDs. Neither path stores raw provider responses or AWS request IDs. A successful API response means SES accepted the request, not that the recipient server accepted the email. The console's sandbox/production and sending-enabled result is a regional account observation, not live-delivery proof.
+
+The signed SNS callback contains an organization UUID in its URL because SNS cannot present a PaperBoy bearer key. That UUID is not treated as authorization. PaperBoy requires an exact configured topic ARN, restricts certificate and confirmation URLs to the matching regional SNS host over HTTPS, refuses redirects, bounds downloads and request bodies, validates the X.509 signature, and only then parses the embedded SES event. Signature version 2 is recommended; version 1 remains accepted for AWS compatibility. EventBridge/REST/MCP ingestion instead requires a tenant-bound key whose creator remains an owner or admin.
+
+SES events are correlated to exactly one message in the same organization and require the stored SES message ID to match. Provider event IDs are unique per organization/provider, so retries return the first event. Permanent-bounce and complaint addresses are normalized and must already belong to that message before suppression. Raw AWS payloads, recipients, diagnostics, SMTP responses, certificate bodies, and signatures are not persisted; only a payload hash, safe classifications, IDs, counts, and UTC instants remain. Provider timestamps outside the bounded acceptance window fall back to receipt time.
 
 ### Webhooks and outbound requests
 

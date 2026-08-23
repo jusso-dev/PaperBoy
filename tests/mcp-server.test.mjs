@@ -213,11 +213,11 @@ const firstOutboundProviders = {
     },
     {
       capabilities: { batch: true, events: true, scheduling: false },
-      configured: false,
-      credentialScope: null,
+      configured: true,
+      credentialScope: "organization",
       id: "aws-ses",
       label: "Amazon SES",
-      state: "adapter-unavailable",
+      state: "ready",
     },
     {
       capabilities: { batch: true, events: true, scheduling: false },
@@ -324,7 +324,9 @@ function openTrackingServices(overrides = {}) {
 function outboundProviderServices(overrides = {}) {
   return {
     get: async () => firstOutboundProviders,
+    ingest: async () => [],
     test: async (_principal, payload) => ({
+      details: null,
       provider: payload.provider,
       testedAt: fixedNow,
     }),
@@ -696,11 +698,17 @@ test("initializes and publishes versioned tool schemas", async () => {
         "settings",
       ],
       paperboy_test_outbound_provider: [
+        "details",
         "ok",
         "protocolTimeZone",
         "provider",
         "schemaVersion",
         "testedAt",
+      ],
+      paperboy_ingest_outbound_provider_event: [
+        "data",
+        "protocolTimeZone",
+        "schemaVersion",
       ],
       paperboy_verify_domain: [
         "domain",
@@ -746,6 +754,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_open_tracking: [],
       paperboy_get_outbound_providers: [],
       paperboy_ingest_feedback: ["rawReportBase64"],
+      paperboy_ingest_outbound_provider_event: ["payload", "provider"],
       paperboy_import_suppressions: ["csv"],
       paperboy_list_capabilities: [],
       paperboy_list_broadcasts: [],
@@ -798,6 +807,7 @@ test("initializes and publishes versioned tool schemas", async () => {
         "domainOverrides",
       ],
       paperboy_test_outbound_provider: ["provider"],
+      paperboy_ingest_outbound_provider_event: ["payload", "provider"],
       paperboy_verify_domain: ["domainId"],
     };
     const requiredInputSchemaSnapshots = {
@@ -873,6 +883,10 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_open_tracking: { destructive: false, readOnly: false },
       paperboy_update_outbound_providers: { destructive: false, readOnly: false },
       paperboy_test_outbound_provider: { destructive: false, readOnly: false },
+      paperboy_ingest_outbound_provider_event: {
+        destructive: false,
+        readOnly: false,
+      },
       paperboy_verify_domain: { destructive: false, readOnly: false },
     };
 
@@ -1273,7 +1287,7 @@ test("open tracking is a first-class tenant-bound MCP setting with UTC metadata"
   );
 });
 
-test("outbound providers are first-class tenant-bound MCP settings and tests", async () => {
+test("outbound providers are first-class tenant-bound MCP settings, tests, and events", async () => {
   const calls = [];
   await withClient(
     dependencies({
@@ -1282,9 +1296,32 @@ test("outbound providers are first-class tenant-bound MCP settings and tests", a
           calls.push(["get", principal]);
           return firstOutboundProviders;
         },
+        ingest: async (principal, provider, payload) => {
+          calls.push(["ingest", principal, provider, payload]);
+          return [
+            {
+              createdAt: fixedNow,
+              eventId: "14141414-1414-4414-8414-141414141414",
+              messageId: firstMessage.id,
+              provider: "aws-ses",
+              providerEventId: "ses-event-fixture",
+              replayed: false,
+              suppressionCount: 1,
+              type: "bounced",
+            },
+          ];
+        },
         test: async (principal, payload) => {
           calls.push(["test", principal, payload]);
-          return { provider: payload.provider, testedAt: fixedNow };
+          return {
+            details: {
+              accountMode: "production",
+              region: "ap-southeast-2",
+              sendingEnabled: true,
+            },
+            provider: payload.provider,
+            testedAt: fixedNow,
+          };
         },
         update: async (principal, payload) => {
           calls.push(["update", principal, payload]);
@@ -1307,8 +1344,15 @@ test("outbound providers are first-class tenant-bound MCP settings and tests", a
         name: "paperboy_update_outbound_providers",
       });
       const tested = await client.callTool({
-        arguments: { provider: "cloudflare-email" },
+        arguments: { provider: "aws-ses" },
         name: "paperboy_test_outbound_provider",
+      });
+      const ingested = await client.callTool({
+        arguments: {
+          payload: { eventType: "Bounce" },
+          provider: "aws-ses",
+        },
+        name: "paperboy_ingest_outbound_provider_event",
       });
 
       assert.equal(read.structuredContent.settings.defaultProvider, "smtp");
@@ -1319,6 +1363,13 @@ test("outbound providers are first-class tenant-bound MCP settings and tests", a
       );
       assert.equal(updated.structuredContent.settings.domains[0].updatedAt, fixedNow.toISOString());
       assert.equal(tested.structuredContent.testedAt, fixedNow.toISOString());
+      assert.deepEqual(tested.structuredContent.details, {
+        accountMode: "production",
+        region: "ap-southeast-2",
+        sendingEnabled: true,
+      });
+      assert.equal(ingested.structuredContent.data[0].suppressionCount, 1);
+      assert.equal(ingested.structuredContent.protocolTimeZone, "UTC");
       assert.equal(JSON.stringify(read).includes("test-token"), false);
       assert.deepEqual(calls, [
         ["get", firstPrincipal],
@@ -1332,7 +1383,13 @@ test("outbound providers are first-class tenant-bound MCP settings and tests", a
             ],
           },
         ],
-        ["test", firstPrincipal, { provider: "cloudflare-email" }],
+        ["test", firstPrincipal, { provider: "aws-ses" }],
+        [
+          "ingest",
+          firstPrincipal,
+          "aws-ses",
+          { eventType: "Bounce" },
+        ],
       ]);
     },
   );

@@ -1,6 +1,7 @@
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import type { OutboundProviderHttpServices } from "@/lib/outbound-provider-http";
 import { testConfiguredOutboundProvider } from "@/lib/outbound-provider-runtime";
+import { ingestOutboundProviderEvent } from "@/lib/outbound-provider-events";
 import {
   getOutboundProviderSettings,
   OutboundProviderSettingsError,
@@ -20,6 +21,13 @@ export const outboundProviderApiServices: OutboundProviderHttpServices = {
     getOutboundProviderSettings({
       actorUserId: actorUserId(principal),
       orgId: principal.orgId,
+    }),
+  ingest: (principal, provider, payload) =>
+    ingestOutboundProviderEvent({
+      actorUserId: principal.actorUserId,
+      orgId: principal.orgId,
+      payload,
+      provider,
     }),
   test: (principal, payload) =>
     testOutboundProviderConnection({

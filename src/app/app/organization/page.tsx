@@ -25,6 +25,9 @@ import { formatDateTime } from "@/lib/time";
 type OrganizationPageProps = {
   searchParams: Promise<{
     error?: string;
+    providerMode?: string;
+    providerRegion?: string;
+    providerSending?: string;
     saved?: string;
   }>;
 };
@@ -117,7 +120,20 @@ export default async function OrganizationPage({
     ? (errorMessages[status.error] ??
       "We could not complete that organization action. Try again.")
     : null;
-  const successMessage = status.saved ? successMessages[status.saved] : null;
+  const testedSesMode =
+    status.saved === "provider-tested" &&
+    (status.providerMode === "sandbox" || status.providerMode === "production") &&
+    typeof status.providerRegion === "string" &&
+    /^[a-z]{2}(?:-[a-z0-9]+)+-[0-9]$/.test(status.providerRegion)
+      ? status.providerMode
+      : null;
+  const successMessage = testedSesMode
+    ? `Amazon SES connection passed in ${status.providerRegion}: ${testedSesMode} access, sending ${
+        status.providerSending === "true" ? "enabled" : "disabled"
+      }.`
+    : status.saved
+      ? successMessages[status.saved]
+      : null;
 
   return (
     <section>
@@ -263,6 +279,8 @@ export default async function OrganizationPage({
           Credentials stay in the operator secret store. PaperBoy never accepts
           or returns them through the console, REST API, or MCP. Cloudflare Email
           Service is selectable directly and uses its authenticated SMTP endpoint.
+          Amazon SES supports per-organisation IAM roles or access keys and reports
+          its regional sandbox or production mode when tested.
         </p>
 
         {canManageOutboundProviders ? (

@@ -1,0 +1,6 @@
+{
+  "Type": "Notification",
+  "MessageId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "TopicArn": "arn:aws:sns:us-east-1:123456789012:paperboy-ses-events",
+  "Message": "{\"eventType\":\"Bounce\",\"bounce\":{\"bounceType\":\"Permanent\",\"bounceSubType\":\"General\",\"bouncedRecipients\":[{\"emailAddress\":\"reader@example.net\",\"action\":\"failed\",\"status\":\"5.1.1\",\"diagnosticCode\":\"smtp; 550 user unknown\"}],\"timestamp\":\"2026-08-24T01:02:03.000Z\",\"feedbackId\":\"010001-bounce-fixture\"},\"mail\":{\"timestamp\":\"2026-08-24T01:01:00.000Z\",\"messageId\":\"010001-ses-message-fixture\",\"source\":\"news@example.com\",\"destination\":[\"reader@example.net\"],\"tags\":{\"paperboy_message_id\":[\"11111111-1111-4111-8111-111111111111\"],\"ses:configuration-set\":[\"paperboy-events\"]}}}"
+}

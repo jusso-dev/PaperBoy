@@ -10,6 +10,7 @@ test("the event catalog is bounded to message lifecycle outcomes", () => {
   assert.deepEqual(MESSAGE_EVENT_TYPES, [
     "queued",
     "delivered",
+    "deferred",
     "bounced",
     "complained",
     "opened",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   OutboundProviderConfigurationError,
+  organizationAwsSesVariable,
   organizationProviderSecretVariable,
   providerConfigurationErrorMessage,
   providerRuntimeStatus,
@@ -88,7 +89,7 @@ test("Cloudflare Email requires its API-token SMTP endpoint", () => {
 test("missing credentials and unavailable adapters fail closed without secret values", () => {
   for (const [provider, code] of [
     ["smtp", "CREDENTIALS_MISSING"],
-    ["aws-ses", "ADAPTER_UNAVAILABLE"],
+    ["aws-ses", "CREDENTIALS_MISSING"],
     ["azure-email", "ADAPTER_UNAVAILABLE"],
   ]) {
     assert.throws(
@@ -101,4 +102,64 @@ test("missing credentials and unavailable adapters fail closed without secret va
       },
     );
   }
+});
+
+test("Amazon SES resolves per-organization region and access-key credentials", () => {
+  const environment = {
+    [organizationAwsSesVariable(orgId, "ACCESS_KEY_ID")]:
+      "TESTSESACCESSKEY01",
+    [organizationAwsSesVariable(orgId, "CONFIGURATION_SET")]:
+      "paperboy-events",
+    [organizationAwsSesVariable(orgId, "REGION")]: "ap-southeast-2",
+    [organizationAwsSesVariable(orgId, "SECRET_ACCESS_KEY")]:
+      "fixture-secret-access-key",
+    [organizationAwsSesVariable(orgId, "SNS_TOPIC_ARN")]:
+      "arn:aws:sns:ap-southeast-2:123456789012:paperboy-ses-events",
+    AWS_SES_ACCESS_KEY_ID: "TESTSESDEFAULTKEY01",
+    AWS_SES_REGION: "us-east-1",
+    AWS_SES_SECRET_ACCESS_KEY: "operator-default-secret",
+  };
+  const status = providerRuntimeStatus({
+    environment,
+    orgId,
+    provider: "aws-ses",
+  });
+
+  assert.deepEqual(status, {
+    configured: true,
+    credentialScope: "organization",
+    state: "ready",
+  });
+  assert.equal(JSON.stringify(status).includes("fixture-secret"), false);
+});
+
+test("Amazon SES supports an organization IAM role and rejects partial keys", () => {
+  assert.deepEqual(
+    providerRuntimeStatus({
+      environment: {
+        [organizationAwsSesVariable(orgId, "REGION")]: "us-gov-west-1",
+        [organizationAwsSesVariable(orgId, "ROLE_ARN")]:
+          "arn:aws-us-gov:iam::123456789012:role/paperboy-ses",
+      },
+      orgId,
+      provider: "aws-ses",
+    }),
+    {
+      configured: true,
+      credentialScope: "organization",
+      state: "ready",
+    },
+  );
+  assert.equal(
+    providerRuntimeStatus({
+      environment: {
+        [organizationAwsSesVariable(orgId, "ACCESS_KEY_ID")]:
+          "TESTSESACCESSKEY01",
+        [organizationAwsSesVariable(orgId, "REGION")]: "us-east-1",
+      },
+      orgId,
+      provider: "aws-ses",
+    }).state,
+    "configuration-invalid",
+  );
 });

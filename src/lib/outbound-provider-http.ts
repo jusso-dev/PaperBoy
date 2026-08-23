@@ -5,17 +5,24 @@ import {
   providerConfigurationErrorMessage,
 } from "@/lib/outbound-provider-configuration";
 import type { LiveOutboundProvider } from "@/lib/outbound-provider-core";
+import type { OutboundProviderEventIngestionResult } from "@/lib/outbound-provider-events";
 import {
   OutboundProviderSettingsError,
   type OutboundProviderSettings,
+  type OutboundProviderTestResult,
 } from "@/lib/outbound-providers";
 
 export type OutboundProviderHttpServices = {
   get: (principal: ApiKeyPrincipal) => Promise<OutboundProviderSettings>;
+  ingest: (
+    principal: ApiKeyPrincipal,
+    provider: LiveOutboundProvider,
+    payload: unknown,
+  ) => Promise<OutboundProviderEventIngestionResult[]>;
   test: (
     principal: ApiKeyPrincipal,
     payload: unknown,
-  ) => Promise<{ provider: LiveOutboundProvider; testedAt: Date }>;
+  ) => Promise<OutboundProviderTestResult>;
   update: (
     principal: ApiKeyPrincipal,
     payload: unknown,
@@ -224,6 +231,13 @@ export async function handleTestOutboundProviderRequest(
     return json(
       {
         ok: true,
+        details: result.details
+          ? {
+              account_mode: result.details.accountMode,
+              region: result.details.region,
+              sending_enabled: result.details.sendingEnabled,
+            }
+          : null,
         protocol_time_zone: "UTC",
         provider: result.provider,
         tested_at: result.testedAt.toISOString(),

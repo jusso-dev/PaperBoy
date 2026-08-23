@@ -1,6 +1,6 @@
 # Suppression list
 
-PaperBoy keeps one suppression list per organization. Reasons are `manual`, `unsubscribed`, `bounced`, and `complained`. The same table is checked by single sends, idempotent replays, batches, broadcasts, HTTP, and MCP before a queue row is inserted. The gate is provider-neutral, so a suppressed address never reaches either the SMTP adapter or Cloudflare Email Sending.
+PaperBoy keeps one suppression list per organization. Reasons are `manual`, `unsubscribed`, `bounced`, and `complained`. The same table is checked by single sends, idempotent replays, batches, broadcasts, HTTP, and MCP before a queue row is inserted. The gate is provider-neutral, so a suppressed address never reaches SMTP, Cloudflare Email Sending, or Amazon SES.
 
 Owners and admins can create, update, delete, and import suppressions. Current organization members can read them. Tenant context always comes from the signed-in session or bearer key; callers never supply an organization ID.
 
@@ -38,3 +38,7 @@ Stored instants and REST/MCP timestamps are RFC 3339 UTC. The console formats th
 ## Cloudflare Email Service
 
 PaperBoy suppressions run before provider selection, so they protect Cloudflare SMTP and future Cloudflare REST/Workers adapters without changing the provider-neutral queue. Cloudflare also maintains its own `cf-bounce` return path and provider suppression pipeline. These controls complement each other: deleting a PaperBoy entry does not delete or bypass a Cloudflare provider suppression, and PaperBoy does not replace Cloudflare bounce analytics.
+
+## Amazon SES
+
+Signed SNS or authenticated EventBridge feedback passes through the same tenant service. A permanent SES bounce adds `bounced`; a complaint adds `complained`; transient bounces and delivery delays do not suppress. The event recipient must already belong to the correlated organization message, and the stored SES message ID must match. SES may also enforce its independent account-level suppression list, so deleting a PaperBoy record does not guarantee SES will accept a later recipient.

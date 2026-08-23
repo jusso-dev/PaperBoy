@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { SendEmailCommand } from "@aws-sdk/client-sesv2";
 
 const databaseUrl = process.env.PAPERBOY_TEST_DATABASE_URL;
 
@@ -18,7 +19,14 @@ test(
         getOutboundProviderSettings,
         updateOutboundProviderSettings,
       },
-      { OutboundProviderConfigurationError },
+      {
+        OutboundProviderConfigurationError,
+        organizationAwsSesVariable,
+        providerAwsSesConfiguration,
+      },
+      { createAwsSesAdapter },
+      { postgresWorkerStore },
+      { processNextMessage },
     ] = await Promise.all([
       import("drizzle-orm"),
       import("../src/db/index.ts"),
@@ -26,6 +34,9 @@ test(
       import("../src/lib/messages.ts"),
       import("../src/lib/outbound-providers.ts"),
       import("../src/lib/outbound-provider-configuration.ts"),
+      import("../src/lib/aws-ses-adapter.ts"),
+      import("../src/lib/postgres-worker-store.ts"),
+      import("../src/lib/worker-core.ts"),
     ]);
     const orgId = randomUUID();
     const domainId = randomUUID();
@@ -39,6 +50,13 @@ test(
     const cloudflareEnvironment = {
       CLOUDFLARE_EMAIL_SMTP_URL:
         "smtps://api_token:test-token@smtp.mx.cloudflare.net:465",
+    };
+    const sesEnvironment = {
+      [organizationAwsSesVariable(orgId, "ACCESS_KEY_ID")]:
+        "TESTSESACCESSKEY02",
+      [organizationAwsSesVariable(orgId, "REGION")]: "ap-southeast-2",
+      [organizationAwsSesVariable(orgId, "SECRET_ACCESS_KEY")]:
+        "fixture-secret-access-key",
     };
     const integrationLock = await db.$client.connect();
     await integrationLock.query("SELECT pg_advisory_lock($1)", [190020]);
@@ -174,6 +192,68 @@ test(
         .where(eq(messages.orgId, orgId));
       assert.equal(Number(after), Number(before));
 
+      await updateOutboundProviderSettings({
+        actorUserId: userId,
+        environment: sesEnvironment,
+        orgId,
+        payload: { default_provider: "aws-ses" },
+      });
+      const fourth = await queueEmail({
+        payload: { ...payload, to: "ses@example.net" },
+        principal,
+        providerEnvironment: sesEnvironment,
+      });
+      assert.equal(fourth.provider, "aws-ses");
+      await db
+        .update(messages)
+        .set({ nextAttemptAt: new Date("2000-01-01T00:00:00.000Z") })
+        .where(eq(messages.id, fourth.id));
+      const configuration = providerAwsSesConfiguration({
+        environment: sesEnvironment,
+        orgId,
+      });
+      assert.ok(configuration);
+      const commands = [];
+      const adapter = createAwsSesAdapter({
+        client: {
+          async send(command) {
+            commands.push(command);
+            return { MessageId: "010001-ses-postgres-proof" };
+          },
+        },
+        configuration,
+        now: () => new Date("2026-08-24T01:00:00.000Z"),
+      });
+      try {
+        assert.deepEqual(
+          await processNextMessage({
+            adapter: {
+              name: "aws-ses-integration",
+              send: (message) => adapter.send(message),
+            },
+            deliveryModes: ["live"],
+            now: () => new Date("2026-08-24T01:00:01.000Z"),
+            store: postgresWorkerStore,
+            workerId: "aws-ses-integration",
+          }),
+          { messageId: fourth.id, state: "sent" },
+        );
+      } finally {
+        adapter.close();
+      }
+      assert.ok(commands[0] instanceof SendEmailCommand);
+      const [sesMessage] = await db
+        .select({
+          providerMessageId: messages.providerMessageId,
+          status: messages.status,
+        })
+        .from(messages)
+        .where(eq(messages.id, fourth.id));
+      assert.deepEqual(sesMessage, {
+        providerMessageId: "010001-ses-postgres-proof",
+        status: "sent",
+      });
+
       const rows = await db
         .select({ id: messages.id, provider: messages.outboundProvider })
         .from(messages)
@@ -184,6 +264,7 @@ test(
           [first.id, "smtp"],
           [second.id, "cloudflare-email"],
           [third.id, "smtp"],
+          [fourth.id, "aws-ses"],
         ]),
       );
     } finally {

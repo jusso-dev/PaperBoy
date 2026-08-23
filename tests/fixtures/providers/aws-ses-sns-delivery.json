@@ -1,0 +1,6 @@
+{
+  "Type": "Notification",
+  "MessageId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "TopicArn": "arn:aws:sns:us-east-1:123456789012:paperboy-ses-events",
+  "Message": "{\"eventType\":\"Delivery\",\"delivery\":{\"timestamp\":\"2026-08-24T01:04:03.000Z\",\"processingTimeMillis\":1000,\"recipients\":[\"reader@example.net\"],\"smtpResponse\":\"250 accepted\"},\"mail\":{\"timestamp\":\"2026-08-24T01:01:00.000Z\",\"messageId\":\"010001-ses-message-fixture\",\"source\":\"news@example.com\",\"destination\":[\"reader@example.net\"],\"tags\":{\"paperboy_message_id\":[\"11111111-1111-4111-8111-111111111111\"]}}}"
+}

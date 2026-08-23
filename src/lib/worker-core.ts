@@ -174,7 +174,9 @@ export const testSinkAdapter: OutboundProviderAdapter =
       }
       return { providerMessageId: null };
     },
-    async testConnection() {},
+    async testConnection() {
+      return null;
+    },
   });
 
 export function routeOutboundProviders(

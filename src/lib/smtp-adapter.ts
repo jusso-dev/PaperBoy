@@ -429,7 +429,10 @@ export function createSmtpAdapter(
         throw smtpError(error);
       }
     },
-    testConnection: verify,
+    async testConnection() {
+      await verify();
+      return null;
+    },
     verify,
   });
 }

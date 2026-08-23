@@ -224,17 +224,27 @@ export async function updateDomainOutboundProviderAction(formData: FormData) {
 
 export async function testOutboundProviderAction(formData: FormData) {
   const { organization, session } = await requireOrganization();
+  let details: Awaited<
+    ReturnType<typeof testOutboundProviderConnection>
+  >["details"] = null;
 
   try {
-    await testOutboundProviderConnection({
+    const result = await testOutboundProviderConnection({
       actorUserId: session.user.id,
       orgId: organization.id,
       payload: { provider: formData.get("provider") },
       testConnection: testConfiguredOutboundProvider,
     });
+    details = result.details;
   } catch (error) {
     redirect(errorLocation(error));
   }
 
-  redirect("/app/organization?saved=provider-tested");
+  const search = new URLSearchParams({ saved: "provider-tested" });
+  if (details) {
+    search.set("providerMode", details.accountMode);
+    search.set("providerRegion", details.region);
+    search.set("providerSending", String(details.sendingEnabled));
+  }
+  redirect(`/app/organization?${search.toString()}`);
 }

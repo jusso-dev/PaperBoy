@@ -17,6 +17,7 @@ import {
   LIVE_OUTBOUND_PROVIDERS,
   OUTBOUND_PROVIDER_CATALOG,
   type LiveOutboundProvider,
+  type OutboundProviderConnectionDetails,
   type OutboundProviderCapabilities,
 } from "@/lib/outbound-provider-core";
 
@@ -45,6 +46,12 @@ export type OutboundProviderSettings = {
   domains: OutboundProviderDomainSetting[];
   providers: OutboundProviderStatus[];
   updatedAt: Date;
+};
+
+export type OutboundProviderTestResult = {
+  details: OutboundProviderConnectionDetails | null;
+  provider: LiveOutboundProvider;
+  testedAt: Date;
 };
 
 export type OutboundProviderValidationIssue = {
@@ -371,8 +378,8 @@ export async function testOutboundProviderConnection(input: {
     environment?: Readonly<Record<string, string | undefined>>;
     orgId: string;
     provider: LiveOutboundProvider;
-  }) => Promise<void>;
-}): Promise<{ provider: LiveOutboundProvider; testedAt: Date }> {
+  }) => Promise<OutboundProviderConnectionDetails | null>;
+}): Promise<OutboundProviderTestResult> {
   const { provider } = parseTestOutboundProviderInput(input.payload);
   await requireOrganizationPermission({
     ...input,
@@ -380,11 +387,12 @@ export async function testOutboundProviderConnection(input: {
   });
 
   try {
-    await input.testConnection({
+    const details = await input.testConnection({
       environment: input.environment,
       orgId: input.orgId,
       provider,
     });
+    return { details, provider, testedAt: input.now ?? new Date() };
   } catch (error) {
     if (error instanceof OutboundProviderConfigurationError) throw error;
     throw new OutboundProviderConfigurationError(
@@ -392,5 +400,4 @@ export async function testOutboundProviderConnection(input: {
       provider,
     );
   }
-  return { provider, testedAt: input.now ?? new Date() };
 }

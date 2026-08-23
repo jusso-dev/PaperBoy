@@ -1,6 +1,7 @@
 export const MESSAGE_EVENT_TYPES = [
   "queued",
   "delivered",
+  "deferred",
   "bounced",
   "complained",
   "opened",

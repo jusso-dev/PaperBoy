@@ -11,6 +11,7 @@ import {
   type LiveOutboundProvider,
 } from "@/lib/outbound-provider-core";
 import type { OutboundProviderHttpServices } from "@/lib/outbound-provider-http";
+import { OutboundProviderEventError } from "@/lib/outbound-provider-event-core";
 import {
   OutboundProviderSettingsError,
   type OutboundProviderSettings,
@@ -22,6 +23,7 @@ export const PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_NAMES = [
   "paperboy_get_outbound_providers",
   "paperboy_update_outbound_providers",
   "paperboy_test_outbound_provider",
+  "paperboy_ingest_outbound_provider_event",
 ] as const;
 
 export const PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_DEFINITIONS = [
@@ -44,6 +46,13 @@ export const PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_DEFINITIONS = [
       "Test one outbound provider using operator secret-store credentials without accepting or returning secret material.",
     mutating: false,
     name: PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_NAMES[2],
+    schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+  },
+  {
+    description:
+      "Ingest one authenticated Amazon SES SNS or EventBridge delivery event into the tenant-bound message timeline and suppression service without accepting an organization ID.",
+    mutating: true,
+    name: PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_NAMES[3],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
   },
 ] as const;
@@ -92,11 +101,34 @@ const settingsOutputSchema = z.object({
   settings: settingsSchema,
 });
 const testOutputSchema = z.object({
+  details: z
+    .object({
+      accountMode: z.enum(["production", "sandbox"]),
+      region: z.string(),
+      sendingEnabled: z.boolean(),
+    })
+    .nullable(),
   ok: z.literal(true),
   protocolTimeZone: z.literal("UTC"),
   provider: providerSchema,
   schemaVersion: z.literal(PAPERBOY_MCP_SCHEMA_VERSION),
   testedAt: z.iso.datetime({ offset: true }),
+});
+const eventOutputSchema = z.object({
+  data: z.array(
+    z.object({
+      createdAt: z.iso.datetime({ offset: true }),
+      eventId: z.string().uuid(),
+      messageId: z.string().uuid(),
+      provider: z.literal("aws-ses"),
+      providerEventId: z.string(),
+      replayed: z.boolean(),
+      suppressionCount: z.number().int().min(0).max(50),
+      type: z.enum(["bounced", "complained", "deferred", "delivered"]),
+    }),
+  ),
+  protocolTimeZone: z.literal("UTC"),
+  schemaVersion: z.literal(PAPERBOY_MCP_SCHEMA_VERSION),
 });
 
 function unauthorizedResult() {
@@ -125,6 +157,13 @@ function errorResult(error: unknown) {
           : error.issues[0]?.message ?? "Check the outbound-provider settings.";
   } else if (error instanceof OutboundProviderConfigurationError) {
     message = providerConfigurationErrorMessage(error);
+  } else if (error instanceof OutboundProviderEventError) {
+    message =
+      error.code === "NO_MATCHING_MESSAGE"
+        ? "The provider event does not match one message in this organization."
+        : error.code === "MEMBERSHIP_REQUIRED"
+          ? "Create a new API key from a current organization member."
+          : "Provide one valid Amazon SES SNS or EventBridge event.";
   } else {
     console.error("PaperBoy MCP outbound-provider operation failed.");
   }
@@ -271,11 +310,67 @@ export function registerPaperBoyOutboundProviderTools(input: {
       try {
         const result = await input.services.test(principal, { provider });
         const output = {
+          details: result.details,
           ok: true as const,
           protocolTimeZone: "UTC" as const,
           provider: result.provider as LiveOutboundProvider,
           schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
           testedAt: protocolTimestamp(result.testedAt),
+        };
+        return {
+          content: [
+            { text: JSON.stringify(output, null, 2), type: "text" as const },
+          ],
+          structuredContent: output,
+        };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  input.server.registerTool(
+    PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_NAMES[3],
+    {
+      annotations: {
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_DEFINITIONS[3].description,
+      inputSchema: z
+        .object({
+          payload: z.record(z.string(), z.unknown()),
+          provider: z.literal("aws-ses"),
+        })
+        .strict(),
+      outputSchema: eventOutputSchema,
+      title: "Ingest PaperBoy outbound-provider event",
+      _meta: { "paperboy/schemaVersion": PAPERBOY_MCP_SCHEMA_VERSION },
+    },
+    async ({ payload, provider }) => {
+      const principal = await input.authorize();
+      if (!principal) return unauthorizedResult();
+      try {
+        const results = await input.services.ingest(
+          principal,
+          provider,
+          payload,
+        );
+        const output = {
+          data: results.map((result) => ({
+            createdAt: protocolTimestamp(result.createdAt),
+            eventId: result.eventId,
+            messageId: result.messageId,
+            provider: "aws-ses" as const,
+            providerEventId: result.providerEventId,
+            replayed: result.replayed,
+            suppressionCount: result.suppressionCount,
+            type: result.type,
+          })),
+          protocolTimeZone: "UTC" as const,
+          schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
         };
         return {
           content: [

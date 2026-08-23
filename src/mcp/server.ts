@@ -329,16 +329,17 @@ const broadcastDocument = `# PaperBoy broadcasts
 const workerDocument = `# PaperBoy outbound worker
 
 - Run 'pnpm worker' beside every web deployment. The PostgreSQL queue is the source of truth.
-- SMTP_URL supplies the operator-default SMTP secret. Per-organization SMTP and Cloudflare Email Service variables use a normalized organization UUID suffix. Credentials stay in operator injection and never enter MCP arguments or output.
+- SMTP_URL supplies the operator-default SMTP secret. Per-organization SMTP, Cloudflare Email Service, and Amazon SES variables use a normalized organization UUID suffix. Credentials stay in operator injection and never enter MCP arguments or output.
 - SMTP_TLS_MODE defaults to required. smtp:// must negotiate STARTTLS; opportunistic and disabled are weaker opt-ins for controlled environments. smtps:// uses implicit TLS.
 - For local capture, run 'docker compose -f compose.dev.yml up --wait mailpit', use SMTP_URL=smtp://127.0.0.1:1025 with SMTP_TLS_MODE=disabled, and inspect http://127.0.0.1:8025.
 - Cloudflare Email Service is selectable directly through the same hardened transport with CLOUDFLARE_EMAIL_SMTP_URL=smtps://api_token:<URL-encoded API token>@smtp.mx.cloudflare.net:465 and required TLS. A compatible SMTP_URL remains supported. Cloudflare remains its own DKIM/ARC signing authority.
+- Amazon SES uses the regional v2 API with an organization IAM role or access-key pair. Worker sends preserve raw MIME and attachments through SendEmail; the provider contract also exposes SendBulkEmail for compatible groups. Configuration-set message tags correlate signed SNS or authenticated EventBridge events without storing provider payloads.
 - Each message stores its resolved provider. Settings changes affect future queue rows only. Missing credentials fail before insertion; credentials removed later fail that row explicitly instead of falling back to another provider.
 - A worker atomically claims an eligible message, records 'sending', and holds a five-minute lease. If it exits mid-delivery, another worker can reclaim the same row after the lease expires.
 - Delivery is at least once. A process exit after a provider accepts a message but before PostgreSQL records 'sent' can cause a duplicate, so preserve send idempotency where the provider supports it.
 - Retry transient network failures, HTTP 5xx, and SMTP 4xx with bounded backoff. SMTP 550 and other permanent failures move directly to 'failed'. Five attempts exhaust the retry budget.
 - Failure codes and reasons are sanitized before storage. Message bodies, addresses, attachments, credentials, and provider responses never appear in MCP status output.
-- Use paperboy_list_delivery_statuses and paperboy_get_delivery_status to inspect queued, sending, sent, and failed records. The list supports status, domainId, and RFC 3339 UTC creation bounds while retaining key-derived tenant and environment scope. Use paperboy_list_message_events for the ordered queued, delivered, bounced, complained, and opted-in opened timeline. Opened events cannot exist unless that message persisted tracking opt-in. MCP timestamps remain RFC 3339 UTC, and these tools never return MIME or provider-owned Cloudflare DKIM/ARC material.
+- Use paperboy_list_delivery_statuses and paperboy_get_delivery_status to inspect queued, sending, sent, and failed records. The list supports status, domainId, and RFC 3339 UTC creation bounds while retaining key-derived tenant and environment scope. Use paperboy_list_message_events for the ordered queued, delivered, deferred, bounced, complained, and opted-in opened timeline. Opened events cannot exist unless that message persisted tracking opt-in. MCP timestamps remain RFC 3339 UTC, and these tools never return MIME or provider-owned signing material.
 - The worker hands the same rendered semantic message to every adapter. SMTP builds MIME at delivery time; Cloudflare Email Sending receives structured, unsigned fields and remains its own signing authority.
 - The same process also sends queued webhooks. Supply the same PAPERBOY_WEBHOOK_ENCRYPTION_KEY to every web and worker process that configures or delivers webhooks; without it, webhook rows remain queued.
 `;
@@ -350,7 +351,7 @@ const webhookDocument = `# PaperBoy signed webhooks
 - Each POST uses webhook-id, webhook-timestamp, and webhook-signature headers. Verify HMAC-SHA256 over the exact raw UTF-8 bytes of id.timestamp.body with the Base64-decoded part after whsec_. Reject stale timestamps before parsing JSON.
 - The webhook ID is the stable message-event ID and does not change across retries. Timestamp and signature are regenerated for each attempt.
 - Any 2xx response completes delivery. Network failures and 5xx responses retry after one minute, five minutes, thirty minutes, and two hours; other responses fail without retry. Five attempts exhaust the queue.
-- Event bodies contain type, created_at in RFC 3339 UTC, data.email_id, and data.environment. They omit recipients, subject, content, attachments, credentials, and provider payloads. SMTP, Cloudflare Email Service, and future adapters share this event path.
+- Event bodies contain type, created_at in RFC 3339 UTC, data.email_id, and data.environment. They omit recipients, subject, content, attachments, credentials, and provider payloads. SMTP, Cloudflare Email Service, and Amazon SES share this event path, including SES deferred delivery events.
 - Keep stored instants and protocol timestamps in UTC. Convert only receiver presentation with an explicit IANA timezone.
 `;
 
@@ -418,10 +419,12 @@ const outboundProviderDocument = `# PaperBoy outbound providers
 - paperboy_get_outbound_providers returns SMTP, Cloudflare Email Service, Amazon SES, and Azure Communication Services Email capabilities plus safe readiness state. It never returns secret values or provider payloads.
 - Owners and admins use paperboy_update_outbound_providers to select the organization default or tenant-owned domain overrides. Current members can read settings. Organization context always comes from the API key.
 - paperboy_test_outbound_provider performs a provider connection check using operator-injected credentials. Never put SMTP passwords, Cloudflare API tokens, AWS keys, Azure connection strings, or secret references in tool arguments.
+- Amazon SES connection tests return only its region, sandbox or production mode, and sending-enabled flag. paperboy_ingest_outbound_provider_event accepts one bounded SES SNS or EventBridge JSON object, correlates it within the key's organization, and idempotently records delivery, delay, permanent-bounce, or complaint outcomes.
 - Missing or invalid credentials fail closed before a live message enters the queue. Test API keys continue to use the isolated test sink.
-- SMTP_URL remains the operator-default SMTP secret. Cloudflare Email Service may use CLOUDFLARE_EMAIL_SMTP_URL or a Cloudflare SMTP_URL. Per-organization secret variables use the documented normalized organization UUID suffix.
-- Amazon SES and Azure are equal contract identities now; their delivery and event adapters land on their dedicated cards. Selecting an unavailable adapter produces an explicit error without falling back to SMTP.
-- Provider event adapters map into the stable PaperBoy delivered, bounced, and complained event names. Webhook names and PaperBoy message IDs do not change when provider selection changes.
+- SMTP_URL remains the operator-default SMTP secret. Cloudflare Email Service may use CLOUDFLARE_EMAIL_SMTP_URL or a Cloudflare SMTP_URL. Amazon SES supports AWS_SES_REGION with an IAM role, access-key pair, or explicitly enabled workload credential chain; every setting has a documented per-organization UUID-suffixed form.
+- Amazon SES is a live v2 delivery and event adapter. Azure remains selectable but unavailable until its adapter lands. Neither path silently falls back to SMTP.
+- SES SendEmail stores the returned SES message ID. SendBulkEmail supports up to 50 compatible entries. Configuration-set tags preserve each PaperBoy UUID, while signed SNS or API-key-authenticated EventBridge ingestion verifies both the tenant message and SES message ID before mutation.
+- Provider event adapters map into the stable PaperBoy delivered, deferred, bounced, and complained event names. Permanent SES bounces and complaints update the shared organization suppression list; transient bounces and delays do not.
 - Settings and test timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
 `;
 

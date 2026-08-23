@@ -1,0 +1,10 @@
+{
+  "BulkEmailEntryResults": [
+    { "Status": "SUCCESS", "MessageId": "010001-ses-bulk-001" },
+    { "Status": "SUCCESS", "MessageId": "010001-ses-bulk-002" }
+  ],
+  "$metadata": {
+    "httpStatusCode": 200,
+    "requestId": "ffffffff-ffff-4fff-8fff-ffffffffffff"
+  }
+}

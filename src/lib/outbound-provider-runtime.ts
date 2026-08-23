@@ -1,13 +1,16 @@
 import {
   OutboundProviderConfigurationError,
+  providerAwsSesConfiguration,
   providerConfigurationErrorMessage,
   providerSmtpConfiguration,
   requireProviderConfigured,
 } from "@/lib/outbound-provider-configuration";
 import {
+  type OutboundProviderConnectionDetails,
   type LiveOutboundProvider,
   type OutboundProviderAdapter,
 } from "@/lib/outbound-provider-core";
+import { createAwsSesAdapter } from "@/lib/aws-ses-adapter";
 import { createSmtpAdapter } from "@/lib/smtp-adapter";
 import {
   OutboundDeliveryError,
@@ -40,6 +43,17 @@ export function createConfiguredOutboundProvider(input: {
     });
   }
 
+  if (input.provider === "aws-ses") {
+    const configuration = providerAwsSesConfiguration(input);
+    if (!configuration) {
+      throw new OutboundProviderConfigurationError(
+        "CREDENTIALS_MISSING",
+        input.provider,
+      );
+    }
+    return createAwsSesAdapter({ configuration });
+  }
+
   throw new OutboundProviderConfigurationError(
     "ADAPTER_UNAVAILABLE",
     input.provider,
@@ -50,10 +64,10 @@ export async function testConfiguredOutboundProvider(input: {
   environment?: Readonly<Record<string, string | undefined>>;
   orgId: string;
   provider: LiveOutboundProvider;
-}): Promise<void> {
+}): Promise<OutboundProviderConnectionDetails | null> {
   const adapter = createConfiguredOutboundProvider(input);
   try {
-    await adapter.testConnection();
+    return await adapter.testConnection();
   } finally {
     adapter.close?.();
   }

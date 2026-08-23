@@ -50,7 +50,7 @@ function dependencies(overrides = {}) {
       request.headers.has("authorization") ? principal : null,
     services: {
       get: async () => settings(),
-      test: async () => ({ provider: "smtp", testedAt: fixedNow }),
+      test: async () => ({ details: null, provider: "smtp", testedAt: fixedNow }),
       update: async () => settings(),
       ...overrides,
     },
@@ -86,7 +86,7 @@ test("provider REST updates and tests through the authenticated tenant service",
   const deps = dependencies({
     async test(received, payload) {
       calls.push(["test", received, payload]);
-      return { provider: "cloudflare-email", testedAt: fixedNow };
+      return { details: null, provider: "cloudflare-email", testedAt: fixedNow };
     },
     async update(received, payload) {
       calls.push(["update", received, payload]);
@@ -107,6 +107,7 @@ test("provider REST updates and tests through the authenticated tenant service",
   assert.equal(update.status, 200);
   assert.equal(tested.status, 200);
   assert.deepEqual(await tested.json(), {
+    details: null,
     ok: true,
     protocol_time_zone: "UTC",
     provider: "cloudflare-email",
@@ -116,6 +117,38 @@ test("provider REST updates and tests through the authenticated tenant service",
     ["update", principal, { default_provider: "smtp" }],
     ["test", principal, { provider: "cloudflare-email" }],
   ]);
+});
+
+test("provider REST exposes only safe Amazon SES account mode details", async () => {
+  const response = await handleTestOutboundProviderRequest(
+    request("/api/v1/providers/test", "POST", { provider: "aws-ses" }),
+    dependencies({
+      async test() {
+        return {
+          details: {
+            accountMode: "sandbox",
+            region: "ap-southeast-2",
+            sendingEnabled: true,
+          },
+          provider: "aws-ses",
+          testedAt: fixedNow,
+        };
+      },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    details: {
+      account_mode: "sandbox",
+      region: "ap-southeast-2",
+      sending_enabled: true,
+    },
+    ok: true,
+    protocol_time_zone: "UTC",
+    provider: "aws-ses",
+    tested_at: fixedNow.toISOString(),
+  });
 });
 
 test("provider REST returns explicit auth, validation, and credential 4xx errors", async () => {

@@ -10,7 +10,8 @@ info:
     Tenant-bound transactional email API. API keys select one organization and
     one live or test environment. Stored instants and HTTP timestamps are RFC
     3339 UTC. The queue is provider-neutral: self-hosted SMTP and Cloudflare
-    Email Service use the same messages, limits, suppressions, and event model.
+    Email Service and Amazon SES use the same messages, limits, suppressions,
+    and event model.
 servers:
   - url: /
     description: Same origin as the PaperBoy deployment
@@ -40,6 +41,7 @@ x-paperboy-mcp:
     getOutboundProviders: paperboy_get_outbound_providers
     updateOutboundProviders: paperboy_update_outbound_providers
     testOutboundProvider: paperboy_test_outbound_provider
+    ingestOutboundProviderEvent: paperboy_ingest_outbound_provider_event
     getWebhook: paperboy_get_webhook
     configureWebhook: paperboy_configure_webhook
 paths:
@@ -390,6 +392,90 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/providers/aws-ses/events:
+    post:
+      operationId: ingestAwsSesEvent
+      tags: [Outbound providers]
+      summary: Ingest one Amazon SES event
+      description: >-
+        Owners and admins ingest one bounded SES SNS notification or EventBridge
+        event through the organization-bound API key. PaperBoy verifies message
+        correlation, stores only safe event metadata, updates hard-bounce or
+        complaint suppressions, and replays the same provider event idempotently.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AwsSesEventInput'
+      responses:
+        '202':
+          description: Event accepted or safely replayed.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundProviderEventEnvelope'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: Provider event exceeds 512 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/providers/aws-ses/events/{orgId}:
+    post:
+      operationId: receiveAwsSesSnsEvent
+      security: []
+      tags: [Outbound providers]
+      summary: Receive one signed Amazon SNS notification
+      description: >-
+        Public Amazon SNS subscription endpoint. PaperBoy requires the exact
+        per-organization topic ARN, verifies the AWS certificate and SNS
+        signature before ingestion, and automatically handles signed subscription
+        confirmation. Configure SNS signature version 2.
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              $ref: '#/components/schemas/AwsSnsEnvelope'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AwsSnsEnvelope'
+      responses:
+        '202':
+          description: Signed notification accepted or safely replayed.
+        '204':
+          description: Signed subscription confirmation completed or unsubscribe confirmation acknowledged.
+        '403':
+          description: Topic or SNS signature verification failed.
+        '404':
+          description: Organization SNS endpoint is not configured.
+        '422':
+          description: Signed notification does not contain a valid matching SES event.
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/webhooks:
     get:
       operationId: getWebhook
@@ -705,8 +791,12 @@ components:
     OutboundProviderTestResult:
       type: object
       additionalProperties: false
-      required: [ok, protocol_time_zone, provider, tested_at]
+      required: [details, ok, protocol_time_zone, provider, tested_at]
       properties:
+        details:
+          oneOf:
+            - $ref: '#/components/schemas/OutboundProviderConnectionDetails'
+            - type: 'null'
         ok:
           type: boolean
           const: true
@@ -717,6 +807,88 @@ components:
           $ref: '#/components/schemas/OutboundProvider'
         tested_at:
           $ref: '#/components/schemas/UtcDateTime'
+    OutboundProviderConnectionDetails:
+      type: object
+      additionalProperties: false
+      required: [account_mode, region, sending_enabled]
+      properties:
+        account_mode:
+          type: string
+          enum: [sandbox, production]
+        region:
+          type: string
+          pattern: '^[a-z]{2}(?:-[a-z0-9]+)+-[0-9]$'
+        sending_enabled:
+          type: boolean
+    AwsSesEventInput:
+      type: object
+      additionalProperties: true
+      description: One SES event, SNS notification envelope, or EventBridge event. Maximum encoded size is 512 KiB.
+    AwsSnsEnvelope:
+      type: object
+      additionalProperties: true
+      required: [Message, MessageId, Signature, SignatureVersion, SigningCertURL, Timestamp, TopicArn, Type]
+      properties:
+        Message:
+          type: string
+        MessageId:
+          type: string
+        Signature:
+          type: string
+        SignatureVersion:
+          type: string
+          enum: ['1', '2']
+        SigningCertURL:
+          type: string
+          format: uri
+        Timestamp:
+          $ref: '#/components/schemas/UtcDateTime'
+        TopicArn:
+          type: string
+        Type:
+          type: string
+          enum: [Notification, SubscriptionConfirmation, UnsubscribeConfirmation]
+    OutboundProviderEventResult:
+      type: object
+      additionalProperties: false
+      required: [created_at, event_id, message_id, provider, provider_event_id, replayed, suppression_count, type]
+      properties:
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        event_id:
+          type: string
+          format: uuid
+        message_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          const: aws-ses
+        provider_event_id:
+          type: string
+        replayed:
+          type: boolean
+        suppression_count:
+          type: integer
+          minimum: 0
+          maximum: 50
+        type:
+          type: string
+          enum: [delivered, deferred, bounced, complained]
+    OutboundProviderEventEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, protocol_time_zone]
+      properties:
+        data:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/OutboundProviderEventResult'
+        protocol_time_zone:
+          type: string
+          const: UTC
     OpenTrackingSettings:
       type: object
       additionalProperties: false
@@ -1003,7 +1175,7 @@ components:
           format: uuid
         type:
           type: string
-          enum: [queued, delivered, bounced, complained, opened]
+          enum: [queued, delivered, deferred, bounced, complained, opened]
     WebhookConfigurationInput:
       type: object
       additionalProperties: false
@@ -1086,6 +1258,7 @@ components:
           enum:
             - email.queued
             - email.delivered
+            - email.deferred
             - email.bounced
             - email.complained
             - email.opened
