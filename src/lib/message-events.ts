@@ -1,6 +1,13 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { events, messageAttachments, messages } from "@/db/schema";
+import {
+  events,
+  messageAttachments,
+  messages,
+  orgs,
+  webhookDeliveries,
+  webhookEndpoints,
+} from "@/db/schema";
 import {
   requireMessageEventAllowed,
   type MessageEventRecord,
@@ -11,6 +18,7 @@ import {
   type MessageDeliveryStatusRecord,
 } from "@/lib/message-statuses";
 import { MessageStatusError } from "@/lib/message-status-core";
+import { webhookEventBody } from "@/lib/webhook-core";
 
 export type MessageAttachmentMetadata = {
   contentType: string;
@@ -47,6 +55,84 @@ function eventFromRow(row: typeof events.$inferSelect): MessageEventRecord {
     sequence: row.sequence,
     type: row.type,
   };
+}
+
+type MessageEventTransaction = Parameters<
+  Parameters<typeof db.transaction>[0]
+>[0];
+
+export async function insertMessageEvent(
+  tx: MessageEventTransaction,
+  input: {
+    createdAt?: Date;
+    data?: Record<string, unknown>;
+    messageId: string;
+    type: MessageEventType;
+  },
+): Promise<MessageEventRecord> {
+  const [row] = await tx
+    .insert(events)
+    .values({
+      createdAt: input.createdAt,
+      data: input.data ?? {},
+      messageId: input.messageId,
+      type: input.type,
+    })
+    .returning();
+
+  if (!row) {
+    throw new Error("Message event insert returned no row.");
+  }
+
+  const event = eventFromRow(row);
+  const [message] = await tx
+    .select({
+      environment: messages.environment,
+      orgId: messages.orgId,
+    })
+    .from(messages)
+    .where(eq(messages.id, input.messageId))
+    .limit(1);
+
+  if (message) {
+    await tx
+      .select({ id: orgs.id })
+      .from(orgs)
+      .where(eq(orgs.id, message.orgId))
+      .for("share");
+    const [endpoint] = await tx
+      .select({
+        encryptedSecret: webhookEndpoints.encryptedSecret,
+        id: webhookEndpoints.id,
+        url: webhookEndpoints.url,
+      })
+      .from(webhookEndpoints)
+      .where(eq(webhookEndpoints.orgId, message.orgId))
+      .limit(1);
+
+    if (!endpoint) {
+      return event;
+    }
+
+    await tx.insert(webhookDeliveries).values({
+      body: webhookEventBody({
+        createdAt: event.createdAt,
+        environment: message.environment === "live" ? "live" : "test",
+        messageId: event.messageId,
+        type: event.type,
+      }),
+      createdAt: event.createdAt,
+      encryptedSecret: endpoint.encryptedSecret,
+      endpointId: endpoint.id,
+      eventId: event.id,
+      nextAttemptAt: event.createdAt,
+      orgId: message.orgId,
+      updatedAt: event.createdAt,
+      url: endpoint.url,
+    });
+  }
+
+  return event;
 }
 
 export async function getMessageDetail(
@@ -131,20 +217,6 @@ export async function recordMessageEvent(input: {
       type: input.type,
     });
 
-    const [event] = await tx
-      .insert(events)
-      .values({
-        createdAt: input.createdAt,
-        data: input.data ?? {},
-        messageId: input.messageId,
-        type: input.type,
-      })
-      .returning();
-
-    if (!event) {
-      throw new Error("Message event insert returned no row.");
-    }
-
-    return eventFromRow(event);
+    return insertMessageEvent(tx, input);
   });
 }

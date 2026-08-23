@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { events, messageAttachments, messages } from "@/db/schema";
+import { messageAttachments, messages } from "@/db/schema";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import {
   attachmentStorageKey,
@@ -19,6 +19,7 @@ import {
   type MessageStatus,
 } from "@/lib/email-core";
 import { authorizeSendingDomain } from "@/lib/domains";
+import { insertMessageEvent } from "@/lib/message-events";
 import { materializeTemplateSendPayload } from "@/lib/templates";
 
 export {
@@ -181,7 +182,7 @@ export async function queueEmail(input: {
         throw new Error("Message insert returned no row.");
       }
 
-      await tx.insert(events).values({
+      await insertMessageEvent(tx, {
         createdAt: inserted.createdAt,
         data: {},
         messageId: inserted.id,

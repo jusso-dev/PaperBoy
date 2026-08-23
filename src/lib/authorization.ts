@@ -22,6 +22,8 @@ export const ORG_PERMISSIONS = [
   "templates.delete",
   "templates.read",
   "templates.update",
+  "webhooks.manage",
+  "webhooks.read",
 ] as const;
 
 export type OrgPermission = (typeof ORG_PERMISSIONS)[number];
@@ -47,6 +49,8 @@ const rolePermissions: Record<OrgRole, ReadonlySet<OrgPermission>> = {
     "templates.delete",
     "templates.read",
     "templates.update",
+    "webhooks.manage",
+    "webhooks.read",
   ]),
   member: new Set([
     "broadcasts.read",

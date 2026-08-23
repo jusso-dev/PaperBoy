@@ -98,7 +98,7 @@ Run a supervised worker beside the web process after applying migrations:
 pnpm worker
 ```
 
-The worker needs the same `DATABASE_URL` and `PAPERBOY_ATTACHMENT_STORAGE_PATH` as the web process. `PAPERBOY_WORKER_POLL_MS` controls idle polling from 100 to 60,000 milliseconds and defaults to 1,000. `PAPERBOY_WORKER_ID` can supply a stable 1-128 character process identity; otherwise PaperBoy uses the host name and PID. Keep the process environment on `TZ=UTC`; user-facing delivery times are still rendered with each signed-in user's persisted IANA timezone.
+The worker needs the same `DATABASE_URL`, `PAPERBOY_ATTACHMENT_STORAGE_PATH`, and `PAPERBOY_WEBHOOK_ENCRYPTION_KEY` as the web process. `PAPERBOY_WORKER_POLL_MS` controls idle polling from 100 to 60,000 milliseconds and defaults to 1,000. `PAPERBOY_WORKER_ID` can supply a stable 1-128 character process identity; otherwise PaperBoy uses the host name and PID. Keep the process environment on `TZ=UTC`; user-facing delivery times are still rendered with each signed-in user's persisted IANA timezone.
 
 Set `SMTP_URL` to enable live delivery through an operator-selected SMTP server. PaperBoy accepts `smtp://` submission and `smtps://` implicit TLS URLs. `SMTP_TLS_MODE` defaults to `required`: an `smtp://` connection must upgrade with STARTTLS or fail safely. `opportunistic` permits a failed upgrade to continue and `disabled` sends plaintext, so use either weaker mode only on a trusted development network. `smtps://` always requires implicit TLS. Inject URL credentials through the deployment secret store; PaperBoy never writes the URL, credentials, or raw relay response to delivery status or logs.
 
@@ -130,6 +130,25 @@ Transient network failures, HTTP 5xx, and SMTP 4xx return to `queued` after 1 mi
 The worker routes test keys only to the isolated test sink and live keys only to the configured live adapter. The worker core passes one provider-neutral semantic message including verified attachment bytes. SMTP coverage builds MIME from that value, while the Cloudflare compatibility assertion converts that exact value into Cloudflare Email Sending's structured, unsigned REST payload. No queue schema, template path, delivery-status response, or MCP tool is provider-specific.
 
 Queue creation stores its `queued` event in the same transaction as the message. A successful worker transition stores `sent` state and its `delivered` event atomically, so self-hosted SMTP, Cloudflare Email Service SMTP, and future structured adapters share one event contract. Equal event instants use an internal sequence tie-break; REST and MCP timelines remain stable without exposing that sequence.
+
+## Signed webhooks
+
+Owners and admins can configure one organization-wide endpoint with `PUT /api/v1/webhooks` or `paperboy_configure_webhook`:
+
+```sh
+curl -X PUT https://paperboy.example/api/v1/webhooks \
+  -H 'Authorization: Bearer <PaperBoy API key>' \
+  -H 'Content-Type: application/json' \
+  --data '{"url":"https://hooks.example.com/paperboy"}'
+```
+
+First creation returns a generated `whsec_...` `signing_secret`. Store it immediately in the receiver's secret manager: PaperBoy keeps only a context-bound AES-256-GCM envelope and `GET /api/v1/webhooks` never returns either raw or encrypted secret. Reconfiguring the URL preserves the existing secret and returns `signing_secret: null`. Set the same `PAPERBOY_WEBHOOK_ENCRYPTION_KEY` to a dedicated Base64-encoded 32-byte key in every web, MCP, and worker process; do not reuse the DKIM key. Without it, the worker leaves webhook deliveries queued.
+
+Each event POST carries `webhook-id`, `webhook-timestamp`, and `webhook-signature`. The signature is `v1,<Base64 HMAC-SHA256>` over the exact raw UTF-8 string `<id>.<Unix-seconds timestamp>.<body>`, keyed by the Base64-decoded portion after `whsec_`. Verify the raw body before JSON parsing, compare in constant time, and reject timestamps outside a five-minute tolerance. The format follows Svix's [white-labelled signing contract and manual verification algorithm](https://docs.svix.com/receiving/verifying-payloads/how-manual).
+
+The stable event ID remains unchanged across retries; attempt timestamp and signature change. Any 2xx response completes delivery. Network failures and 5xx responses retry after 1 minute, 5 minutes, 30 minutes, then 2 hours; 3xx and 4xx responses fail without retry, and five attempts exhaust the queue. PostgreSQL leases make abandoned attempts reclaimable, with the same at-least-once caveat as email delivery.
+
+Bodies contain only `type`, UTC `created_at`, and `data.email_id` plus `data.environment`; recipients, subject, message content, attachments, credentials, and provider payloads stay out. SMTP, Cloudflare Email Service, and future adapters emit through the same transactionally queued event path. Production configuration accepts HTTPS only. Plain HTTP is restricted to `localhost`/loopback receivers outside production for local validation.
 
 ## Email templates
 
@@ -216,6 +235,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
         "DATABASE_URL": "<injected database URL>",
         "PAPERBOY_API_KEY": "<injected PaperBoy API key>",
         "PAPERBOY_DKIM_ENCRYPTION_KEY": "<injected base64-encoded 32-byte key>",
+        "PAPERBOY_WEBHOOK_ENCRYPTION_KEY": "<injected different base64-encoded 32-byte key>",
         "PAPERBOY_ATTACHMENT_STORAGE_PATH": "<private shared attachment path>"
       }
     }
@@ -225,7 +245,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 
 Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
 
-The contract exposes capability/account context plus first-class single/batch sending, delivery-status list/get, ordered message-event timelines, template list/get/create/update/delete/preview, broadcast list/get/create/pause/resume/cancel, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, worker operation, templates, broadcasts, and DNS. `paperboy_list_delivery_statuses` and `paperboy_get_delivery_status` expose attempts, state times, and sanitized failures without recipients or message content. `paperboy_list_message_events` exposes the ordered lifecycle without recipients, content, event data, provider payloads, or the internal sequence. `paperboy_preview_template` renders sample JSON and lists missing required variables without queueing or sending mail. Broadcast tools expose aggregate progress without returning audience addresses or message bodies; cancellation requires explicit confirmation. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Template, broadcast, delivery, domain, and DKIM reads or mutations re-read the key creator's current membership and role; destructive cancellation/deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
+The contract exposes capability/account context plus first-class single/batch sending, delivery-status list/get, ordered message-event timelines, signed webhook get/configure, template list/get/create/update/delete/preview, broadcast list/get/create/pause/resume/cancel, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, worker operation, signed webhook verification, templates, broadcasts, and DNS. `paperboy_list_delivery_statuses` and `paperboy_get_delivery_status` expose attempts, state times, and sanitized failures without recipients or message content. `paperboy_list_message_events` exposes the ordered lifecycle without recipients, content, event data, provider payloads, or the internal sequence. `paperboy_get_webhook` omits all secret material; `paperboy_configure_webhook` returns a signing secret only when first creating the endpoint. `paperboy_preview_template` renders sample JSON and lists missing required variables without queueing or sending mail. Broadcast tools expose aggregate progress without returning audience addresses or message bodies; cancellation requires explicit confirmation. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Template, broadcast, delivery, webhook, domain, and DKIM reads or mutations re-read the key creator's current membership and role; destructive cancellation/deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
 
 HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
 

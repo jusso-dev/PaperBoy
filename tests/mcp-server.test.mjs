@@ -92,6 +92,12 @@ const firstEvent = {
   sequence: 1,
   type: "queued",
 };
+const firstWebhook = {
+  createdAt: fixedNow,
+  id: "abababab-abab-4bab-8bab-abababababab",
+  updatedAt: fixedNow,
+  url: "https://hooks.example.com/paperboy",
+};
 const firstTemplate = {
   createdAt: fixedNow,
   html: "<p>Hello {{reader.name}}</p>",
@@ -186,6 +192,17 @@ function templateServices(overrides = {}) {
   };
 }
 
+function webhookServices(overrides = {}) {
+  return {
+    configure: async () => ({
+      endpoint: firstWebhook,
+      signingSecret: "whsec_shown-once",
+    }),
+    get: async () => firstWebhook,
+    ...overrides,
+  };
+}
+
 async function withClient(dependencies, run) {
   const server = createPaperBoyMcpServer({
     now: () => fixedNow,
@@ -217,6 +234,7 @@ function dependencies(overrides = {}) {
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
     templates: templateServices(),
+    webhooks: webhookServices(),
     ...overrides,
   };
 }
@@ -294,6 +312,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "template",
       ],
+      paperboy_get_webhook: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "webhook",
+      ],
       paperboy_list_capabilities: [
         "generatedAt",
         "protocolTimeZone",
@@ -331,6 +355,13 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
         "templates",
+      ],
+      paperboy_configure_webhook: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "signingSecret",
+        "webhook",
       ],
       paperboy_preview_template: [
         "html",
@@ -412,12 +443,14 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_broadcast: ["broadcastId"],
       paperboy_get_delivery_status: ["messageId"],
       paperboy_get_template: ["templateId"],
+      paperboy_get_webhook: [],
       paperboy_list_capabilities: [],
       paperboy_list_broadcasts: [],
       paperboy_list_domains: [],
       paperboy_list_delivery_statuses: ["limit"],
       paperboy_list_message_events: ["messageId"],
       paperboy_list_templates: [],
+      paperboy_configure_webhook: ["url"],
       paperboy_preview_template: ["data", "templateId"],
       paperboy_pause_broadcast: ["broadcastId"],
       paperboy_resume_broadcast: ["broadcastId"],
@@ -468,12 +501,14 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_broadcast: { destructive: false, readOnly: true },
       paperboy_get_delivery_status: { destructive: false, readOnly: true },
       paperboy_get_template: { destructive: false, readOnly: true },
+      paperboy_get_webhook: { destructive: false, readOnly: true },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
       paperboy_list_broadcasts: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
       paperboy_list_delivery_statuses: { destructive: false, readOnly: true },
       paperboy_list_message_events: { destructive: false, readOnly: true },
       paperboy_list_templates: { destructive: false, readOnly: true },
+      paperboy_configure_webhook: { destructive: false, readOnly: false },
       paperboy_preview_template: { destructive: false, readOnly: true },
       paperboy_pause_broadcast: { destructive: false, readOnly: false },
       paperboy_resume_broadcast: { destructive: false, readOnly: false },
@@ -621,6 +656,13 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     assert.match(workerGuide.contents[0].text, /Cloudflare Email Sending/);
     assert.match(workerGuide.contents[0].text, /paperboy_list_message_events/);
     assert.match(workerGuide.contents[0].text, /persisted tracking opt-in/);
+
+    const webhookGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[6],
+    });
+    assert.match(webhookGuide.contents[0].text, /webhook-signature/);
+    assert.match(webhookGuide.contents[0].text, /HMAC-SHA256/);
+    assert.match(webhookGuide.contents[0].text, /Cloudflare Email Service/);
   });
 });
 
@@ -826,6 +868,57 @@ test("delivery status is first-class, tenant-bound, UTC, and content-free", asyn
         ["list", firstPrincipal, 7],
         ["get", firstPrincipal, firstDelivery.id],
         ["listEvents", firstPrincipal, firstDelivery.id],
+      ]);
+    },
+  );
+});
+
+test("webhook configuration is first-class and returns a new secret once", async () => {
+  const calls = [];
+
+  await withClient(
+    dependencies({
+      webhooks: webhookServices({
+        configure: async (principal, payload) => {
+          calls.push(["configure", principal, payload]);
+          return {
+            endpoint: firstWebhook,
+            signingSecret: "whsec_shown-once",
+          };
+        },
+        get: async (principal) => {
+          calls.push(["get", principal]);
+          return firstWebhook;
+        },
+      }),
+    }),
+    async (client) => {
+      const configured = await client.callTool({
+        arguments: { url: firstWebhook.url },
+        name: "paperboy_configure_webhook",
+      });
+      const fetched = await client.callTool({
+        arguments: {},
+        name: "paperboy_get_webhook",
+      });
+
+      assert.deepEqual(configured.structuredContent, {
+        observedAt: fixedNow.toISOString(),
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+        signingSecret: "whsec_shown-once",
+        webhook: {
+          ...firstWebhook,
+          createdAt: fixedNow.toISOString(),
+          updatedAt: fixedNow.toISOString(),
+        },
+      });
+      assert.equal(fetched.structuredContent.webhook.id, firstWebhook.id);
+      assert.equal(JSON.stringify(fetched).includes("whsec_"), false);
+      assert.equal(JSON.stringify(fetched).includes("encrypted"), false);
+      assert.deepEqual(calls, [
+        ["configure", firstPrincipal, { url: firstWebhook.url }],
+        ["get", firstPrincipal],
       ]);
     },
   );

@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { events, messages } from "@/db/schema";
+import { messages } from "@/db/schema";
 import type { MessageDeliveryMode } from "@/lib/email-core";
+import { insertMessageEvent } from "@/lib/message-events";
 import { loadMessageAttachments } from "@/lib/stored-message-attachments";
 import type { WorkerStore } from "@/lib/worker-core";
 
@@ -173,7 +174,7 @@ export const postgresWorkerStore: WorkerStore = {
         return false;
       }
 
-      await tx.insert(events).values({
+      await insertMessageEvent(tx, {
         createdAt: input.now,
         data: {},
         messageId: input.messageId,

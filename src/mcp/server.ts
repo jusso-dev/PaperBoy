@@ -38,6 +38,12 @@ import {
   registerPaperBoyTemplateTools,
   type PaperBoyMcpTemplateServices,
 } from "@/mcp/template-tools";
+import {
+  PAPERBOY_WEBHOOK_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_WEBHOOK_MCP_TOOL_NAMES,
+  registerPaperBoyWebhookTools,
+  type PaperBoyMcpWebhookServices,
+} from "@/mcp/webhook-tools";
 
 export { PAPERBOY_MCP_SCHEMA_VERSION, PAPERBOY_MCP_VERSION };
 
@@ -46,6 +52,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
   "paperboy_get_account_context",
   ...PAPERBOY_EMAIL_MCP_TOOL_NAMES,
   ...PAPERBOY_DELIVERY_MCP_TOOL_NAMES,
+  ...PAPERBOY_WEBHOOK_MCP_TOOL_NAMES,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_NAMES,
   ...PAPERBOY_BROADCAST_MCP_TOOL_NAMES,
   ...PAPERBOY_DOMAIN_MCP_TOOL_NAMES,
@@ -58,6 +65,7 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/templates",
   "paperboy://docs/broadcasts",
   "paperboy://docs/worker",
+  "paperboy://docs/webhooks",
 ] as const;
 
 type PaperBoyMcpDependencies = {
@@ -69,6 +77,7 @@ type PaperBoyMcpDependencies = {
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
   now?: () => Date;
   templates: PaperBoyMcpTemplateServices;
+  webhooks: PaperBoyMcpWebhookServices;
 };
 
 const emptyInputSchema = z.object({}).strict();
@@ -131,6 +140,7 @@ const toolDefinitions = [
   },
   ...PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS,
+  ...PAPERBOY_WEBHOOK_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DOMAIN_MCP_TOOL_DEFINITIONS,
@@ -161,6 +171,10 @@ const resourceDefinitions = [
     description: "Operate and inspect the durable outbound worker.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[5],
   },
+  {
+    description: "Configure and verify signed outbound webhooks.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[6],
+  },
 ] as const;
 
 const configurationDocument = `# PaperBoy MCP configuration
@@ -176,6 +190,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - DKIM tools return public DNS material only. PaperBoy private keys remain encrypted at rest and never enter tool output.
 - paperboy_send_email and paperboy_send_email_batch use the same validation, domain authorization, and queue services as their HTTP peers. Single sends can persist private attachments outside PostgreSQL; batch sends reject them. Tool output never includes attachment content. Test keys always select the test sink; batch results preserve input order and report failures per item.
 - paperboy_list_message_events returns the same tenant- and environment-scoped ordered timeline as GET /api/v1/emails/:id/events. It omits recipients, content, event data, and provider payloads.
+- paperboy_get_webhook and paperboy_configure_webhook manage one organization webhook without accepting an organization ID. A new signing secret is returned only on first creation and is never returned by reads.
 - Send tools accept either inline subject/body fields or \`template_id\` plus a JSON \`data\` object. Template rendering finishes before provider delivery, so SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text.
 - Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
@@ -231,6 +246,18 @@ const workerDocument = `# PaperBoy outbound worker
 - Failure codes and reasons are sanitized before storage. Message bodies, addresses, attachments, credentials, and provider responses never appear in MCP status output.
 - Use paperboy_list_delivery_statuses and paperboy_get_delivery_status to inspect queued, sending, sent, and failed records. Use paperboy_list_message_events for the ordered queued, delivered, bounced, complained, and opted-in opened timeline. Opened events cannot exist unless that message persisted tracking opt-in. MCP timestamps remain RFC 3339 UTC.
 - The worker hands the same rendered semantic message to every adapter. SMTP builds MIME at delivery time; Cloudflare Email Sending receives structured, unsigned fields and remains its own signing authority.
+- The same process also sends queued webhooks. Supply the same PAPERBOY_WEBHOOK_ENCRYPTION_KEY to every web and worker process that configures or delivers webhooks; without it, webhook rows remain queued.
+`;
+
+const webhookDocument = `# PaperBoy signed webhooks
+
+- Configure one organization endpoint with PUT /api/v1/webhooks or paperboy_configure_webhook. The generated whsec_ signing secret is shown only in the first successful response; store it immediately in the receiver's secret manager.
+- Production endpoints must use HTTPS. Plain HTTP is accepted only for loopback development receivers outside production.
+- Each POST uses webhook-id, webhook-timestamp, and webhook-signature headers. Verify HMAC-SHA256 over the exact raw UTF-8 bytes of id.timestamp.body with the Base64-decoded part after whsec_. Reject stale timestamps before parsing JSON.
+- The webhook ID is the stable message-event ID and does not change across retries. Timestamp and signature are regenerated for each attempt.
+- Any 2xx response completes delivery. Network failures and 5xx responses retry after one minute, five minutes, thirty minutes, and two hours; other responses fail without retry. Five attempts exhaust the queue.
+- Event bodies contain type, created_at in RFC 3339 UTC, data.email_id, and data.environment. They omit recipients, subject, content, attachments, credentials, and provider payloads. SMTP, Cloudflare Email Service, and future adapters share this event path.
+- Keep stored instants and protocol timestamps in UTC. Convert only receiver presentation with an explicit IANA timezone.
 `;
 
 function authorizationError() {
@@ -350,6 +377,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[3], templateDocument],
     [resourceDefinitions[4], broadcastDocument],
     [resourceDefinitions[5], workerDocument],
+    [resourceDefinitions[6], webhookDocument],
   ] as const) {
     server.registerResource(
       resource.uri,
@@ -390,6 +418,13 @@ export function createPaperBoyMcpServer(
     now,
     server,
     services: dependencies.deliveries,
+  });
+
+  registerPaperBoyWebhookTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.webhooks,
   });
 
   registerPaperBoyTemplateTools({

@@ -29,6 +29,8 @@ const matrix = {
     "templates.delete",
     "templates.read",
     "templates.update",
+    "webhooks.manage",
+    "webhooks.read",
   ]),
   member: new Set([
     "broadcasts.read",
@@ -55,6 +57,7 @@ test("members cannot mint API keys or delete domains", () => {
   assert.equal(can("member", "broadcasts.read"), true);
   assert.equal(can("member", "messages.read"), true);
   assert.equal(can("member", "broadcasts.control"), false);
+  assert.equal(can("member", "webhooks.manage"), false);
   assert.throws(
     () => requirePermission("member", "apiKeys.create"),
     AuthorizationError,

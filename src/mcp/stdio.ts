@@ -21,6 +21,7 @@ async function main() {
     { paperBoyMcpDeliveryServices },
     { paperBoyMcpEmailServices },
     { paperBoyMcpTemplateServices },
+    { paperBoyMcpWebhookServices },
   ] = await Promise.all([
     import("@/lib/api-key-auth"),
     import("@/lib/organization-reader"),
@@ -29,6 +30,7 @@ async function main() {
     import("@/mcp/delivery-services"),
     import("@/mcp/email-services"),
     import("@/mcp/template-services"),
+    import("@/mcp/webhook-services"),
   ]);
   const principal = await authenticateApiKey(rawApiKey);
 
@@ -48,6 +50,7 @@ async function main() {
         emails: paperBoyMcpEmailServices,
         findOrganization: findOrganizationById,
         templates: paperBoyMcpTemplateServices,
+        webhooks: paperBoyMcpWebhookServices,
       }),
     {
       onerror: () =>

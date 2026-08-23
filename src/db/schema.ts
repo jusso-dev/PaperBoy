@@ -24,6 +24,7 @@ import type {
   BroadcastStatus,
   SuppressionReason,
 } from "@/lib/broadcast-core";
+import type { WebhookDeliveryStatus } from "@/lib/webhook-core";
 
 export const orgs = pgTable("orgs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -775,6 +776,123 @@ export const events = pgTable(
     check(
       "events_data_object_check",
       sql`jsonb_typeof(${table.data}) = 'object'`,
+    ),
+  ],
+);
+
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    url: text("url").notNull(),
+    encryptedSecret: text("encrypted_secret").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("webhook_endpoints_org_id_unique").on(table.orgId),
+    check(
+      "webhook_endpoints_url_length_check",
+      sql`char_length(${table.url}) between 1 and 2048`,
+    ),
+    check(
+      "webhook_endpoints_encrypted_secret_length_check",
+      sql`char_length(${table.encryptedSecret}) between 32 and 1024`,
+    ),
+  ],
+);
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    endpointId: uuid("endpoint_id").notNull(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    encryptedSecret: text("encrypted_secret").notNull(),
+    body: text("body").notNull(),
+    status: text("status")
+      .$type<WebhookDeliveryStatus>()
+      .default("queued")
+      .notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    workerId: text("worker_id"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+    responseStatus: integer("response_status"),
+    lastErrorCode: text("last_error_code"),
+    failureReason: text("failure_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("webhook_deliveries_event_id_unique").on(table.eventId),
+    index("webhook_deliveries_org_id_created_at_idx").on(
+      table.orgId,
+      table.createdAt,
+    ),
+    index("webhook_deliveries_status_next_attempt_at_created_at_idx").on(
+      table.status,
+      table.nextAttemptAt,
+      table.createdAt,
+    ),
+    check(
+      "webhook_deliveries_status_check",
+      sql`${table.status} in ('queued', 'sending', 'delivered', 'failed')`,
+    ),
+    check(
+      "webhook_deliveries_attempt_count_check",
+      sql`${table.attemptCount} >= 0`,
+    ),
+    check(
+      "webhook_deliveries_url_length_check",
+      sql`char_length(${table.url}) between 1 and 2048`,
+    ),
+    check(
+      "webhook_deliveries_body_length_check",
+      sql`char_length(${table.body}) between 2 and 65536`,
+    ),
+    check(
+      "webhook_deliveries_worker_state_check",
+      sql`(${table.status} = 'sending' and ${table.attemptCount} > 0 and ${table.lastAttemptAt} is not null and ${table.workerId} is not null and ${table.leaseExpiresAt} is not null) or (${table.status} <> 'sending' and ${table.workerId} is null and ${table.leaseExpiresAt} is null)`,
+    ),
+    check(
+      "webhook_deliveries_delivered_state_check",
+      sql`(${table.status} = 'delivered' and ${table.deliveredAt} is not null) or (${table.status} <> 'delivered' and ${table.deliveredAt} is null)`,
+    ),
+    check(
+      "webhook_deliveries_failed_state_check",
+      sql`(${table.status} = 'failed' and ${table.failedAt} is not null and ${table.failureReason} is not null) or (${table.status} <> 'failed' and ${table.failedAt} is null)`,
+    ),
+    check(
+      "webhook_deliveries_response_status_check",
+      sql`${table.responseStatus} is null or ${table.responseStatus} between 100 and 599`,
     ),
   ],
 );

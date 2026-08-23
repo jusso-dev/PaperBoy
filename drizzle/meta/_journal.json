@@ -92,6 +92,13 @@
       "when": 1787493912144,
       "tag": "0012_nebulous_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787495499423,
+      "tag": "0013_chief_multiple_man",
+      "breakpoints": true
     }
   ]
 }
