@@ -14,6 +14,10 @@ export const ORG_PERMISSIONS = [
   "members.invite",
   "members.remove",
   "members.read",
+  "templates.create",
+  "templates.delete",
+  "templates.read",
+  "templates.update",
 ] as const;
 
 export type OrgPermission = (typeof ORG_PERMISSIONS)[number];
@@ -31,8 +35,12 @@ const rolePermissions: Record<OrgRole, ReadonlySet<OrgPermission>> = {
     "domains.verify",
     "members.invite",
     "members.read",
+    "templates.create",
+    "templates.delete",
+    "templates.read",
+    "templates.update",
   ]),
-  member: new Set(["domains.read", "members.read"]),
+  member: new Set(["domains.read", "members.read", "templates.read"]),
 };
 
 export class AuthorizationError extends Error {

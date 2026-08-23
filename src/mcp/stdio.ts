@@ -18,11 +18,13 @@ async function main() {
     { findOrganizationById },
     { paperBoyMcpDomainServices },
     { paperBoyMcpEmailServices },
+    { paperBoyMcpTemplateServices },
   ] = await Promise.all([
     import("@/lib/api-key-auth"),
     import("@/lib/organization-reader"),
     import("@/mcp/domain-services"),
     import("@/mcp/email-services"),
+    import("@/mcp/template-services"),
   ]);
   const principal = await authenticateApiKey(rawApiKey);
 
@@ -39,6 +41,7 @@ async function main() {
         domains: paperBoyMcpDomainServices,
         emails: paperBoyMcpEmailServices,
         findOrganization: findOrganizationById,
+        templates: paperBoyMcpTemplateServices,
       }),
     {
       onerror: () =>

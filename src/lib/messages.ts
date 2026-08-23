@@ -20,6 +20,7 @@ import {
   type MessageStatus,
 } from "@/lib/email-core";
 import { authorizeSendingDomain } from "@/lib/domains";
+import { materializeTemplateSendPayload } from "@/lib/templates";
 
 export type QueuedMessageRecord = {
   createdAt: Date;
@@ -124,7 +125,11 @@ export async function queueEmail(input: {
   payload: unknown;
   principal: ApiKeyPrincipal;
 }): Promise<QueuedMessageRecord> {
-  const email = parseSendEmailInput(input.payload, {
+  const payload = await materializeTemplateSendPayload({
+    orgId: input.principal.orgId,
+    payload: input.payload,
+  });
+  const email = parseSendEmailInput(payload, {
     allowAttachments: input.allowAttachments,
   });
   const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);

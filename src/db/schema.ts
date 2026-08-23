@@ -335,6 +335,54 @@ export const domainDkimKeys = pgTable(
   ],
 );
 
+export const emailTemplates = pgTable(
+  "email_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    subject: text("subject").notNull(),
+    html: text("html"),
+    textBody: text("text"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("email_templates_org_id_name_unique").on(
+      table.orgId,
+      sql`lower(${table.name})`,
+    ),
+    index("email_templates_org_id_idx").on(table.orgId),
+    check(
+      "email_templates_name_length_check",
+      sql`char_length(btrim(${table.name})) between 1 and 120`,
+    ),
+    check(
+      "email_templates_subject_length_check",
+      sql`char_length(btrim(${table.subject})) between 1 and 998 and ${table.subject} !~ '[\r\n]'`,
+    ),
+    check(
+      "email_templates_html_length_check",
+      sql`${table.html} is null or char_length(${table.html}) between 1 and 2097152`,
+    ),
+    check(
+      "email_templates_text_length_check",
+      sql`${table.textBody} is null or char_length(${table.textBody}) between 1 and 2097152`,
+    ),
+    check(
+      "email_templates_body_check",
+      sql`${table.html} is not null or ${table.textBody} is not null`,
+    ),
+  ],
+);
+
 export const messages = pgTable(
   "messages",
   {

@@ -67,6 +67,15 @@ const firstMessage = {
   replayed: false,
   status: "queued",
 };
+const firstTemplate = {
+  createdAt: fixedNow,
+  html: "<p>Hello {{reader.name}}</p>",
+  id: "88888888-8888-4888-8888-888888888888",
+  name: "Welcome reader",
+  subject: "Welcome, {{reader.name}}",
+  text: "Hello {{reader.name}}",
+  updatedAt: fixedNow,
+};
 
 function domainServices(overrides = {}) {
   return {
@@ -86,6 +95,17 @@ function emailServices(overrides = {}) {
   return {
     queue: async () => firstMessage,
     queueBatch: async () => [{ message: firstMessage, ok: true }],
+    ...overrides,
+  };
+}
+
+function templateServices(overrides = {}) {
+  return {
+    create: async () => firstTemplate,
+    delete: async () => undefined,
+    get: async () => firstTemplate,
+    list: async () => [firstTemplate],
+    update: async () => firstTemplate,
     ...overrides,
   };
 }
@@ -118,6 +138,7 @@ function dependencies(overrides = {}) {
     emails: emailServices(),
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
+    templates: templateServices(),
     ...overrides,
   };
 }
@@ -132,12 +153,25 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
       ],
+      paperboy_create_template: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "template",
+      ],
       paperboy_delete_domain: [
         "deleted",
         "domainId",
         "observedAt",
         "protocolTimeZone",
         "schemaVersion",
+      ],
+      paperboy_delete_template: [
+        "deleted",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "templateId",
       ],
       paperboy_finalize_domain_dkim_rotation: [
         "domain",
@@ -152,6 +186,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
       ],
+      paperboy_get_template: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "template",
+      ],
       paperboy_list_capabilities: [
         "generatedAt",
         "protocolTimeZone",
@@ -165,6 +205,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "observedAt",
         "protocolTimeZone",
         "schemaVersion",
+      ],
+      paperboy_list_templates: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "templates",
       ],
       paperboy_send_email: [
         "deliveryMode",
@@ -193,6 +239,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
       ],
+      paperboy_update_template: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "template",
+      ],
       paperboy_verify_domain: [
         "domain",
         "observedAt",
@@ -202,43 +254,63 @@ test("initializes and publishes versioned tool schemas", async () => {
     };
     const inputSchemaSnapshots = {
       paperboy_create_domain: ["name"],
+      paperboy_create_template: ["html", "name", "subject", "text"],
       paperboy_delete_domain: ["confirm", "domainId"],
+      paperboy_delete_template: ["confirm", "templateId"],
       paperboy_finalize_domain_dkim_rotation: ["confirm", "domainId"],
       paperboy_get_account_context: [],
+      paperboy_get_template: ["templateId"],
       paperboy_list_capabilities: [],
       paperboy_list_domains: [],
+      paperboy_list_templates: [],
       paperboy_rotate_domain_dkim: ["domainId"],
       paperboy_send_email: [
         "attachments",
+        "data",
         "from",
         "html",
         "idempotencyKey",
         "subject",
         "tags",
+        "template_id",
         "text",
         "to",
       ],
       paperboy_send_email_batch: ["emails"],
       paperboy_setup_domain_dkim: ["domainId"],
+      paperboy_update_template: [
+        "html",
+        "name",
+        "subject",
+        "templateId",
+        "text",
+      ],
       paperboy_verify_domain: ["domainId"],
     };
     const requiredInputSchemaSnapshots = {
-      paperboy_send_email: ["from", "subject", "to"],
+      paperboy_create_template: ["name", "subject"],
+      paperboy_send_email: ["from", "to"],
+      paperboy_update_template: ["templateId"],
     };
     const annotationSnapshots = {
       paperboy_create_domain: { destructive: false, readOnly: false },
+      paperboy_create_template: { destructive: false, readOnly: false },
       paperboy_delete_domain: { destructive: true, readOnly: false },
+      paperboy_delete_template: { destructive: true, readOnly: false },
       paperboy_finalize_domain_dkim_rotation: {
         destructive: true,
         readOnly: false,
       },
       paperboy_get_account_context: { destructive: false, readOnly: true },
+      paperboy_get_template: { destructive: false, readOnly: true },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
+      paperboy_list_templates: { destructive: false, readOnly: true },
       paperboy_rotate_domain_dkim: { destructive: false, readOnly: false },
       paperboy_send_email: { destructive: false, readOnly: false },
       paperboy_send_email_batch: { destructive: false, readOnly: false },
       paperboy_setup_domain_dkim: { destructive: false, readOnly: false },
+      paperboy_update_template: { destructive: false, readOnly: false },
       paperboy_verify_domain: { destructive: false, readOnly: false },
     };
 
@@ -355,6 +427,12 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     });
     assert.equal(dnsGuide.contents[0].text, DNS_OPERATOR_GUIDE);
     assert.match(dnsGuide.contents[0].text, /Cloudflare Email Sending/);
+
+    const templateGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[3],
+    });
+    assert.match(templateGuide.contents[0].text, /{{reader\.name}}/);
+    assert.match(templateGuide.contents[0].text, /Cloudflare|provider delivery/);
   });
 });
 
@@ -409,6 +487,74 @@ test("domain tools pass the authenticated tenant and actor to shared services", 
         name: "mail.example.com",
         principal: firstPrincipal,
       });
+    },
+  );
+});
+
+test("template CRUD is tenant-bound and reports UTC protocol timestamps", async () => {
+  const calls = [];
+
+  await withClient(
+    dependencies({
+      templates: templateServices({
+        create: async (principal, payload) => {
+          calls.push(["create", principal, payload]);
+          return firstTemplate;
+        },
+        delete: async (principal, templateId) => {
+          calls.push(["delete", principal, templateId]);
+        },
+        list: async (principal) => {
+          calls.push(["list", principal]);
+          return [firstTemplate];
+        },
+      }),
+    }),
+    async (client) => {
+      const listed = await client.callTool({
+        arguments: {},
+        name: "paperboy_list_templates",
+      });
+      const created = await client.callTool({
+        arguments: {
+          name: firstTemplate.name,
+          subject: firstTemplate.subject,
+          text: firstTemplate.text,
+        },
+        name: "paperboy_create_template",
+      });
+      const deleted = await client.callTool({
+        arguments: { confirm: true, templateId: firstTemplate.id },
+        name: "paperboy_delete_template",
+      });
+
+      assert.equal(listed.isError, undefined);
+      assert.equal(listed.structuredContent.protocolTimeZone, "UTC");
+      assert.equal(
+        listed.structuredContent.templates[0].createdAt,
+        fixedNow.toISOString(),
+      );
+      assert.equal(created.structuredContent.template.id, firstTemplate.id);
+      assert.deepEqual(deleted.structuredContent, {
+        deleted: true,
+        observedAt: fixedNow.toISOString(),
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+        templateId: firstTemplate.id,
+      });
+      assert.deepEqual(calls, [
+        ["list", firstPrincipal],
+        [
+          "create",
+          firstPrincipal,
+          {
+            name: firstTemplate.name,
+            subject: firstTemplate.subject,
+            text: firstTemplate.text,
+          },
+        ],
+        ["delete", firstPrincipal, firstTemplate.id],
+      ]);
     },
   );
 });
@@ -476,6 +622,29 @@ test("sending is a first-class tenant-bound MCP operation with UTC metadata", as
       });
       assert.equal(JSON.stringify(result).includes("Body"), false);
       assert.equal(JSON.stringify(result).includes("cHJpdmF0ZQ=="), false);
+
+      const templated = await client.callTool({
+        arguments: {
+          data: { reader: { name: "Ada" } },
+          from: "sender@example.com",
+          template_id: firstTemplate.id,
+          to: ["reader@example.net"],
+        },
+        name: "paperboy_send_email",
+      });
+
+      assert.equal(templated.isError, undefined);
+      assert.deepEqual(received, {
+        idempotencyKey: undefined,
+        payload: {
+          data: { reader: { name: "Ada" } },
+          from: "sender@example.com",
+          template_id: firstTemplate.id,
+          to: ["reader@example.net"],
+        },
+        principal: firstPrincipal,
+      });
+      assert.equal(JSON.stringify(templated).includes("Ada"), false);
     },
   );
 });
@@ -494,9 +663,9 @@ test("batch sending preserves order and reports per-item MCP failures", async ()
       to: ["first@example.net"],
     },
     {
+      data: { reader: { name: "Second" } },
       from: "sender@example.com",
-      subject: "Second",
-      text: "Second body",
+      template_id: firstTemplate.id,
       to: ["second@example.net"],
     },
   ];

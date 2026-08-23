@@ -20,6 +20,12 @@ import {
   registerPaperBoyEmailTools,
   type PaperBoyMcpEmailServices,
 } from "@/mcp/email-tools";
+import {
+  PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_TEMPLATE_MCP_TOOL_NAMES,
+  registerPaperBoyTemplateTools,
+  type PaperBoyMcpTemplateServices,
+} from "@/mcp/template-tools";
 
 export { PAPERBOY_MCP_SCHEMA_VERSION, PAPERBOY_MCP_VERSION };
 
@@ -27,6 +33,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
   "paperboy_list_capabilities",
   "paperboy_get_account_context",
   ...PAPERBOY_EMAIL_MCP_TOOL_NAMES,
+  ...PAPERBOY_TEMPLATE_MCP_TOOL_NAMES,
   ...PAPERBOY_DOMAIN_MCP_TOOL_NAMES,
 ] as const;
 
@@ -34,6 +41,7 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/configuration",
   "paperboy://docs/operator-safety",
   "paperboy://docs/dns",
+  "paperboy://docs/templates",
 ] as const;
 
 type PaperBoyMcpDependencies = {
@@ -42,6 +50,7 @@ type PaperBoyMcpDependencies = {
   emails: PaperBoyMcpEmailServices;
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
   now?: () => Date;
+  templates: PaperBoyMcpTemplateServices;
 };
 
 const emptyInputSchema = z.object({}).strict();
@@ -103,6 +112,7 @@ const toolDefinitions = [
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
   },
   ...PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
+  ...PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DOMAIN_MCP_TOOL_DEFINITIONS,
 ] as const;
 
@@ -119,6 +129,10 @@ const resourceDefinitions = [
     description: "Publish and verify PaperBoy SPF and DMARC records.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[2],
   },
+  {
+    description: "Create and send safe PaperBoy email templates.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[3],
+  },
 ] as const;
 
 const configurationDocument = `# PaperBoy MCP configuration
@@ -128,8 +142,10 @@ const configurationDocument = `# PaperBoy MCP configuration
 - Never put an API key in a tool argument, URL, command-line argument, source file, or diagnostic log.
 - A key is bound to one organization and one environment (\`live\` or \`test\`).
 - Domain mutations re-check the key creator's current organization role.
+- Template CRUD re-checks the key creator's current organization role. Sending an existing template is authorized by the active organization-bound API key.
 - DKIM tools return public DNS material only. PaperBoy private keys remain encrypted at rest and never enter tool output.
 - paperboy_send_email and paperboy_send_email_batch use the same validation, domain authorization, and queue services as their HTTP peers. Single sends can persist private attachments outside PostgreSQL; batch sends reject them. Tool output never includes attachment content. Test keys always select the test sink; batch results preserve input order and report failures per item.
+- Send tools accept either inline subject/body fields or \`template_id\` plus a JSON \`data\` object. Template rendering finishes before provider delivery, so SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text.
 - Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
 - Revocation denies the next authenticated HTTP request or stdio tool call. Reconnect with a newly issued key.
@@ -142,6 +158,20 @@ const operatorSafetyDocument = `# PaperBoy MCP operator safety
 - Keep stored instants and protocol timestamps in RFC 3339 UTC. Convert only for presentation using an explicit IANA timezone.
 - Read state before future mutating tools, preserve idempotency keys, and require human confirmation for destructive operations.
 - Tool errors must not expose API keys, secrets, message content, or another organization's state.
+`;
+
+const templateDocument = `# PaperBoy email templates
+
+- Templates belong to the organization bound to the API key. Never pass an organization ID to a template tool.
+- A template stores a name, subject, and at least one of HTML or plain text.
+- Variables use dotted double-brace paths such as \`{{reader.name}}\`.
+- Helpers, sections, expressions, triple braces, and executable template code are rejected.
+- Values inserted into HTML are escaped. Subject and plain-text values are interpolated as text.
+- Missing variables render as empty text. Required-variable validation and preview are separate capabilities.
+- Queue email with \`template_id\` and an optional JSON \`data\` object. Do not combine those fields with inline subject, HTML, or text.
+- Rendering happens before provider delivery, so Cloudflare Email Sending and SMTP receive the same content.
+- Read a template before deleting it, then pass \`confirm: true\` to paperboy_delete_template.
+- Stored instants and MCP timestamps are UTC. Console presentation uses each user's IANA timezone.
 `;
 
 function authorizationError() {
@@ -258,6 +288,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[0], configurationDocument],
     [resourceDefinitions[1], operatorSafetyDocument],
     [resourceDefinitions[2], DNS_OPERATOR_GUIDE],
+    [resourceDefinitions[3], templateDocument],
   ] as const) {
     server.registerResource(
       resource.uri,
@@ -291,6 +322,13 @@ export function createPaperBoyMcpServer(
     authorize: dependencies.authorize,
     server,
     services: dependencies.emails,
+  });
+
+  registerPaperBoyTemplateTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.templates,
   });
 
   registerPaperBoyDomainTools({

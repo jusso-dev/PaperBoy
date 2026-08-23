@@ -3,6 +3,7 @@ import { AttachmentStorageError } from "@/lib/attachment-storage";
 import { DomainError } from "@/lib/domain-core";
 import { EmailError } from "@/lib/email-core";
 import type { QueuedMessageRecord } from "@/lib/messages";
+import { TemplateError } from "@/lib/template-core";
 
 export type EmailHttpDependencies = {
   authenticate: (request: Request) => Promise<ApiKeyPrincipal | null>;
@@ -25,6 +26,31 @@ export function emailJson(
 }
 
 export function describeEmailFailure(error: unknown) {
+  if (error instanceof TemplateError) {
+    if (error.code === "TEMPLATE_NOT_FOUND") {
+      return {
+        body: {
+          error: {
+            code: "template_not_found",
+            message: "No template with that ID exists in this organization.",
+          },
+        },
+        status: 404,
+      };
+    }
+
+    return {
+      body: {
+        error: {
+          code: "validation_error",
+          fields: error.issues,
+          message: "Correct the template fields and try again.",
+        },
+      },
+      status: 422,
+    };
+  }
+
   if (error instanceof EmailError) {
     if (error.code === "ATTACHMENTS_TOO_LARGE") {
       return {

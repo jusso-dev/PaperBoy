@@ -11,6 +11,7 @@ import type {
   QueuedMessageBatchItem,
   QueuedMessageRecord,
 } from "@/lib/messages";
+import { TemplateError } from "@/lib/template-core";
 import { protocolTimestamp } from "@/lib/time";
 import { PAPERBOY_MCP_SCHEMA_VERSION } from "@/mcp/contract";
 
@@ -70,29 +71,78 @@ const attachment = z
   })
   .strict();
 
+const templateData = z.record(z.string(), z.unknown());
+
+function validateSendMode(
+  value: {
+    data?: Record<string, unknown>;
+    html?: string;
+    subject?: string;
+    template_id?: string;
+    text?: string;
+  },
+  context: z.core.$RefinementCtx,
+) {
+  if (value.template_id) {
+    for (const field of ["subject", "html", "text"] as const) {
+      if (value[field] !== undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "Do not combine inline content with template_id.",
+          path: [field],
+        });
+      }
+    }
+
+    return;
+  }
+
+  if (!value.subject) {
+    context.addIssue({
+      code: "custom",
+      message: "Provide subject for an inline email.",
+      path: ["subject"],
+    });
+  }
+
+  if (value.data !== undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "Provide template_id when sending template data.",
+      path: ["data"],
+    });
+  }
+}
+
 const sendEmailPayloadSchema = z
   .object({
+    data: templateData.optional(),
     from: address,
     html: z.string().max(2 * 1024 * 1024).optional(),
-    subject: z.string().min(1).max(998),
+    subject: z.string().min(1).max(998).optional(),
     tags: z.array(tag).max(75).optional(),
+    template_id: z.string().uuid().optional(),
     text: z.string().max(2 * 1024 * 1024).optional(),
     to: z.union([address, z.array(address).min(1).max(50)]),
   })
-  .strict();
+  .strict()
+  .superRefine(validateSendMode);
 
 const sendEmailInputSchema = z
   .object({
     attachments: z.array(attachment).max(100).optional(),
+    data: templateData.optional(),
     from: address,
     html: z.string().max(2 * 1024 * 1024).optional(),
     idempotencyKey: z.string().min(1).max(256).optional(),
-    subject: z.string().min(1).max(998),
+    subject: z.string().min(1).max(998).optional(),
     tags: z.array(tag).max(75).optional(),
+    template_id: z.string().uuid().optional(),
     text: z.string().max(2 * 1024 * 1024).optional(),
     to: z.union([address, z.array(address).min(1).max(50)]),
   })
-  .strict();
+  .strict()
+  .superRefine(validateSendMode);
 
 const sendEmailBatchInputSchema = z
   .object({
@@ -188,6 +238,18 @@ function errorDetails(error: unknown) {
             code: "validation_error",
             fields: error.issues,
             message: "Correct the invalid email fields and try again.",
+        };
+  } else if (error instanceof TemplateError) {
+    details =
+      error.code === "TEMPLATE_NOT_FOUND"
+        ? {
+            code: "template_not_found",
+            message: "No template with that ID exists in this organization.",
+          }
+        : {
+            code: "validation_error",
+            fields: error.issues,
+            message: "Correct the invalid template fields and try again.",
           };
   } else if (error instanceof DomainError) {
     details = {

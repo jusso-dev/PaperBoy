@@ -10,6 +10,7 @@ import {
   parseSendEmailInput,
 } from "../src/lib/email-core.ts";
 import { handleSendEmailRequest } from "../src/lib/email-http.ts";
+import { TemplateError } from "../src/lib/template-core.ts";
 
 const generated = generateApiKey("test");
 const principal = {
@@ -196,4 +197,23 @@ test("private attachment storage failures return an actionable 503", async () =>
   assert.equal(response.status, 503);
   assert.equal(body.error.code, "attachment_storage_unavailable");
   assert.equal(JSON.stringify(body).includes("WRITE_FAILED"), false);
+});
+
+test("an unknown organization template returns 404", async () => {
+  const { dependencies } = testDependencies();
+  dependencies.queue = async () => {
+    throw new TemplateError("TEMPLATE_NOT_FOUND");
+  };
+  const response = await handleSendEmailRequest(
+    request({
+      from: "sender@example.com",
+      template_id: "33333333-3333-4333-8333-333333333333",
+      to: "reader@example.net",
+    }),
+    dependencies,
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 404);
+  assert.equal(body.error.code, "template_not_found");
 });

@@ -621,6 +621,102 @@ select:focus-visible {
   color: #84382f;
 }
 
+/* ---- Email templates ------------------------------------------------- */
+
+.template-guide {
+  border-left: 4px solid var(--accent);
+}
+
+.template-form {
+  margin-top: 18px;
+}
+
+.template-form-heading {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(180px, 0.6fr) minmax(280px, 1.4fr);
+}
+
+.template-list {
+  display: grid;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.template-card {
+  margin-bottom: 0;
+}
+
+.template-heading {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.template-heading h2 {
+  border: 0;
+  font-size: 22px;
+  margin: 0;
+  padding: 0;
+}
+
+.template-heading > code {
+  color: var(--ink-soft);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.template-meta {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.template-readonly {
+  margin-top: 18px;
+}
+
+.template-readonly h3 {
+  font-size: 14px;
+  margin: 14px 0 5px;
+}
+
+.template-readonly pre {
+  background: var(--paper-deep);
+  border: 1px solid var(--rule);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  overflow-x: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
+.template-delete {
+  border-top: 1px solid var(--rule);
+  margin-top: 18px;
+  padding-top: 12px;
+}
+
+.template-delete summary {
+  cursor: pointer;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.template-delete form {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.template-delete label {
+  font-size: 13px;
+}
+
 /* ---- Tables ------------------------------------------------------------ */
 
 .table {
@@ -745,10 +841,20 @@ select:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .template-form-heading {
+    grid-template-columns: 1fr;
+  }
+
   .domain-heading,
-  .domain-actions {
+  .domain-actions,
+  .template-heading,
+  .template-delete form {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .template-heading > code {
+    text-align: left;
   }
 
   .domain-delete {

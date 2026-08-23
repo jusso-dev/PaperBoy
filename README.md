@@ -58,7 +58,7 @@ curl https://paperboy.example/api/v1/emails \
 {"id":"00000000-0000-4000-8000-000000000000"}
 ```
 
-`to` accepts one address or an array of up to 50. Provide non-empty `html` or `text`; `subject` is required. Tags use `{name, value}` pairs with ASCII letters, numbers, underscores, or dashes. Invalid JSON returns 400. Invalid fields, including missing `from` or `to`, return structured JSON with 422.
+`to` accepts one address or an array of up to 50. For inline content, provide `subject` and non-empty `html` or `text`. A template send uses `template_id` and optional `data` instead. Tags use `{name, value}` pairs with ASCII letters, numbers, underscores, or dashes. Invalid JSON returns 400. Invalid fields, including missing `from` or `to`, return structured JSON with 422.
 
 Single sends accept up to 100 private attachments as `{content, filename, content_type}`. `content` must be canonical Base64; filenames cannot contain paths or control characters; MIME types use forms such as `application/pdf` or `image/png`. Decoded attachment bytes may total at most 10 MiB per message, with an HTTP 413 response above that limit. The batch endpoint intentionally rejects attachments.
 
@@ -82,11 +82,37 @@ curl https://paperboy.example/api/v1/emails/batch \
 {"data":[{"id":"00000000-0000-4000-8000-000000000001"},{"id":"00000000-0000-4000-8000-000000000002"}]}
 ```
 
-Each item is validated and queued independently under the same API-key and domain rules. Mixed success returns HTTP 207 with each array position containing either `{id}` or a structured `{error}`; valid neighbors are not dropped. Invalid envelopes return 422. Batch idempotency is not available yet, so an `Idempotency-Key` fails explicitly instead of being ignored.
+Each item is validated and queued independently under the same API-key and domain rules. Inline and template-backed items can be mixed in one batch. Mixed success returns HTTP 207 with each array position containing either `{id}` or a structured `{error}`; valid neighbors are not dropped. Invalid envelopes return 422. Batch idempotency is not available yet, so an `Idempotency-Key` fails explicitly instead of being ignored.
 
 The queue stores semantic `from`, `to`, subject, HTML/text, tags, and private attachment references rather than prebuilt MIME. This leaves Date and DKIM ownership to the selected outbound adapter: a self-hosted SMTP path builds MIME with the stored bytes and can use PaperBoy signing, while Cloudflare Email Sending receives structured Base64 attachments and constructs and signs its provider-managed message without double-signing. This endpoint persists `queued` rows; the outbound worker is a separate deployment component.
 
-Message instants are PostgreSQL `timestamptz` values. MCP exposes them as RFC 3339 UTC; future console presentation uses the signed-in user's persisted IANA timezone.
+Message instants are PostgreSQL `timestamptz` values. MCP exposes them as RFC 3339 UTC; console presentation uses the signed-in user's persisted IANA timezone.
+
+## Email templates
+
+Templates are organization-owned records with a case-insensitively unique name, subject, and at least one of HTML or plain text. Owners and admins manage them in the console; members can read them. The console formats template timestamps using the signed-in user's persisted IANA timezone. REST timestamps and MCP timestamps are RFC 3339 UTC.
+
+The bearer-key REST surface is:
+
+- `GET /api/v1/templates` and `POST /api/v1/templates`
+- `GET`, `PATCH`, and `DELETE /api/v1/templates/:templateId`
+
+REST tenant context always comes from the key. Template CRUD also re-checks the key creator's current organization membership and role. A missing or cross-organization template returns 404; duplicate names return 409. API responses never accept a caller-supplied organization ID.
+
+Template variables use dotted double braces such as `{{reader.name}}`. PaperBoy deliberately supports no helpers, sections, expressions, triple braces, or executable template code. Data must be a bounded JSON object containing nested objects and scalar values; arrays and prototype-sensitive keys are rejected. HTML substitutions are escaped, while subject and plain-text substitutions remain text. Missing variables render as empty text; required-variable validation and preview are separate capabilities.
+
+Queue a template through the single or batch send API with the normal envelope fields plus `template_id` and optional `data`:
+
+```json
+{
+  "from": "PaperBoy <news@mail.example.com>",
+  "to": "reader@example.net",
+  "template_id": "00000000-0000-4000-8000-000000000000",
+  "data": {"reader": {"name": "Ada"}}
+}
+```
+
+Do not combine `template_id` with inline `subject`, `html`, or `text`. PaperBoy resolves and validates rendered content before calculating idempotency or persisting the message. The stored queue record therefore contains the exact semantic content delivered later. SMTP MIME and Cloudflare Email Sending's structured payload are built from that same rendered subject, HTML, and text; Cloudflare remains responsible for its own Date and DKIM signature.
 
 ## Sending domains
 
@@ -134,7 +160,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 
 Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
 
-The contract exposes capability/account context plus first-class single/batch sending, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools, with authenticated configuration, operator-safety, and DNS operator resources. `paperboy_send_email` accepts the same private Base64 attachments as HTTP but never returns their content. `paperboy_send_email_batch` preserves input order, reports per-item failures, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Domain and DKIM mutations re-read the key creator's current membership and role; destructive deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
+The contract exposes capability/account context plus first-class single/batch sending, template list/get/create/update/delete, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, templates, and DNS. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Template, domain, and DKIM CRUD re-read the key creator's current membership and role; destructive deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
 
 HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
 
