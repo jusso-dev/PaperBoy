@@ -23,7 +23,7 @@ Security invariants:
 
 - PaperBoy bearer API keys, Better Auth sessions and secret, and MCP process credentials.
 - DKIM private keys; webhook signing secrets; webhook/DKIM encryption keys; unsubscribe and open-tracking signing keys.
-- SMTP usernames/passwords and Cloudflare Email Service API tokens embedded in `SMTP_URL`.
+- SMTP usernames/passwords and Cloudflare Email Service API tokens injected through operator-default or per-organization provider secret variables.
 - PostgreSQL tenant, membership, domain, recipient, template, message, event, suppression, queue, and idempotency data.
 - Private attachment bytes and their integrity metadata.
 - Sending-domain DNS, DKIM/SPF records, provider account, IP/domain reputation, and suppression state.
@@ -39,7 +39,8 @@ Security invariants:
 | Local MCP stdio client to PaperBoy | The launching operator controls its environment and process boundary | Database URL, PaperBoy API key, feature secrets, MCP messages |
 | PaperBoy services to PostgreSQL | Database and its administrators are trusted infrastructure | Tenant data, encrypted secret envelopes, queue state, timestamps |
 | Web/worker to attachment storage | Host, mount, permissions, and backups are trusted infrastructure | Private attachment bytes and generated storage keys |
-| Worker to self-hosted SMTP/MTA | Operator must enforce authentication, relay policy, TLS, egress, and reputation controls | Credentials and raw MIME, optionally PaperBoy DKIM-signed |
+| Console/REST/MCP to provider settings | Current tenant membership and role are rechecked; secret values are never accepted | Provider IDs, safe readiness, domain overrides, UTC timestamps |
+| Worker to self-hosted SMTP/MTA | Operator must enforce authentication, relay policy, TLS, egress, and reputation controls | Secret-store credentials and raw MIME, optionally PaperBoy DKIM-signed |
 | Worker to Cloudflare Email Service | Cloudflare account, API token, TLS endpoint, and provider controls are trusted | SMTP MIME or future structured payload; Cloudflare owns final DKIM/ARC and `cf-bounce` behavior |
 | Worker to webhook receiver | Receiver identity and HTTPS endpoint are configured by an organization owner/admin | Minimal event body plus timestamped HMAC signature |
 | PaperBoy/operator to DNS | Registrar, DNS provider, and change-control accounts are trusted | SPF and DKIM public records, domain verification |
@@ -74,7 +75,9 @@ If an attacker obtains both PostgreSQL contents and `PAPERBOY_DKIM_ENCRYPTION_KE
 
 PaperBoy cannot prevent an open relay, sender spoofing, plaintext submission, or reputation damage when the operator configures the MTA incorrectly. The MTA must require authenticated TLS submission, restrict relay networks and sender domains, isolate bounce handling, and keep its own audit controls. `SMTP_TLS_MODE=opportunistic` and `disabled` are development/exception modes, not production defaults.
 
-Cloudflare Email Service is a first-class live-provider boundary, not a special bypass. Its SMTP credential is supplied through `SMTP_URL`, the same queue/rate-limit/suppression path applies, and Cloudflare remains responsible for provider-owned DKIM, ARC, bounce, and suppression behavior. A successful PaperBoy submission is not proof of final delivery. Cloudflare can reject, suppress, delay, or reclassify a message after acceptance. The future structured adapter must continue omitting `Date`, DKIM, and ARC headers so PaperBoy does not double-sign provider messages.
+Provider settings persist only identifiers: one organization default, nullable domain overrides, and a message snapshot. Secrets stay in operator injection. Missing or malformed credentials fail before queue insertion, while an adapter that becomes unavailable after queueing fails the snapshotted message without downgrade or fallback. This prevents a provider-selection change from silently moving sensitive mail to another jurisdiction or trust boundary.
+
+Cloudflare Email Service is a first-class live-provider boundary, not a special bypass. Its SMTP credential is supplied through `CLOUDFLARE_EMAIL_SMTP_URL`, an organization-scoped equivalent, or a compatible Cloudflare-hosted `SMTP_URL`; the same queue/rate-limit/suppression path applies, and Cloudflare remains responsible for provider-owned DKIM, ARC, bounce, and suppression behavior. A successful PaperBoy submission is not proof of final delivery. Cloudflare can reject, suppress, delay, or reclassify a message after acceptance. The future structured adapter must continue omitting `Date`, DKIM, and ARC headers so PaperBoy does not double-sign provider messages.
 
 ### Webhooks and outbound requests
 

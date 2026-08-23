@@ -25,6 +25,8 @@ function message(overrides = {}) {
     from: "PaperBoy <news@example.com>",
     html: "<p>Private edition</p>",
     id: "11111111-1111-4111-8111-111111111111",
+    orgId: "22222222-2222-4222-8222-222222222222",
+    provider: "smtp",
     subject: "Morning edition",
     text: "Private edition",
     to: ["reader@example.net"],
@@ -236,7 +238,11 @@ test("the fifth transient failure exhausts retries and sanitizes diagnostics", a
 
 test("the built-in sink accepts test mail and rejects live mail", async () => {
   await testSinkAdapter.send({
-    ...message({ deliveryMode: "test-sink", environment: "test" }),
+    ...message({
+      deliveryMode: "test-sink",
+      environment: "test",
+      provider: "test-sink",
+    }),
     attachments: [],
   });
 
@@ -252,7 +258,7 @@ test("the built-in sink accepts test mail and rejects live mail", async () => {
 test("the mode router keeps test mail out of the live adapter", async () => {
   const calls = [];
   const adapter = routeOutboundAdapters({
-    live: {
+    smtp: {
       name: "live",
       async send(delivery) {
         calls.push(["live", delivery.id]);
@@ -267,7 +273,11 @@ test("the mode router keeps test mail out of the live adapter", async () => {
   });
 
   await adapter.send(
-    message({ deliveryMode: "test-sink", environment: "test" }),
+    message({
+      deliveryMode: "test-sink",
+      environment: "test",
+      provider: "test-sink",
+    }),
   );
   await adapter.send(message());
 

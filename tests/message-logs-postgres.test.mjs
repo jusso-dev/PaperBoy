@@ -80,6 +80,7 @@ test(
         id: randomUUID(),
         nextAttemptAt: createdAt,
         orgId,
+        outboundProvider: live ? "smtp" : "test-sink",
         subject: `Edition ${index}`,
         textBody: `Private edition ${index}`,
         to: [`reader-${index}@example.net`],

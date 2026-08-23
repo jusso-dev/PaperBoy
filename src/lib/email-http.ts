@@ -5,6 +5,10 @@ import { EmailError, normalizeIdempotencyKey } from "@/lib/email-core";
 import type { QueuedMessageRecord } from "@/lib/messages";
 import { OpenTrackingConfigurationError } from "@/lib/open-tracking-core";
 import {
+  OutboundProviderConfigurationError,
+  providerConfigurationErrorMessage,
+} from "@/lib/outbound-provider-configuration";
+import {
   RateLimitConfigurationError,
   RateLimitError,
 } from "@/lib/rate-limit-core";
@@ -82,6 +86,24 @@ export function describeEmailFailure(error: unknown): EmailFailure {
         },
       },
       status: 503,
+    };
+  }
+
+  if (error instanceof OutboundProviderConfigurationError) {
+    return {
+      body: {
+        error: {
+          code:
+            error.code === "CREDENTIALS_MISSING"
+              ? "provider_credentials_missing"
+              : error.code === "ADAPTER_UNAVAILABLE"
+                ? "provider_adapter_unavailable"
+                : "provider_configuration_invalid",
+          message: providerConfigurationErrorMessage(error),
+          provider: error.provider,
+        },
+      },
+      status: 422,
     };
   }
 

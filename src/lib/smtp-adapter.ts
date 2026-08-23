@@ -1,10 +1,19 @@
 import nodemailer, { type SendMailOptions } from "nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
-import { buildSmtpMimeMessage } from "@/lib/email-delivery";
+import {
+  buildSmtpMimeMessage,
+  CLOUDFLARE_EMAIL_MAX_BYTES,
+} from "@/lib/email-delivery";
 import { normalizeEmailAddress } from "@/lib/email-core";
+import { parseFeedbackReport } from "@/lib/feedback-core";
+import {
+  defineOutboundProviderAdapter,
+  OUTBOUND_PROVIDER_CATALOG,
+  type LiveOutboundProvider,
+  type OutboundProviderAdapter,
+} from "@/lib/outbound-provider-core";
 import {
   OutboundDeliveryError,
-  type OutboundAdapter,
   smtpDeliveryError,
 } from "@/lib/worker-core";
 
@@ -18,6 +27,7 @@ export type SmtpTlsMode = (typeof SMTP_TLS_MODES)[number];
 
 type SmtpSendResult = {
   accepted: unknown[];
+  messageId?: unknown;
   rejected: unknown[];
 };
 
@@ -38,6 +48,7 @@ export type SmtpTransportClient = {
 type SmtpAdapterInput = {
   environment?: Readonly<Record<string, string | undefined>>;
   now?: () => Date;
+  provider?: Extract<LiveOutboundProvider, "cloudflare-email" | "smtp">;
   transportFactory?: (
     options: SMTPTransport.Options,
   ) => SmtpTransportClient;
@@ -227,9 +238,70 @@ function smtpError(error: unknown): OutboundDeliveryError {
   });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function cloudflareProviderEvent(input: {
+  payload: unknown;
+  receivedAt: Date;
+}) {
+  if (!isRecord(input.payload)) {
+    throw new TypeError("Cloudflare Email provider events must be JSON objects.");
+  }
+
+  const source = input.payload.source;
+  const body = input.payload.payload;
+  if (
+    !isRecord(source) ||
+    source.type !== "email.sending" ||
+    !isRecord(body)
+  ) {
+    throw new TypeError("Cloudflare Email provider event shape is invalid.");
+  }
+
+  const eventTypes = {
+    "cf.email.sending.message.bounced": "bounced",
+    "cf.email.sending.message.complained": "complained",
+    "cf.email.sending.message.delivered": "delivered",
+  } as const;
+  const providerType = input.payload.type;
+  if (
+    typeof providerType !== "string" ||
+    !Object.hasOwn(eventTypes, providerType)
+  ) {
+    return [];
+  }
+
+  const messageId = body.messageId;
+  if (
+    typeof messageId !== "string" ||
+    messageId.length === 0 ||
+    messageId.length > 1000 ||
+    /[\u0000-\u001f\u007f]/.test(messageId)
+  ) {
+    throw new TypeError("Cloudflare Email provider event message ID is invalid.");
+  }
+
+  return [
+    {
+      data: {
+        provider: "cloudflare-email",
+        provider_event: providerType,
+      },
+      messageId,
+      occurredAt: input.receivedAt,
+      type: eventTypes[providerType as keyof typeof eventTypes],
+    },
+  ];
+}
+
 export function createSmtpAdapter(
   input: SmtpAdapterInput = {},
-): OutboundAdapter & { close: () => void; verify: () => Promise<void> } {
+): OutboundProviderAdapter & {
+  close: () => void;
+  verify: () => Promise<void>;
+} {
   const options = smtpTransportOptions(input.environment);
   const transportFactory =
     input.transportFactory ??
@@ -237,25 +309,52 @@ export function createSmtpAdapter(
       nodemailer.createTransport(transportOptions) as SmtpTransportClient);
   const transport = transportFactory(options);
   const now = input.now ?? (() => new Date());
-  const bounceAddress = configuredBounceAddress(input.environment);
+  const provider = input.provider ?? "smtp";
+  const bounceAddress =
+    provider === "cloudflare-email"
+      ? null
+      : configuredBounceAddress(input.environment);
+  const verify = async () => {
+    try {
+      await transport.verify();
+    } catch (error) {
+      throw smtpError(error);
+    }
+  };
 
-  return {
-    name: "smtp",
+  return defineOutboundProviderAdapter({
+    capabilities: OUTBOUND_PROVIDER_CATALOG[provider].capabilities,
     close() {
       transport.close();
     },
-    async verify() {
-      try {
-        await transport.verify();
-      } catch (error) {
-        throw smtpError(error);
+    async mapEvent({ payload, receivedAt }) {
+      if (provider === "cloudflare-email") {
+        return cloudflareProviderEvent({ payload, receivedAt });
       }
+      if (!Buffer.isBuffer(payload)) {
+        throw new TypeError("SMTP provider events must be raw report bytes.");
+      }
+      const report = await parseFeedbackReport(payload);
+      return report.outcomes.map((outcome) => ({
+        data: {
+          classification: outcome.classification,
+          ...(outcome.status === null ? {} : { status: outcome.status }),
+        },
+        messageId: outcome.messageId,
+        occurredAt: receivedAt,
+        type:
+          outcome.classification === "complaint" ? "complained" : "bounced",
+      }));
     },
+    provider,
     async send(message) {
-      if (message.deliveryMode !== "live") {
+      if (
+        message.deliveryMode !== "live" ||
+        message.provider !== provider
+      ) {
         throw new OutboundDeliveryError({
           code: "adapter_mode_mismatch",
-          reason: "The SMTP adapter accepts live delivery only.",
+          reason: "The SMTP adapter accepts only its selected live provider.",
           retryable: false,
         });
       }
@@ -279,6 +378,16 @@ export function createSmtpAdapter(
         headers: { "X-PaperBoy-Message-ID": message.id },
         messageId: `<${message.id}@${senderDomain}>`,
       });
+      if (
+        provider === "cloudflare-email" &&
+        raw.byteLength > CLOUDFLARE_EMAIL_MAX_BYTES
+      ) {
+        throw new OutboundDeliveryError({
+          code: "provider_message_too_large",
+          reason: "Cloudflare Email messages must not exceed 5 MiB after MIME encoding.",
+          retryable: false,
+        });
+      }
 
       try {
         const result = await transport.sendMail({
@@ -306,6 +415,13 @@ export function createSmtpAdapter(
             retryable: false,
           });
         }
+        const providerMessageId =
+          typeof result.messageId === "string" &&
+          result.messageId.length <= 1000 &&
+          !/[\u0000-\u001f\u007f]/.test(result.messageId)
+            ? result.messageId
+            : null;
+        return { providerMessageId };
       } catch (error) {
         if (error instanceof OutboundDeliveryError) {
           throw error;
@@ -313,5 +429,7 @@ export function createSmtpAdapter(
         throw smtpError(error);
       }
     },
-  };
+    testConnection: verify,
+    verify,
+  });
 }

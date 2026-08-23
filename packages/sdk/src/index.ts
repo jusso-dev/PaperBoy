@@ -1,6 +1,12 @@
 export type PaperBoyEnvironment = "live" | "test";
 export type PaperBoyDeliveryMode = "live" | "test-sink";
 export type PaperBoyMessageStatus = "queued" | "sending" | "sent" | "failed";
+export type PaperBoyOutboundProvider =
+  | "smtp"
+  | "cloudflare-email"
+  | "aws-ses"
+  | "azure-email"
+  | "test-sink";
 
 export type EmailTag = {
   name: string;
@@ -71,6 +77,7 @@ export type Email = {
   next_attempt_at: string | null;
   object: "email";
   open_tracking_enabled: boolean;
+  provider: PaperBoyOutboundProvider;
   sent_at: string | null;
   status: PaperBoyMessageStatus;
   subject: string;

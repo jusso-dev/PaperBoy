@@ -1,0 +1,5 @@
+{
+  "event": "delivered",
+  "provider": "smtp",
+  "provider_message_id": "smtp-fixture-001"
+}

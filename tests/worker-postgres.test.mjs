@@ -66,6 +66,7 @@ test(
           from: "news@example.com",
           id: liveId,
           orgId,
+          outboundProvider: "smtp",
           subject: "Live queue isolation",
           textBody: "Private live body",
           to: ["live-reader@example.net"],
@@ -115,6 +116,7 @@ test(
           attemptCount: 1,
           messageId: recoverableId,
           now: new Date(leaseExpiresAt.getTime() + 2),
+          providerMessageId: null,
           workerId: "shared-worker-id",
         }),
         false,
@@ -124,6 +126,7 @@ test(
           attemptCount: 2,
           messageId: recoverableId,
           now: new Date(leaseExpiresAt.getTime() + 3),
+          providerMessageId: "test-sink-proof",
           workerId: "shared-worker-id",
         }),
         true,
@@ -138,6 +141,7 @@ test(
       assert.equal(sent.workerId, null);
       assert.equal(sent.leaseExpiresAt, null);
       assert.ok(sent.sentAt instanceof Date);
+      assert.equal(sent.providerMessageId, "test-sink-proof");
 
       await db.insert(messages).values({
         deliveryMode: "test-sink",

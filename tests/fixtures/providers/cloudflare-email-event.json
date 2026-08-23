@@ -1,0 +1,25 @@
+{
+  "type": "cf.email.sending.message.delivered",
+  "source": {
+    "type": "email.sending",
+    "zoneId": "023e105f4ecef8ad9ca31a8372d0c353",
+    "domain": "example.com"
+  },
+  "payload": {
+    "eventId": "0190d0c4-7e9a-7b3c-9f12-1a2b3c4d5e6f",
+    "messageId": "cloudflare-message-1",
+    "sender": "news@example.com",
+    "recipient": "reader@example.net",
+    "subject": "Private subject",
+    "terminal": true,
+    "delivery": {
+      "status": "delivered",
+      "smtpStatusCode": "250",
+      "smtpResponse": "private provider response"
+    }
+  },
+  "metadata": {
+    "eventSchemaVersion": 1,
+    "eventTimestamp": "2026-08-24T01:01:59.000Z"
+  }
+}

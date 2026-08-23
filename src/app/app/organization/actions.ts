@@ -7,6 +7,13 @@ import {
   OpenTrackingSettingsError,
 } from "@/lib/open-tracking-core";
 import { updateOpenTrackingSettings } from "@/lib/open-tracking";
+import { OutboundProviderConfigurationError } from "@/lib/outbound-provider-configuration";
+import { testConfiguredOutboundProvider } from "@/lib/outbound-provider-runtime";
+import {
+  OutboundProviderSettingsError,
+  testOutboundProviderConnection,
+  updateOutboundProviderSettings,
+} from "@/lib/outbound-providers";
 import {
   RateLimitConfigurationError,
   RateLimitSettingsError,
@@ -48,6 +55,20 @@ function errorLocation(error: unknown): string {
 
   if (error instanceof OpenTrackingConfigurationError) {
     return "/app/organization?error=open_tracking_configuration";
+  }
+
+  if (error instanceof OutboundProviderSettingsError) {
+    if (error.code === "MEMBERSHIP_REQUIRED") {
+      return "/app/organization?error=membership_required";
+    }
+    if (error.code === "DOMAIN_NOT_FOUND") {
+      return "/app/organization?error=provider_domain_not_found";
+    }
+    return "/app/organization?error=invalid_provider_settings";
+  }
+
+  if (error instanceof OutboundProviderConfigurationError) {
+    return `/app/organization?error=provider_${error.code.toLowerCase()}`;
   }
 
   throw error;
@@ -159,4 +180,61 @@ export async function updateOpenTrackingAction(formData: FormData) {
   }
 
   redirect("/app/organization?saved=open-tracking");
+}
+
+export async function updateDefaultOutboundProviderAction(formData: FormData) {
+  const { organization, session } = await requireOrganization();
+
+  try {
+    await updateOutboundProviderSettings({
+      actorUserId: session.user.id,
+      orgId: organization.id,
+      payload: { default_provider: formData.get("provider") },
+    });
+  } catch (error) {
+    redirect(errorLocation(error));
+  }
+
+  redirect("/app/organization?saved=outbound-provider");
+}
+
+export async function updateDomainOutboundProviderAction(formData: FormData) {
+  const { organization, session } = await requireOrganization();
+  const selected = formData.get("provider");
+
+  try {
+    await updateOutboundProviderSettings({
+      actorUserId: session.user.id,
+      orgId: organization.id,
+      payload: {
+        domain_overrides: [
+          {
+            domain_id: formData.get("domainId"),
+            provider: selected === "" ? null : selected,
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    redirect(errorLocation(error));
+  }
+
+  redirect("/app/organization?saved=domain-provider");
+}
+
+export async function testOutboundProviderAction(formData: FormData) {
+  const { organization, session } = await requireOrganization();
+
+  try {
+    await testOutboundProviderConnection({
+      actorUserId: session.user.id,
+      orgId: organization.id,
+      payload: { provider: formData.get("provider") },
+      testConnection: testConfiguredOutboundProvider,
+    });
+  } catch (error) {
+    redirect(errorLocation(error));
+  }
+
+  redirect("/app/organization?saved=provider-tested");
 }

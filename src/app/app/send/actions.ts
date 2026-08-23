@@ -8,6 +8,10 @@ import { DomainError } from "@/lib/domains";
 import { EmailError } from "@/lib/email-core";
 import { OpenTrackingConfigurationError } from "@/lib/open-tracking-core";
 import {
+  OutboundProviderConfigurationError,
+  providerConfigurationErrorMessage,
+} from "@/lib/outbound-provider-configuration";
+import {
   RateLimitConfigurationError,
   RateLimitError,
 } from "@/lib/rate-limit-core";
@@ -50,6 +54,10 @@ function sendErrorMessage(error: unknown): string {
 
   if (error instanceof OpenTrackingConfigurationError) {
     return "The operator must configure the public URL and open-tracking signing key.";
+  }
+
+  if (error instanceof OutboundProviderConfigurationError) {
+    return providerConfigurationErrorMessage(error);
   }
 
   throw error;

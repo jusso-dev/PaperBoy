@@ -125,6 +125,7 @@ export function serializeMessage(message: MessageDetailRecord) {
     next_attempt_at: timestamp(message.nextAttemptAt),
     object: "email" as const,
     open_tracking_enabled: message.openTrackingEnabled,
+    provider: message.provider,
     sent_at: timestamp(message.sentAt),
     status: message.status,
     subject: message.subject,

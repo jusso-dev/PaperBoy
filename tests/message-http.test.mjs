@@ -46,6 +46,7 @@ function detail() {
     leaseExpiresAt: null,
     nextAttemptAt: null,
     openTrackingEnabled: false,
+    provider: "test-sink",
     sentAt: new Date("2026-08-23T10:01:00.000Z"),
     status: "sent",
     subject: "Morning edition",
@@ -106,6 +107,7 @@ test("GET email returns tenant service data with explicit UTC timestamps", async
   assert.equal(body.created_at, "2026-08-23T10:00:00.000Z");
   assert.equal(body.sent_at, "2026-08-23T10:01:00.000Z");
   assert.equal(body.open_tracking_enabled, false);
+  assert.equal(body.provider, "test-sink");
   assert.deepEqual(body.attachments, [
     {
       content_type: "application/pdf",

@@ -2,7 +2,7 @@ import { resolveTxt } from "node:dns/promises";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { domainDkimKeys, domains, orgMembers } from "@/db/schema";
+import { domainDkimKeys, domains, orgMembers, orgs } from "@/db/schema";
 import type { ApiKeyEnvironment } from "@/lib/api-key-crypto";
 import {
   DEFAULT_SPF_RECORD,
@@ -35,6 +35,8 @@ import {
   type OrgPermission,
   type OrgRole,
 } from "@/lib/authorization";
+import { requireProviderConfigured } from "@/lib/outbound-provider-configuration";
+import { isLiveOutboundProvider } from "@/lib/outbound-provider-core";
 
 export { DomainError } from "@/lib/domain-core";
 export type { DomainErrorCode } from "@/lib/domain-core";
@@ -563,6 +565,7 @@ export async function authorizeSendingDomain(input: {
   environment: ApiKeyEnvironment;
   fromDomain: unknown;
   orgId: string;
+  providerEnvironment?: Readonly<Record<string, string | undefined>>;
 }) {
   const name = normalizeSendingDomain(input.fromDomain);
 
@@ -571,16 +574,24 @@ export async function authorizeSendingDomain(input: {
   }
 
   if (input.environment === "test") {
-    return { domainId: null, mode: "test-sink" as const, name };
+    return {
+      domainId: null,
+      mode: "test-sink" as const,
+      name,
+      provider: "test-sink" as const,
+    };
   }
 
   const [domain] = await db
     .select({
       dkimKeyId: domainDkimKeys.id,
       id: domains.id,
+      orgProvider: orgs.outboundProvider,
+      overrideProvider: domains.outboundProvider,
       status: domains.status,
     })
     .from(domains)
+    .innerJoin(orgs, eq(orgs.id, domains.orgId))
     .innerJoin(
       domainDkimKeys,
       and(
@@ -602,5 +613,16 @@ export async function authorizeSendingDomain(input: {
     throw new DomainError("DOMAIN_NOT_VERIFIED");
   }
 
-  return { domainId: domain.id, mode: "live" as const, name };
+  const provider = isLiveOutboundProvider(domain.overrideProvider)
+    ? domain.overrideProvider
+    : isLiveOutboundProvider(domain.orgProvider)
+      ? domain.orgProvider
+      : "smtp";
+  requireProviderConfigured({
+    environment: input.providerEnvironment,
+    orgId: input.orgId,
+    provider,
+  });
+
+  return { domainId: domain.id, mode: "live" as const, name, provider };
 }

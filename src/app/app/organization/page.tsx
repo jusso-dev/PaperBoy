@@ -3,6 +3,9 @@ import {
   inviteMemberAction,
   removeMemberAction,
   switchOrganizationAction,
+  testOutboundProviderAction,
+  updateDefaultOutboundProviderAction,
+  updateDomainOutboundProviderAction,
   updateOpenTrackingAction,
   updateRateLimitsAction,
 } from "./actions";
@@ -15,6 +18,7 @@ import {
 } from "@/lib/organizations";
 import { requireOrganization } from "@/lib/session";
 import { getOpenTrackingSettings } from "@/lib/open-tracking";
+import { getOutboundProviderSettings } from "@/lib/outbound-providers";
 import { getRateLimitSettings } from "@/lib/rate-limits";
 import { formatDateTime } from "@/lib/time";
 
@@ -35,10 +39,21 @@ const errorMessages: Record<string, string> = {
   invalid_rate_limits:
     "Use whole-number limits, with the test limit higher than the live limit.",
   invalid_open_tracking: "Choose whether open tracking is enabled.",
+  invalid_provider_settings: "Choose a supported outbound provider.",
   invitation_not_found: "That invitation is no longer available.",
   membership_required: "That organization membership is no longer available.",
   open_tracking_configuration:
     "The operator must configure the public URL and dedicated open-tracking signing key before tracking can be enabled.",
+  provider_adapter_unavailable:
+    "That provider is selectable, but this PaperBoy build does not include its delivery adapter yet.",
+  provider_configuration_invalid:
+    "The operator must correct that provider's secret-store configuration.",
+  provider_connection_failed:
+    "The provider did not accept the connection test.",
+  provider_credentials_missing:
+    "The operator must add that provider's credentials to the PaperBoy secret store.",
+  provider_domain_not_found:
+    "That sending domain is no longer available in this organisation.",
   rate_limit_configuration:
     "The operator must correct the configured live and test rate-limit defaults.",
 };
@@ -49,6 +64,9 @@ const successMessages: Record<string, string> = {
   removed: "Member removed.",
   "rate-limits": "Organization rate limits saved.",
   "open-tracking": "Organization open-tracking setting saved.",
+  "outbound-provider": "Organisation default outbound provider saved.",
+  "domain-provider": "Domain outbound-provider override saved.",
+  "provider-tested": "Provider connection test passed.",
 };
 
 export default async function OrganizationPage({
@@ -65,6 +83,7 @@ export default async function OrganizationPage({
     pendingInvitations,
     rateLimits,
     openTracking,
+    outboundProviders,
   ] = await Promise.all([
       listUserOrganizations(session.user.id),
       listOrganizationMembers(organization.id),
@@ -78,6 +97,10 @@ export default async function OrganizationPage({
         actorUserId: session.user.id,
         orgId: organization.id,
       }),
+      getOutboundProviderSettings({
+        actorUserId: session.user.id,
+        orgId: organization.id,
+      }),
     ]);
   const canInvite = can(organization.role, "members.invite");
   const canRemove = can(organization.role, "members.remove");
@@ -85,6 +108,10 @@ export default async function OrganizationPage({
   const canManageOpenTracking = can(
     organization.role,
     "openTracking.manage",
+  );
+  const canManageOutboundProviders = can(
+    organization.role,
+    "outboundProviders.manage",
   );
   const errorMessage = status.error
     ? (errorMessages[status.error] ??
@@ -218,6 +245,171 @@ export default async function OrganizationPage({
         ) : (
           <p>Owners and admins manage rate limits.</p>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Outbound providers</h2>
+        <p>
+          Every live message snapshots one provider before entering the queue.
+          The organisation default is <strong>{outboundProviders.providers.find(
+            (provider) => provider.id === outboundProviders.defaultProvider,
+          )?.label ?? outboundProviders.defaultProvider}</strong>. Changing it
+          never reroutes existing messages. Updated {formatDateTime(
+            outboundProviders.updatedAt,
+            session.user.timezone,
+          )}.
+        </p>
+        <p>
+          Credentials stay in the operator secret store. PaperBoy never accepts
+          or returns them through the console, REST API, or MCP. Cloudflare Email
+          Service is selectable directly and uses its authenticated SMTP endpoint.
+        </p>
+
+        {canManageOutboundProviders ? (
+          <form
+            action={updateDefaultOutboundProviderAction}
+            className="rate-limit-form"
+          >
+            <div className="field">
+              <label htmlFor="default-outbound-provider">
+                Organisation default
+              </label>
+              <select
+                defaultValue={outboundProviders.defaultProvider}
+                id="default-outbound-provider"
+                name="provider"
+              >
+                {outboundProviders.providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button className="btn btn-primary" type="submit">
+              Save default provider
+            </button>
+          </form>
+        ) : (
+          <p>Owners and admins manage outbound providers.</p>
+        )}
+
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Readiness</th>
+                <th>Capabilities</th>
+                {canManageOutboundProviders ? <th>Connection</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {outboundProviders.providers.map((provider) => (
+                <tr key={provider.id}>
+                  <td>{provider.label}</td>
+                  <td>
+                    <span
+                      className={`pill ${
+                        provider.configured ? "pill-accent" : "pill-muted"
+                      }`}
+                    >
+                      {provider.configured
+                        ? provider.credentialScope === "organization"
+                          ? "Organisation secret ready"
+                          : "Operator default ready"
+                        : provider.state === "adapter-unavailable"
+                          ? "Adapter pending"
+                          : provider.state === "configuration-invalid"
+                            ? "Configuration invalid"
+                            : "Credentials missing"}
+                    </span>
+                  </td>
+                  <td>
+                    {[
+                      provider.capabilities.batch ? "batch" : "single",
+                      provider.capabilities.events ? "events" : null,
+                      provider.capabilities.scheduling ? "scheduling" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </td>
+                  {canManageOutboundProviders ? (
+                    <td>
+                      <form action={testOutboundProviderAction}>
+                        <input name="provider" type="hidden" value={provider.id} />
+                        <button className="btn btn-compact" type="submit">
+                          Test provider
+                        </button>
+                      </form>
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {outboundProviders.domains.length > 0 ? (
+          <div>
+            <h3>Domain overrides</h3>
+            <p>Leave a domain on organisation default unless it needs a different path.</p>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Domain</th>
+                    <th>Route</th>
+                    {canManageOutboundProviders ? <th>Action</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {outboundProviders.domains.map((domain) => (
+                    <tr key={domain.id}>
+                      <td>{domain.name}</td>
+                      <td>
+                        {canManageOutboundProviders ? (
+                          <form
+                            action={updateDomainOutboundProviderAction}
+                            className="inline-form"
+                          >
+                            <input name="domainId" type="hidden" value={domain.id} />
+                            <select
+                              aria-label={`Outbound provider for ${domain.name}`}
+                              defaultValue={domain.overrideProvider ?? ""}
+                              name="provider"
+                            >
+                              <option value="">Organisation default</option>
+                              {outboundProviders.providers.map((provider) => (
+                                <option key={provider.id} value={provider.id}>
+                                  {provider.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button className="btn btn-compact" type="submit">
+                              Save
+                            </button>
+                          </form>
+                        ) : (
+                          outboundProviders.providers.find(
+                            (provider) => provider.id === domain.effectiveProvider,
+                          )?.label ?? domain.effectiveProvider
+                        )}
+                      </td>
+                      {canManageOutboundProviders ? (
+                        <td>
+                          Effective: {outboundProviders.providers.find(
+                            (provider) => provider.id === domain.effectiveProvider,
+                          )?.label ?? domain.effectiveProvider}
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="card">

@@ -1,0 +1,5 @@
+{
+  "event": "delivered",
+  "provider": "cloudflare-email",
+  "provider_message_id": "cloudflare-fixture-001"
+}

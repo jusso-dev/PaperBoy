@@ -11,6 +11,7 @@ import {
   type MessageDeliveryCounts,
   type MessageDeliveryStatusRecord,
 } from "@/lib/message-status-core";
+import { isOutboundProvider } from "@/lib/outbound-provider-core";
 
 export type {
   MessageDeliveryCounts,
@@ -33,6 +34,7 @@ const statusSelection = {
   lastErrorCode: messages.lastErrorCode,
   leaseExpiresAt: messages.leaseExpiresAt,
   nextAttemptAt: messages.nextAttemptAt,
+  outboundProvider: messages.outboundProvider,
   sentAt: messages.sentAt,
   status: messages.status,
   updatedAt: messages.updatedAt,
@@ -52,6 +54,7 @@ type StatusRow = Pick<
   | "lastErrorCode"
   | "leaseExpiresAt"
   | "nextAttemptAt"
+  | "outboundProvider"
   | "sentAt"
   | "status"
   | "updatedAt"
@@ -97,6 +100,9 @@ function recordFromRow(row: StatusRow): MessageDeliveryStatusRecord {
     lastErrorCode: row.lastErrorCode,
     leaseExpiresAt: row.leaseExpiresAt,
     nextAttemptAt: row.status === "queued" ? row.nextAttemptAt : null,
+    provider: isOutboundProvider(row.outboundProvider)
+      ? row.outboundProvider
+      : "test-sink",
     sentAt: row.sentAt,
     status: row.status,
     updatedAt: row.updatedAt,

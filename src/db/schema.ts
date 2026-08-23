@@ -20,6 +20,10 @@ import type {
   MessageStatus,
 } from "@/lib/email-core";
 import type {
+  LiveOutboundProvider,
+  OutboundProvider,
+} from "@/lib/outbound-provider-core";
+import type {
   BroadcastRecipientStatus,
   BroadcastStatus,
 } from "@/lib/broadcast-core";
@@ -31,6 +35,10 @@ export const orgs = pgTable("orgs", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   liveRateLimitPerMinute: integer("live_rate_limit_per_minute"),
+  outboundProvider: text("outbound_provider")
+    .$type<LiveOutboundProvider>()
+    .default("smtp")
+    .notNull(),
   openTrackingEnabled: boolean("open_tracking_enabled")
     .default(false)
     .notNull(),
@@ -45,6 +53,10 @@ export const orgs = pgTable("orgs", {
   check(
     "orgs_live_rate_limit_check",
     sql`${table.liveRateLimitPerMinute} is null or ${table.liveRateLimitPerMinute} between 1 and 1000000`,
+  ),
+  check(
+    "orgs_outbound_provider_check",
+    sql`${table.outboundProvider} in ('smtp', 'cloudflare-email', 'aws-ses', 'azure-email')`,
   ),
   check(
     "orgs_test_rate_limit_check",
@@ -311,6 +323,7 @@ export const domains = pgTable(
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    outboundProvider: text("outbound_provider").$type<LiveOutboundProvider>(),
     status: text("status").default("pending").notNull(),
     verificationToken: uuid("verification_token")
       .defaultRandom()
@@ -335,6 +348,10 @@ export const domains = pgTable(
     check(
       "domains_status_check",
       sql`${table.status} in ('pending', 'verified')`,
+    ),
+    check(
+      "domains_outbound_provider_check",
+      sql`${table.outboundProvider} is null or ${table.outboundProvider} in ('smtp', 'cloudflare-email', 'aws-ses', 'azure-email')`,
     ),
   ],
 );
@@ -655,6 +672,11 @@ export const messages = pgTable(
       .$type<MessageDeliveryMode>()
       .default("test-sink")
       .notNull(),
+    outboundProvider: text("outbound_provider")
+      .$type<OutboundProvider>()
+      .default("test-sink")
+      .notNull(),
+    providerMessageId: text("provider_message_id"),
     openTrackingEnabled: boolean("open_tracking_enabled")
       .default(false)
       .notNull(),
@@ -721,6 +743,14 @@ export const messages = pgTable(
     check(
       "messages_delivery_mode_check",
       sql`${table.deliveryMode} in ('live', 'test-sink')`,
+    ),
+    check(
+      "messages_outbound_provider_check",
+      sql`${table.outboundProvider} in ('smtp', 'cloudflare-email', 'aws-ses', 'azure-email', 'test-sink')`,
+    ),
+    check(
+      "messages_provider_mode_check",
+      sql`(${table.deliveryMode} = 'test-sink' and ${table.outboundProvider} = 'test-sink') or (${table.deliveryMode} = 'live' and ${table.outboundProvider} <> 'test-sink')`,
     ),
     check(
       "messages_to_array_check",

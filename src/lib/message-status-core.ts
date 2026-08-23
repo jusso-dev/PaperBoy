@@ -2,6 +2,7 @@ import type {
   MessageDeliveryMode,
   MessageStatus,
 } from "@/lib/email-core";
+import type { OutboundProvider } from "@/lib/outbound-provider-core";
 
 export type MessageDeliveryStatusRecord = {
   attemptCount: number;
@@ -16,6 +17,7 @@ export type MessageDeliveryStatusRecord = {
   lastErrorCode: string | null;
   leaseExpiresAt: Date | null;
   nextAttemptAt: Date | null;
+  provider: OutboundProvider;
   sentAt: Date | null;
   status: MessageStatus;
   updatedAt: Date;

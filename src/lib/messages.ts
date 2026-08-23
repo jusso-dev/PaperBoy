@@ -30,6 +30,10 @@ import {
   appendOpenTrackingPixel,
   createOpenTrackingUrl,
 } from "@/lib/open-tracking-core";
+import {
+  isOutboundProvider,
+  type OutboundProvider,
+} from "@/lib/outbound-provider-core";
 import { consumeSendRateLimit } from "@/lib/rate-limits";
 import { materializeTemplateSendPayload } from "@/lib/templates";
 
@@ -44,6 +48,7 @@ export type QueuedMessageRecord = {
   domainId: string | null;
   environment: "live" | "test";
   id: string;
+  provider: OutboundProvider;
   replayed: boolean;
   status: MessageStatus;
 };
@@ -96,6 +101,10 @@ function deliveryMode(value: string): MessageDeliveryMode {
     : "test-sink";
 }
 
+function outboundProvider(value: string): OutboundProvider {
+  return isOutboundProvider(value) ? value : "test-sink";
+}
+
 type RecipientSuppression = {
   email: string;
   reason: "manual" | "unsubscribed" | "bounced" | "complained";
@@ -140,6 +149,7 @@ async function findIdempotentMessage(apiKeyId: string, key: string) {
       domainId: messages.domainId,
       environment: messages.environment,
       id: messages.id,
+      provider: messages.outboundProvider,
       requestHash: messages.requestHash,
       status: messages.status,
     })
@@ -170,6 +180,7 @@ function replayMessage(
     domainId: message.domainId,
     environment: message.environment === "live" ? "live" : "test",
     id: message.id,
+    provider: outboundProvider(message.provider),
     replayed: true,
     status: messageStatus(message.status),
   };
@@ -181,6 +192,7 @@ export async function queueEmail(input: {
   idempotencyKey?: unknown;
   payload: unknown;
   principal: MessageQueuePrincipal;
+  providerEnvironment?: Readonly<Record<string, string | undefined>>;
   rateLimitNow?: Date;
 }): Promise<QueuedMessageRecord> {
   const payload = await materializeTemplateSendPayload({
@@ -229,6 +241,7 @@ export async function queueEmail(input: {
     environment: input.principal.environment,
     fromDomain: email.fromDomain,
     orgId: input.principal.orgId,
+    providerEnvironment: input.providerEnvironment,
   });
 
   const attachmentStore = input.attachmentStore ?? localAttachmentStore;
@@ -306,6 +319,7 @@ export async function queueEmail(input: {
           idempotencyKey,
           openTrackingEnabled,
           orgId: input.principal.orgId,
+          outboundProvider: domain.provider,
           requestHash: idempotencyKey ? requestHash : null,
           subject: email.subject,
           tags: email.tags,
@@ -318,6 +332,7 @@ export async function queueEmail(input: {
           domainId: messages.domainId,
           environment: messages.environment,
           id: messages.id,
+          provider: messages.outboundProvider,
           status: messages.status,
         });
 
@@ -367,6 +382,7 @@ export async function queueEmail(input: {
       domainId: created.domainId,
       environment: created.environment === "live" ? "live" : "test",
       id: created.id,
+      provider: outboundProvider(created.provider),
       replayed: false,
       status: messageStatus(created.status),
     };
@@ -393,6 +409,7 @@ export async function queueEmail(input: {
 export async function queueEmailBatch(input: {
   payloads: unknown[];
   principal: MessageQueuePrincipal;
+  providerEnvironment?: Readonly<Record<string, string | undefined>>;
   rateLimitNow?: Date;
 }): Promise<QueuedMessageBatchItem[]> {
   return Promise.all(
@@ -403,6 +420,7 @@ export async function queueEmailBatch(input: {
             allowAttachments: false,
             payload,
             principal: input.principal,
+            providerEnvironment: input.providerEnvironment,
             rateLimitNow: input.rateLimitNow,
           }),
           ok: true as const,

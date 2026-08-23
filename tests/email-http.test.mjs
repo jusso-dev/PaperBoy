@@ -11,6 +11,7 @@ import {
 } from "../src/lib/email-core.ts";
 import { handleSendEmailRequest } from "../src/lib/email-http.ts";
 import { OpenTrackingConfigurationError } from "../src/lib/open-tracking-core.ts";
+import { OutboundProviderConfigurationError } from "../src/lib/outbound-provider-configuration.ts";
 import { RateLimitError } from "../src/lib/rate-limit-core.ts";
 import { TemplateError } from "../src/lib/template-core.ts";
 
@@ -265,6 +266,23 @@ test("enabled tracking without operator secrets fails before queueing", async ()
   assert.equal(response.status, 503);
   assert.equal(body.error.code, "open_tracking_unavailable");
   assert.match(body.error.message, /dedicated open-tracking signing key/);
+});
+
+test("a live provider without credentials fails closed with a clear 4xx", async () => {
+  const { dependencies } = testDependencies();
+  dependencies.queue = async () => {
+    throw new OutboundProviderConfigurationError(
+      "CREDENTIALS_MISSING",
+      "smtp",
+    );
+  };
+  const response = await handleSendEmailRequest(request(validBody), dependencies);
+  const body = await response.json();
+
+  assert.equal(response.status, 422);
+  assert.equal(body.error.code, "provider_credentials_missing");
+  assert.equal(body.error.provider, "smtp");
+  assert.match(body.error.message, /secret store/);
 });
 
 test("a capped organization receives 429 with an exact Retry-After", async () => {

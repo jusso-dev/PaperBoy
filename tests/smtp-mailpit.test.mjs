@@ -60,6 +60,8 @@ test(
         from: "PaperBoy <news@example.com>",
         html: "<p>Mailpit Compose proof</p>",
         id: messageId,
+        orgId: "28282828-2828-4828-8282-282828282828",
+        provider: "smtp",
         subject: "PaperBoy SMTP Compose proof",
         text: "Mailpit Compose proof",
         to: ["reader@example.net"],

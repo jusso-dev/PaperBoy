@@ -1,0 +1,5 @@
+{
+  "event": "delivered",
+  "provider": "aws-ses",
+  "provider_message_id": "ses-fixture-001"
+}

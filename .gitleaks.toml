@@ -44,7 +44,7 @@ keywords = ["smtp://", "smtps://"]
 [[rules.allowlists]]
 description = "Deliberately weak SMTP adapter test credentials"
 regexTarget = "secret"
-regexes = ['''^(p%40ss|secret|test-token)$''']
+regexes = ['''^(p%40ss|secret|test-token|<password>|<URL-encoded-token>)$''']
 
 [[rules]]
 id = "paperboy-aws-access-key-id"

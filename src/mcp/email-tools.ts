@@ -168,6 +168,13 @@ const queuedEmailOutputShape = {
   environment: z.enum(["live", "test"]),
   id: z.string().uuid(),
   queuedAt: z.iso.datetime({ offset: true }),
+  provider: z.enum([
+    "smtp",
+    "cloudflare-email",
+    "aws-ses",
+    "azure-email",
+    "test-sink",
+  ]),
   replayed: z.boolean(),
   status: z.enum(["queued", "sending", "sent", "failed"]),
 };
@@ -178,6 +185,7 @@ const sendEmailOutputSchema = z.object({
   id: queuedEmailOutputShape.id,
   protocolTimeZone: z.literal("UTC"),
   queuedAt: queuedEmailOutputShape.queuedAt,
+  provider: queuedEmailOutputShape.provider,
   replayed: queuedEmailOutputShape.replayed,
   schemaVersion: z.literal(PAPERBOY_MCP_SCHEMA_VERSION),
   status: queuedEmailOutputShape.status,
@@ -341,6 +349,7 @@ function queuedOutput(message: QueuedMessageRecord) {
     environment: message.environment,
     id: message.id,
     queuedAt: protocolTimestamp(message.createdAt),
+    provider: message.provider,
     replayed: message.replayed,
     status: message.status,
   };

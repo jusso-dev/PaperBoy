@@ -29,31 +29,22 @@ async function main() {
   const [
     { postgresWorkerStore },
     { postgresWebhookStore },
-    { processNextMessage, routeOutboundAdapters, testSinkAdapter },
-    { createSmtpAdapter },
+    { processNextMessage },
+    { createEnvironmentOutboundRouter },
     { configuredWebhookEncryptionKey },
     { processNextWebhook },
   ] = await Promise.all([
       import("@/lib/postgres-worker-store"),
       import("@/lib/postgres-webhook-store"),
       import("@/lib/worker-core"),
-      import("@/lib/smtp-adapter"),
+      import("@/lib/outbound-provider-runtime"),
       import("@/lib/webhook-core"),
       import("@/lib/webhook-worker-core"),
     ]);
   const workerId = workerIdentity();
   const pollMs = pollInterval();
-  const smtp =
-    process.env.SMTP_URL === undefined
-      ? null
-      : createSmtpAdapter({ environment: process.env });
-  const adapter = routeOutboundAdapters({
-    live: smtp ?? undefined,
-    "test-sink": testSinkAdapter,
-  });
-  const deliveryModes = smtp
-    ? (["live", "test-sink"] as const)
-    : (["test-sink"] as const);
+  const adapter = createEnvironmentOutboundRouter({ environment: process.env });
+  const deliveryModes = ["live", "test-sink"] as const;
   const webhookEncryptionKey = process.env.PAPERBOY_WEBHOOK_ENCRYPTION_KEY
     ? configuredWebhookEncryptionKey()
     : null;
@@ -66,12 +57,8 @@ async function main() {
   process.once("SIGTERM", stop);
 
   try {
-    if (smtp) {
-      await smtp.verify();
-    }
-
     console.error(
-      `PaperBoy worker ${workerId} ready for ${smtp ? "SMTP and test-sink" : "test-sink"} delivery; signed webhooks ${webhookEncryptionKey ? "enabled" : "disabled"}.`,
+      `PaperBoy worker ${workerId} ready for provider-routed live and test-sink delivery; signed webhooks ${webhookEncryptionKey ? "enabled" : "disabled"}.`,
     );
 
     while (!stopping) {
@@ -96,13 +83,13 @@ async function main() {
 
     console.error(`PaperBoy worker ${workerId} stopped.`);
   } finally {
-    smtp?.close();
+    adapter.close();
   }
 }
 
 void main().catch(() => {
   console.error(
-    "PaperBoy worker stopped after an internal error. Check DATABASE_URL, migrations, attachment storage, SMTP and webhook secret configuration, connectivity, and worker logs.",
+    "PaperBoy worker stopped after an internal error. Check DATABASE_URL, migrations, attachment storage, outbound provider and webhook secret configuration, connectivity, and worker logs.",
   );
   process.exitCode = 1;
 });

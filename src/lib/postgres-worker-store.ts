@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { messages } from "@/db/schema";
 import type { MessageDeliveryMode } from "@/lib/email-core";
 import { insertMessageEvent } from "@/lib/message-events";
+import { isOutboundProvider } from "@/lib/outbound-provider-core";
 import { loadMessageAttachments } from "@/lib/stored-message-attachments";
 import type { WorkerStore } from "@/lib/worker-core";
 
@@ -16,6 +17,10 @@ function validWorkerId(workerId: string): boolean {
 
 function deliveryMode(value: string): MessageDeliveryMode {
   return value === "live" ? "live" : "test-sink";
+}
+
+function outboundProvider(value: string) {
+  return isOutboundProvider(value) ? value : "test-sink";
 }
 
 async function markOwnedMessage(
@@ -96,6 +101,8 @@ export const postgresWorkerStore: WorkerStore = {
           from: messages.from,
           html: messages.html,
           id: messages.id,
+          orgId: messages.orgId,
+          provider: messages.outboundProvider,
           subject: messages.subject,
           text: messages.textBody,
           to: messages.to,
@@ -109,6 +116,7 @@ export const postgresWorkerStore: WorkerStore = {
         ...claimed,
         deliveryMode: deliveryMode(claimed.deliveryMode),
         environment: claimed.environment === "live" ? "live" : "test",
+        provider: outboundProvider(claimed.provider),
       };
     });
   },
@@ -155,6 +163,7 @@ export const postgresWorkerStore: WorkerStore = {
           failureReason: null,
           lastErrorCode: null,
           leaseExpiresAt: null,
+          providerMessageId: input.providerMessageId,
           sentAt: input.now,
           status: "sent",
           updatedAt: input.now,

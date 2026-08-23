@@ -23,6 +23,8 @@ tags:
     description: Read one message's ordered delivery lifecycle.
   - name: Open tracking
     description: Manage opt-in first-party open tracking and serve its signed pixel.
+  - name: Outbound providers
+    description: Select and test organization and sending-domain delivery routes.
   - name: Webhooks
     description: Configure the organization's signed event destination.
 x-paperboy-mcp:
@@ -35,6 +37,9 @@ x-paperboy-mcp:
     listEmailEvents: paperboy_list_message_events
     getOpenTracking: paperboy_get_open_tracking
     updateOpenTracking: paperboy_update_open_tracking
+    getOutboundProviders: paperboy_get_outbound_providers
+    updateOutboundProviders: paperboy_update_outbound_providers
+    testOutboundProvider: paperboy_test_outbound_provider
     getWebhook: paperboy_get_webhook
     configureWebhook: paperboy_configure_webhook
 paths:
@@ -45,10 +50,12 @@ paths:
       summary: Queue one email
       description: >-
         Validates and stores one provider-neutral message. Test keys always use
-        the isolated test sink. Live keys require a verified organization domain
-        and active DKIM state. Cloudflare Email Service remains responsible for
-        provider-owned DKIM and ARC signatures. Idempotency may be supplied in
-        the header or JSON body and is active for 24 hours per API key.
+        the isolated test sink. Live keys require a verified organization domain,
+        active DKIM state, and configured credentials for the resolved organization
+        default or domain override. Provider choice is snapshotted on the queued
+        message. Cloudflare Email Service remains responsible for provider-owned
+        DKIM and ARC signatures. Idempotency may be supplied in the header or JSON
+        body and is active for 24 hours per API key.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -281,6 +288,108 @@ paths:
             A deployment edge rejected malformed HTTP before the request
             reached PaperBoy. The application handler itself masks token and
             message validity behind the 200 GIF response.
+  /api/v1/providers:
+    get:
+      operationId: getOutboundProviders
+      tags: [Outbound providers]
+      summary: Read outbound-provider routing
+      description: >-
+        Returns the organization default, each tenant-owned domain's effective
+        route, provider capabilities, and safe readiness state. Credentials and
+        provider payloads are never returned. Timestamps are UTC.
+      responses:
+        '200':
+          description: Current provider routing and safe runtime readiness.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundProviderSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateOutboundProviders
+      tags: [Outbound providers]
+      summary: Update outbound-provider routing
+      description: >-
+        Owners and admins select the organization default, one or more sending-
+        domain overrides, or both. Existing messages retain their snapshotted
+        provider. Selecting an unavailable adapter never falls back to SMTP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutboundProviderUpdateInput'
+      responses:
+        '200':
+          description: Saved provider routing and safe runtime readiness.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundProviderSettings'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/providers/test:
+    post:
+      operationId: testOutboundProvider
+      tags: [Outbound providers]
+      summary: Test one outbound provider
+      description: >-
+        Owners and admins perform a connection test with operator-injected
+        credentials. The request never accepts a credential or secret reference.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutboundProviderTestInput'
+      responses:
+        '200':
+          description: The provider accepted the connection test.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundProviderTestResult'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: Credentials are missing or invalid, the adapter is unavailable, or the connection failed.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/webhooks:
     get:
       operationId: getWebhook
@@ -488,6 +597,126 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    OutboundProvider:
+      type: string
+      enum: [smtp, cloudflare-email, aws-ses, azure-email]
+    MessageOutboundProvider:
+      type: string
+      enum: [smtp, cloudflare-email, aws-ses, azure-email, test-sink]
+    OutboundProviderCapabilities:
+      type: object
+      additionalProperties: false
+      required: [batch, events, scheduling]
+      properties:
+        batch:
+          type: boolean
+        events:
+          type: boolean
+        scheduling:
+          type: boolean
+    OutboundProviderStatus:
+      type: object
+      additionalProperties: false
+      required: [capabilities, configured, credential_scope, id, label, state]
+      properties:
+        capabilities:
+          $ref: '#/components/schemas/OutboundProviderCapabilities'
+        configured:
+          type: boolean
+        credential_scope:
+          type: [string, 'null']
+          enum: [operator-default, organization, null]
+        id:
+          $ref: '#/components/schemas/OutboundProvider'
+        label:
+          type: string
+        state:
+          type: string
+          enum: [adapter-unavailable, configuration-invalid, credentials-missing, ready]
+    OutboundProviderDomainSetting:
+      type: object
+      additionalProperties: false
+      required: [domain_id, effective_provider, name, override_provider, updated_at]
+      properties:
+        domain_id:
+          type: string
+          format: uuid
+        effective_provider:
+          $ref: '#/components/schemas/OutboundProvider'
+        name:
+          type: string
+        override_provider:
+          oneOf:
+            - $ref: '#/components/schemas/OutboundProvider'
+            - type: 'null'
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    OutboundProviderSettings:
+      type: object
+      additionalProperties: false
+      required: [default_provider, domains, protocol_time_zone, providers, updated_at]
+      properties:
+        default_provider:
+          $ref: '#/components/schemas/OutboundProvider'
+        domains:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutboundProviderDomainSetting'
+        protocol_time_zone:
+          type: string
+          const: UTC
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutboundProviderStatus'
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    OutboundProviderDomainOverrideInput:
+      type: object
+      additionalProperties: false
+      required: [domain_id, provider]
+      properties:
+        domain_id:
+          type: string
+          format: uuid
+        provider:
+          oneOf:
+            - $ref: '#/components/schemas/OutboundProvider'
+            - type: 'null'
+    OutboundProviderUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        default_provider:
+          $ref: '#/components/schemas/OutboundProvider'
+        domain_overrides:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/OutboundProviderDomainOverrideInput'
+    OutboundProviderTestInput:
+      type: object
+      additionalProperties: false
+      required: [provider]
+      properties:
+        provider:
+          $ref: '#/components/schemas/OutboundProvider'
+    OutboundProviderTestResult:
+      type: object
+      additionalProperties: false
+      required: [ok, protocol_time_zone, provider, tested_at]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        protocol_time_zone:
+          type: string
+          const: UTC
+        provider:
+          $ref: '#/components/schemas/OutboundProvider'
+        tested_at:
+          $ref: '#/components/schemas/UtcDateTime'
     OpenTrackingSettings:
       type: object
       additionalProperties: false
@@ -672,6 +901,7 @@ components:
         - next_attempt_at
         - object
         - open_tracking_enabled
+        - provider
         - sent_at
         - status
         - subject
@@ -720,6 +950,8 @@ components:
           const: email
         open_tracking_enabled:
           type: boolean
+        provider:
+          $ref: '#/components/schemas/MessageOutboundProvider'
         sent_at:
           $ref: '#/components/schemas/NullableUtcDateTime'
         status:

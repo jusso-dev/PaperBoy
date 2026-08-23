@@ -12,6 +12,7 @@ test("the stdio service graph loads outside the Next.js compiler", async () => {
     deliveries,
     domains,
     emails,
+    outboundProviders,
     templates,
   ] = await Promise.all([
     import("../src/lib/api-key-auth.ts"),
@@ -21,6 +22,7 @@ test("the stdio service graph loads outside the Next.js compiler", async () => {
     import("../src/mcp/delivery-services.ts"),
     import("../src/mcp/domain-services.ts"),
     import("../src/mcp/email-services.ts"),
+    import("../src/mcp/outbound-provider-services.ts"),
     import("../src/mcp/template-services.ts"),
   ]);
 
@@ -31,5 +33,6 @@ test("the stdio service graph loads outside the Next.js compiler", async () => {
   assert.equal(typeof deliveries.paperBoyMcpDeliveryServices.list, "function");
   assert.equal(typeof domains.paperBoyMcpDomainServices.list, "function");
   assert.equal(typeof emails.paperBoyMcpEmailServices.queue, "function");
+  assert.equal(typeof outboundProviders.paperBoyMcpOutboundProviderServices.get, "function");
   assert.equal(typeof templates.paperBoyMcpTemplateServices.list, "function");
 });

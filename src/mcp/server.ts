@@ -57,6 +57,12 @@ import {
   type PaperBoyMcpOpenTrackingServices,
 } from "@/mcp/open-tracking-tools";
 import {
+  PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_NAMES,
+  registerPaperBoyOutboundProviderTools,
+  type PaperBoyMcpOutboundProviderServices,
+} from "@/mcp/outbound-provider-tools";
+import {
   PAPERBOY_SUPPRESSION_MCP_TOOL_DEFINITIONS,
   PAPERBOY_SUPPRESSION_MCP_TOOL_NAMES,
   registerPaperBoySuppressionTools,
@@ -83,6 +89,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
   ...PAPERBOY_AUDIENCE_MCP_TOOL_NAMES,
   ...PAPERBOY_EMAIL_MCP_TOOL_NAMES,
   ...PAPERBOY_OPEN_TRACKING_MCP_TOOL_NAMES,
+  ...PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_NAMES,
   ...PAPERBOY_RATE_LIMIT_MCP_TOOL_NAMES,
   ...PAPERBOY_DELIVERY_MCP_TOOL_NAMES,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_NAMES,
@@ -106,6 +113,7 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/audiences",
   "paperboy://docs/rate-limits",
   "paperboy://docs/open-tracking",
+  "paperboy://docs/outbound-providers",
 ] as const;
 
 type PaperBoyMcpDependencies = {
@@ -119,6 +127,7 @@ type PaperBoyMcpDependencies = {
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
   now?: () => Date;
   openTracking: PaperBoyMcpOpenTrackingServices;
+  outboundProviders: PaperBoyMcpOutboundProviderServices;
   rateLimits: PaperBoyMcpRateLimitServices;
   suppressions: PaperBoyMcpSuppressionServices;
   templates: PaperBoyMcpTemplateServices;
@@ -186,6 +195,7 @@ const toolDefinitions = [
   ...PAPERBOY_AUDIENCE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_OPEN_TRACKING_MCP_TOOL_DEFINITIONS,
+  ...PAPERBOY_OUTBOUND_PROVIDER_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_RATE_LIMIT_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_DEFINITIONS,
@@ -245,6 +255,10 @@ const resourceDefinitions = [
     description: "Configure privacy-first signed open tracking.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[11],
   },
+  {
+    description: "Select, inspect, and test outbound provider routing safely.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[12],
+  },
 ] as const;
 
 const configurationDocument = `# PaperBoy MCP configuration
@@ -267,6 +281,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - Suppression CRUD and CSV import use the same organization blocklist checked before HTTP, MCP, batch, broadcast, SMTP, or Cloudflare delivery can be queued.
 - Broadcast creation accepts an audience ID, snapshots active contacts, and adds a PaperBoy-signed unsubscribe URL before the provider-neutral queue.
 - Live and test API keys share separate organization-wide PostgreSQL rate-limit windows. Read or update overrides with the rate-limit tools; send tools report rate_limit_exceeded with an exact retry delay.
+- Outbound-provider tools read and change the organization default or tenant-owned domain overrides, and test one provider without accepting secrets. Every live queue row snapshots the resolved provider; missing credentials fail before insertion and no adapter silently falls back to SMTP.
 - Send tools accept either inline subject/body fields or \`template_id\` plus a JSON \`data\` object. Template rendering finishes before provider delivery, so SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text.
 - Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
@@ -314,10 +329,11 @@ const broadcastDocument = `# PaperBoy broadcasts
 const workerDocument = `# PaperBoy outbound worker
 
 - Run 'pnpm worker' beside every web deployment. The PostgreSQL queue is the source of truth.
-- Set SMTP_URL to an smtp:// or smtps:// submission endpoint to enable live delivery. Without it, the worker consumes test-sink messages only and leaves live rows queued.
+- SMTP_URL supplies the operator-default SMTP secret. Per-organization SMTP and Cloudflare Email Service variables use a normalized organization UUID suffix. Credentials stay in operator injection and never enter MCP arguments or output.
 - SMTP_TLS_MODE defaults to required. smtp:// must negotiate STARTTLS; opportunistic and disabled are weaker opt-ins for controlled environments. smtps:// uses implicit TLS.
 - For local capture, run 'docker compose -f compose.dev.yml up --wait mailpit', use SMTP_URL=smtp://127.0.0.1:1025 with SMTP_TLS_MODE=disabled, and inspect http://127.0.0.1:8025.
-- Cloudflare Email Service works through the same adapter with smtps://api_token:<URL-encoded API token>@smtp.mx.cloudflare.net:465 and required TLS. Keep the token in the worker secret environment, never MCP arguments or output. Cloudflare remains its own DKIM/ARC signing authority.
+- Cloudflare Email Service is selectable directly through the same hardened transport with CLOUDFLARE_EMAIL_SMTP_URL=smtps://api_token:<URL-encoded API token>@smtp.mx.cloudflare.net:465 and required TLS. A compatible SMTP_URL remains supported. Cloudflare remains its own DKIM/ARC signing authority.
+- Each message stores its resolved provider. Settings changes affect future queue rows only. Missing credentials fail before insertion; credentials removed later fail that row explicitly instead of falling back to another provider.
 - A worker atomically claims an eligible message, records 'sending', and holds a five-minute lease. If it exits mid-delivery, another worker can reclaim the same row after the lease expires.
 - Delivery is at least once. A process exit after a provider accepts a message but before PostgreSQL records 'sent' can cause a duplicate, so preserve send idempotency where the provider supports it.
 - Retry transient network failures, HTTP 5xx, and SMTP 4xx with bounded backoff. SMTP 550 and other permanent failures move directly to 'failed'. Five attempts exhaust the retry budget.
@@ -394,6 +410,19 @@ const openTrackingDocument = `# PaperBoy open tracking
 - PAPERBOY_OPEN_TRACKING_SIGNING_KEY is a dedicated Base64-encoded 32-byte key. Rotation invalidates outstanding pixels. PAPERBOY_PUBLIC_URL supplies their public origin.
 - Pixel URLs and stored HTML are provider-neutral. SMTP and Cloudflare Email Service receive the same body; Cloudflare remains its own DKIM and ARC authority.
 - Event instants and MCP timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
+`;
+
+const outboundProviderDocument = `# PaperBoy outbound providers
+
+- Every live message resolves the organization default and optional sending-domain override before queue insertion. The provider ID is snapshotted on the message, so later settings changes never reroute queued mail.
+- paperboy_get_outbound_providers returns SMTP, Cloudflare Email Service, Amazon SES, and Azure Communication Services Email capabilities plus safe readiness state. It never returns secret values or provider payloads.
+- Owners and admins use paperboy_update_outbound_providers to select the organization default or tenant-owned domain overrides. Current members can read settings. Organization context always comes from the API key.
+- paperboy_test_outbound_provider performs a provider connection check using operator-injected credentials. Never put SMTP passwords, Cloudflare API tokens, AWS keys, Azure connection strings, or secret references in tool arguments.
+- Missing or invalid credentials fail closed before a live message enters the queue. Test API keys continue to use the isolated test sink.
+- SMTP_URL remains the operator-default SMTP secret. Cloudflare Email Service may use CLOUDFLARE_EMAIL_SMTP_URL or a Cloudflare SMTP_URL. Per-organization secret variables use the documented normalized organization UUID suffix.
+- Amazon SES and Azure are equal contract identities now; their delivery and event adapters land on their dedicated cards. Selecting an unavailable adapter produces an explicit error without falling back to SMTP.
+- Provider event adapters map into the stable PaperBoy delivered, bounced, and complained event names. Webhook names and PaperBoy message IDs do not change when provider selection changes.
+- Settings and test timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
 `;
 
 function authorizationError() {
@@ -519,6 +548,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[9], audienceDocument],
     [resourceDefinitions[10], rateLimitDocument],
     [resourceDefinitions[11], openTrackingDocument],
+    [resourceDefinitions[12], outboundProviderDocument],
   ] as const) {
     server.registerResource(
       resource.uri,
@@ -566,6 +596,13 @@ export function createPaperBoyMcpServer(
     now,
     server,
     services: dependencies.openTracking,
+  });
+
+  registerPaperBoyOutboundProviderTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.outboundProviders,
   });
 
   registerPaperBoyRateLimitTools({

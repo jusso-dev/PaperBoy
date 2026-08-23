@@ -68,6 +68,7 @@ const firstMessage = {
   domainId: null,
   environment: "test",
   id: "66666666-6666-4666-8666-666666666666",
+  provider: "test-sink",
   replayed: false,
   status: "queued",
 };
@@ -84,6 +85,7 @@ const firstDelivery = {
   lastErrorCode: "http_503",
   leaseExpiresAt: null,
   nextAttemptAt: fixedNow,
+  provider: "test-sink",
   sentAt: null,
   status: "queued",
   updatedAt: fixedNow,
@@ -181,6 +183,53 @@ const firstOpenTracking = {
   enabled: false,
   updatedAt: fixedNow,
 };
+const firstOutboundProviders = {
+  defaultProvider: "smtp",
+  domains: [
+    {
+      effectiveProvider: "smtp",
+      id: firstDomain.id,
+      name: firstDomain.name,
+      overrideProvider: null,
+      updatedAt: fixedNow,
+    },
+  ],
+  providers: [
+    {
+      capabilities: { batch: false, events: true, scheduling: false },
+      configured: true,
+      credentialScope: "operator-default",
+      id: "smtp",
+      label: "SMTP",
+      state: "ready",
+    },
+    {
+      capabilities: { batch: false, events: true, scheduling: false },
+      configured: true,
+      credentialScope: "operator-default",
+      id: "cloudflare-email",
+      label: "Cloudflare Email Service",
+      state: "ready",
+    },
+    {
+      capabilities: { batch: true, events: true, scheduling: false },
+      configured: false,
+      credentialScope: null,
+      id: "aws-ses",
+      label: "Amazon SES",
+      state: "adapter-unavailable",
+    },
+    {
+      capabilities: { batch: true, events: true, scheduling: false },
+      configured: false,
+      credentialScope: null,
+      id: "azure-email",
+      label: "Azure Communication Services Email",
+      state: "adapter-unavailable",
+    },
+  ],
+  updatedAt: fixedNow,
+};
 
 function audienceServices(overrides = {}) {
   return {
@@ -272,6 +321,18 @@ function openTrackingServices(overrides = {}) {
   };
 }
 
+function outboundProviderServices(overrides = {}) {
+  return {
+    get: async () => firstOutboundProviders,
+    test: async (_principal, payload) => ({
+      provider: payload.provider,
+      testedAt: fixedNow,
+    }),
+    update: async () => firstOutboundProviders,
+    ...overrides,
+  };
+}
+
 function suppressionServices(overrides = {}) {
   return {
     create: async () => firstSuppression,
@@ -352,6 +413,7 @@ function dependencies(overrides = {}) {
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
     openTracking: openTrackingServices(),
+    outboundProviders: outboundProviderServices(),
     rateLimits: rateLimitServices(),
     templates: templateServices(),
     suppressions: suppressionServices(),
@@ -481,6 +543,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "settings",
       ],
+      paperboy_get_outbound_providers: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "settings",
+      ],
       paperboy_ingest_feedback: [
         "data",
         "protocolTimeZone",
@@ -575,6 +643,7 @@ test("initializes and publishes versioned tool schemas", async () => {
         "id",
         "protocolTimeZone",
         "queuedAt",
+        "provider",
         "replayed",
         "schemaVersion",
         "status",
@@ -620,6 +689,19 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "settings",
       ],
+      paperboy_update_outbound_providers: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "settings",
+      ],
+      paperboy_test_outbound_provider: [
+        "ok",
+        "protocolTimeZone",
+        "provider",
+        "schemaVersion",
+        "testedAt",
+      ],
       paperboy_verify_domain: [
         "domain",
         "observedAt",
@@ -662,6 +744,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_webhook: [],
       paperboy_get_rate_limits: [],
       paperboy_get_open_tracking: [],
+      paperboy_get_outbound_providers: [],
       paperboy_ingest_feedback: ["rawReportBase64"],
       paperboy_import_suppressions: ["csv"],
       paperboy_list_capabilities: [],
@@ -710,6 +793,11 @@ test("initializes and publishes versioned tool schemas", async () => {
         "testLimitPerMinute",
       ],
       paperboy_update_open_tracking: ["enabled"],
+      paperboy_update_outbound_providers: [
+        "defaultProvider",
+        "domainOverrides",
+      ],
+      paperboy_test_outbound_provider: ["provider"],
       paperboy_verify_domain: ["domainId"],
     };
     const requiredInputSchemaSnapshots = {
@@ -727,6 +815,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_contact: ["audienceId", "contactId"],
       paperboy_update_rate_limits: [],
       paperboy_update_open_tracking: ["enabled"],
+      paperboy_update_outbound_providers: [],
     };
     const annotationSnapshots = {
       paperboy_create_audience: { destructive: false, readOnly: false },
@@ -760,6 +849,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_webhook: { destructive: false, readOnly: true },
       paperboy_get_rate_limits: { destructive: false, readOnly: true },
       paperboy_get_open_tracking: { destructive: false, readOnly: true },
+      paperboy_get_outbound_providers: { destructive: false, readOnly: true },
       paperboy_ingest_feedback: { destructive: false, readOnly: false },
       paperboy_import_suppressions: { destructive: false, readOnly: false },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
@@ -781,6 +871,8 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_suppression: { destructive: false, readOnly: false },
       paperboy_update_rate_limits: { destructive: false, readOnly: false },
       paperboy_update_open_tracking: { destructive: false, readOnly: false },
+      paperboy_update_outbound_providers: { destructive: false, readOnly: false },
+      paperboy_test_outbound_provider: { destructive: false, readOnly: false },
       paperboy_verify_domain: { destructive: false, readOnly: false },
     };
 
@@ -920,6 +1012,13 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     assert.match(workerGuide.contents[0].text, /Cloudflare Email Sending/);
     assert.match(workerGuide.contents[0].text, /paperboy_list_message_events/);
     assert.match(workerGuide.contents[0].text, /persisted tracking opt-in/);
+
+    const providerGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[12],
+    });
+    assert.match(providerGuide.contents[0].text, /Cloudflare Email Service/);
+    assert.match(providerGuide.contents[0].text, /snapshotted/);
+    assert.match(providerGuide.contents[0].text, /RFC 3339 UTC/);
 
     const webhookGuide = await client.readResource({
       uri: PAPERBOY_MCP_RESOURCE_URIS[6],
@@ -1170,6 +1269,71 @@ test("open tracking is a first-class tenant-bound MCP setting with UTC metadata"
         ["update", firstPrincipal, { enabled: true }],
       ]);
       assert.equal(JSON.stringify(calls).includes("organizationId"), false);
+    },
+  );
+});
+
+test("outbound providers are first-class tenant-bound MCP settings and tests", async () => {
+  const calls = [];
+  await withClient(
+    dependencies({
+      outboundProviders: outboundProviderServices({
+        get: async (principal) => {
+          calls.push(["get", principal]);
+          return firstOutboundProviders;
+        },
+        test: async (principal, payload) => {
+          calls.push(["test", principal, payload]);
+          return { provider: payload.provider, testedAt: fixedNow };
+        },
+        update: async (principal, payload) => {
+          calls.push(["update", principal, payload]);
+          return firstOutboundProviders;
+        },
+      }),
+    }),
+    async (client) => {
+      const read = await client.callTool({
+        arguments: {},
+        name: "paperboy_get_outbound_providers",
+      });
+      const updated = await client.callTool({
+        arguments: {
+          defaultProvider: "cloudflare-email",
+          domainOverrides: [
+            { domainId: firstDomain.id, provider: "smtp" },
+          ],
+        },
+        name: "paperboy_update_outbound_providers",
+      });
+      const tested = await client.callTool({
+        arguments: { provider: "cloudflare-email" },
+        name: "paperboy_test_outbound_provider",
+      });
+
+      assert.equal(read.structuredContent.settings.defaultProvider, "smtp");
+      assert.equal(read.structuredContent.protocolTimeZone, "UTC");
+      assert.equal(
+        read.structuredContent.settings.providers[1].credentialScope,
+        "operator-default",
+      );
+      assert.equal(updated.structuredContent.settings.domains[0].updatedAt, fixedNow.toISOString());
+      assert.equal(tested.structuredContent.testedAt, fixedNow.toISOString());
+      assert.equal(JSON.stringify(read).includes("test-token"), false);
+      assert.deepEqual(calls, [
+        ["get", firstPrincipal],
+        [
+          "update",
+          firstPrincipal,
+          {
+            default_provider: "cloudflare-email",
+            domain_overrides: [
+              { domain_id: firstDomain.id, provider: "smtp" },
+            ],
+          },
+        ],
+        ["test", firstPrincipal, { provider: "cloudflare-email" }],
+      ]);
     },
   );
 });
@@ -1674,6 +1838,7 @@ test("sending is a first-class tenant-bound MCP operation with UTC metadata", as
         id: firstMessage.id,
         protocolTimeZone: "UTC",
         queuedAt: fixedNow.toISOString(),
+        provider: "test-sink",
         replayed: false,
         schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
         status: "queued",
@@ -1846,6 +2011,7 @@ test("batch sending preserves order and reports per-item MCP failures", async ()
             id: secondMessage.id,
             index: 0,
             queuedAt: fixedNow.toISOString(),
+            provider: "test-sink",
             replayed: false,
             status: "queued",
           },

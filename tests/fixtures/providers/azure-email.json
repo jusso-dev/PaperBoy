@@ -1,0 +1,5 @@
+{
+  "event": "delivered",
+  "provider": "azure-email",
+  "provider_message_id": "azure-fixture-001"
+}

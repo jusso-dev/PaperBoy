@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { simpleParser } from "mailparser";
 import {
@@ -25,6 +26,8 @@ function message(overrides = {}) {
     from: "PaperBoy <News@Example.COM>",
     html: "<p>Private edition</p>",
     id: "11111111-1111-4111-8111-111111111111",
+    orgId: "22222222-2222-4222-8222-222222222222",
+    provider: "smtp",
     subject: "Morning edition",
     text: "Private edition",
     to: ["Reader@Example.NET"],
@@ -107,6 +110,135 @@ test("Cloudflare Email uses authenticated implicit TLS through the SMTP adapter"
     pass: "test-token",
     user: "api_token",
   });
+});
+
+test("Cloudflare Email is a first-class provider over the hardened SMTP transport", async () => {
+  const fake = fakeTransport({
+    async sendMail(options) {
+      fake.calls.push(options);
+      return {
+        accepted: ["reader@example.net"],
+        messageId: "cloudflare-message-1",
+        rejected: [],
+      };
+    },
+  });
+  const adapter = createSmtpAdapter({
+    environment: {
+      SMTP_URL: "smtps://api_token:test-token@smtp.mx.cloudflare.net:465",
+    },
+    provider: "cloudflare-email",
+    transportFactory: () => fake.client,
+  });
+
+  const result = await adapter.send(
+    message({ provider: "cloudflare-email" }),
+  );
+  assert.equal(adapter.provider, "cloudflare-email");
+  assert.equal(result.providerMessageId, "cloudflare-message-1");
+  assert.equal(fake.calls.length, 1);
+});
+
+test("Cloudflare Email maps structured lifecycle events without leaking message data", async () => {
+  const fake = fakeTransport();
+  const adapter = createSmtpAdapter({
+    environment: {
+      SMTP_URL: "smtps://api_token:test-token@smtp.mx.cloudflare.net:465",
+    },
+    provider: "cloudflare-email",
+    transportFactory: () => fake.client,
+  });
+  const providerEvent = JSON.parse(
+    await readFile(
+      new URL("fixtures/providers/cloudflare-email-event.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const receivedAt = new Date("2026-08-24T01:02:03.000Z");
+  const events = await adapter.mapEvent({ payload: providerEvent, receivedAt });
+
+  assert.deepEqual(events, [
+    {
+      data: {
+        provider: "cloudflare-email",
+        provider_event: "cf.email.sending.message.delivered",
+      },
+      messageId: "cloudflare-message-1",
+      occurredAt: receivedAt,
+      type: "delivered",
+    },
+  ]);
+  assert.equal(JSON.stringify(events).includes("reader@example.net"), false);
+  assert.equal(JSON.stringify(events).includes("Private subject"), false);
+  assert.deepEqual(
+    await adapter.mapEvent({
+      payload: { ...providerEvent, type: "toString" },
+      receivedAt,
+    }),
+    [],
+  );
+  for (const [providerType, expectedType] of [
+    ["cf.email.sending.message.bounced", "bounced"],
+    ["cf.email.sending.message.complained", "complained"],
+  ]) {
+    const [mapped] = await adapter.mapEvent({
+      payload: { ...providerEvent, type: providerType },
+      receivedAt,
+    });
+    assert.equal(mapped.type, expectedType);
+  }
+});
+
+test("Cloudflare Email enforces its 5 MiB SMTP message limit before submission", async () => {
+  const fake = fakeTransport();
+  const adapter = createSmtpAdapter({
+    environment: {
+      SMTP_URL: "smtps://api_token:test-token@smtp.mx.cloudflare.net:465",
+    },
+    provider: "cloudflare-email",
+    transportFactory: () => fake.client,
+  });
+
+  await assert.rejects(
+    adapter.send(
+      message({
+        attachments: [
+          {
+            content: Buffer.alloc(4 * 1024 * 1024),
+            contentType: "application/octet-stream",
+            filename: "large.bin",
+          },
+        ],
+        provider: "cloudflare-email",
+      }),
+    ),
+    (error) =>
+      error instanceof OutboundDeliveryError &&
+      error.code === "provider_message_too_large" &&
+      error.retryable === false,
+  );
+  assert.equal(fake.calls.length, 0);
+});
+
+test("SMTP provider events map recorded DSN bytes into stable PaperBoy events", async () => {
+  const adapter = createSmtpAdapter({
+    environment: { SMTP_URL: "smtp://mail.example.com" },
+    transportFactory: () => fakeTransport().client,
+  });
+  const raw = await readFile(
+    new URL("fixtures/feedback/hard-bounce.eml", import.meta.url),
+  );
+  const receivedAt = new Date("2026-08-24T01:02:03.000Z");
+  const events = await adapter.mapEvent({ payload: raw, receivedAt });
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "bounced");
+  assert.equal(
+    events[0].messageId,
+    "11111111-1111-4111-8111-111111111111",
+  );
+  assert.equal(events[0].occurredAt.toISOString(), receivedAt.toISOString());
+  assert.equal(JSON.stringify(events).includes("hard-bounce@example.net"), false);
 });
 
 test("a dedicated bounce address is explicit and normalized", async () => {
@@ -299,7 +431,11 @@ test("SMTP adapter rejects test-sink messages", async () => {
 
   await assert.rejects(
     adapter.send(
-      message({ deliveryMode: "test-sink", environment: "test" }),
+      message({
+        deliveryMode: "test-sink",
+        environment: "test",
+        provider: "test-sink",
+      }),
     ),
     (error) =>
       error instanceof OutboundDeliveryError &&

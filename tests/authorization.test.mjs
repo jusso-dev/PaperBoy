@@ -31,6 +31,8 @@ const matrix = {
     "messages.send",
     "openTracking.manage",
     "openTracking.read",
+    "outboundProviders.manage",
+    "outboundProviders.read",
     "rateLimits.manage",
     "rateLimits.read",
     "suppressions.manage",
@@ -49,6 +51,7 @@ const matrix = {
     "members.read",
     "messages.read",
     "openTracking.read",
+    "outboundProviders.read",
     "rateLimits.read",
     "suppressions.read",
     "templates.read",
@@ -84,6 +87,8 @@ test("members cannot mint API keys or delete domains", () => {
   assert.equal(can("member", "rateLimits.manage"), false);
   assert.equal(can("member", "openTracking.read"), true);
   assert.equal(can("member", "openTracking.manage"), false);
+  assert.equal(can("member", "outboundProviders.read"), true);
+  assert.equal(can("member", "outboundProviders.manage"), false);
   assert.throws(
     () => requirePermission("member", "apiKeys.create"),
     AuthorizationError,

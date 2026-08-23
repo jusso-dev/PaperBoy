@@ -112,6 +112,7 @@ test(
 
       assert.equal(queued.deliveryMode, "live");
       assert.equal(queued.environment, "live");
+      assert.equal(queued.provider, "smtp");
       assert.equal(queued.status, "queued");
       const [stored] = await db
         .select({
@@ -120,6 +121,7 @@ test(
           environment: messages.environment,
           from: messages.from,
           html: messages.html,
+          provider: messages.outboundProvider,
           subject: messages.subject,
           text: messages.textBody,
           to: messages.to,
@@ -132,6 +134,7 @@ test(
         environment: "live",
         from: `PaperBoy <test@${domainName}>`,
         html: "<p>Console Mailpit proof.</p>",
+        provider: "smtp",
         subject,
         text: "Console Mailpit proof.",
         to: [recipient],
@@ -192,6 +195,8 @@ test(
                 from: stored.from,
                 html: stored.html,
                 id: queued.id,
+                orgId,
+                provider: stored.provider,
                 subject: stored.subject,
                 text: stored.text,
                 to: stored.to,

@@ -53,6 +53,7 @@ test("TypeScript SDK sends one email and gets it from a test HTTP server", async
           next_attempt_at: "2026-08-24T00:00:00.000Z",
           object: "email",
           open_tracking_enabled: false,
+          provider: "test-sink",
           sent_at: null,
           status: "queued",
           subject: "SDK proof",

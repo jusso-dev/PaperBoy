@@ -1,9 +1,15 @@
 import {
   DeliveryProviderError,
   type DeliveryAttachment,
-  type DeliveryMessage,
 } from "@/lib/email-delivery";
 import type { MessageDeliveryMode } from "@/lib/email-core";
+import {
+  defineOutboundProviderAdapter,
+  type OutboundDeliveryMessage,
+  type OutboundProvider,
+  type OutboundProviderAdapter,
+  type OutboundSendResult,
+} from "@/lib/outbound-provider-core";
 
 export const DELIVERY_LEASE_MS = 5 * 60 * 1000;
 export const MAX_DELIVERY_ATTEMPTS = 5;
@@ -14,20 +20,15 @@ export const RETRY_DELAYS_MS = [
   2 * 60 * 60 * 1000,
 ] as const;
 
-export type WorkerClaim = DeliveryMessage & {
-  attemptCount: number;
-  deliveryMode: MessageDeliveryMode;
-  environment: "live" | "test";
-  id: string;
-};
+export type WorkerClaim = Omit<OutboundDeliveryMessage, "attachments">;
 
-export type WorkerDeliveryMessage = WorkerClaim & {
-  attachments: DeliveryAttachment[];
-};
+export type WorkerDeliveryMessage = OutboundDeliveryMessage;
 
 export type OutboundAdapter = {
   name: string;
-  send: (message: WorkerDeliveryMessage) => Promise<void>;
+  send: (
+    message: WorkerDeliveryMessage,
+  ) => Promise<OutboundSendResult | void>;
 };
 
 export type WorkerStore = {
@@ -59,6 +60,7 @@ export type WorkerStore = {
     attemptCount: number;
     messageId: string;
     now: Date;
+    providerMessageId: string | null;
     workerId: string;
   }) => Promise<boolean>;
 };
@@ -152,39 +154,51 @@ export function nextRetryAt(attemptCount: number, now: Date): Date {
   return new Date(now.getTime() + RETRY_DELAYS_MS[index]);
 }
 
-export const testSinkAdapter: OutboundAdapter = {
-  name: "test-sink",
-  async send(message) {
-    if (message.deliveryMode !== "test-sink") {
-      throw new OutboundDeliveryError({
-        code: "adapter_unavailable",
-        reason: "No live outbound adapter is configured.",
-        retryable: false,
-      });
-    }
-  },
-};
+export const testSinkAdapter: OutboundProviderAdapter =
+  defineOutboundProviderAdapter({
+    capabilities: { batch: false, events: false, scheduling: false },
+    provider: "test-sink",
+    async mapEvent() {
+      return [];
+    },
+    async send(message) {
+      if (
+        message.deliveryMode !== "test-sink" ||
+        message.provider !== "test-sink"
+      ) {
+        throw new OutboundDeliveryError({
+          code: "adapter_unavailable",
+          reason: "No live outbound adapter is configured.",
+          retryable: false,
+        });
+      }
+      return { providerMessageId: null };
+    },
+    async testConnection() {},
+  });
 
-export function routeOutboundAdapters(
-  adapters: Readonly<Partial<Record<MessageDeliveryMode, OutboundAdapter>>>,
+export function routeOutboundProviders(
+  adapters: Readonly<Partial<Record<OutboundProvider, OutboundAdapter>>>,
 ): OutboundAdapter {
   return {
-    name: "delivery-mode-router",
+    name: "outbound-provider-router",
     async send(message) {
-      const adapter = adapters[message.deliveryMode];
+      const adapter = adapters[message.provider];
 
       if (!adapter) {
         throw new OutboundDeliveryError({
           code: "adapter_unavailable",
-          reason: "No outbound adapter is configured for this delivery mode.",
+          reason: "No outbound adapter is configured for the selected provider.",
           retryable: false,
         });
       }
 
-      await adapter.send(message);
+      return adapter.send(message);
     },
   };
 }
+
+export const routeOutboundAdapters = routeOutboundProviders;
 
 export async function processNextMessage(input: {
   adapter: OutboundAdapter;
@@ -208,11 +222,12 @@ export async function processNextMessage(input: {
 
   try {
     const attachments = await input.store.loadAttachments(claim.id);
-    await input.adapter.send({ ...claim, attachments });
+    const delivery = await input.adapter.send({ ...claim, attachments });
     const updated = await input.store.markSent({
       attemptCount: claim.attemptCount,
       messageId: claim.id,
       now: now(),
+      providerMessageId: delivery?.providerMessageId ?? null,
       workerId: input.workerId,
     });
     return {
