@@ -3,13 +3,23 @@ import * as z from "zod/v4";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import type { OrganizationRecord } from "@/lib/organization-reader";
 import { protocolTimestamp } from "@/lib/time";
+import {
+  PAPERBOY_MCP_SCHEMA_VERSION,
+  PAPERBOY_MCP_VERSION,
+} from "@/mcp/contract";
+import {
+  PAPERBOY_DOMAIN_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_DOMAIN_MCP_TOOL_NAMES,
+  registerPaperBoyDomainTools,
+  type PaperBoyMcpDomainServices,
+} from "@/mcp/domain-tools";
 
-export const PAPERBOY_MCP_VERSION = "0.1.0";
-export const PAPERBOY_MCP_SCHEMA_VERSION = "1";
+export { PAPERBOY_MCP_SCHEMA_VERSION, PAPERBOY_MCP_VERSION };
 
 export const PAPERBOY_MCP_TOOL_NAMES = [
   "paperboy_list_capabilities",
   "paperboy_get_account_context",
+  ...PAPERBOY_DOMAIN_MCP_TOOL_NAMES,
 ] as const;
 
 export const PAPERBOY_MCP_RESOURCE_URIS = [
@@ -19,6 +29,7 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
 
 type PaperBoyMcpDependencies = {
   authorize: () => Promise<ApiKeyPrincipal | null>;
+  domains: PaperBoyMcpDomainServices;
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
   now?: () => Date;
 };
@@ -81,6 +92,7 @@ const toolDefinitions = [
     name: PAPERBOY_MCP_TOOL_NAMES[1],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
   },
+  ...PAPERBOY_DOMAIN_MCP_TOOL_DEFINITIONS,
 ] as const;
 
 const resourceDefinitions = [
@@ -100,6 +112,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\` and \`PAPERBOY_API_KEY\` in the process environment.
 - Never put an API key in a tool argument, URL, command-line argument, source file, or diagnostic log.
 - A key is bound to one organization and one environment (\`live\` or \`test\`).
+- Domain mutations re-check the key creator's current organization role.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
 - Revocation denies the next authenticated HTTP request or stdio tool call. Reconnect with a newly issued key.
 `;
@@ -254,6 +267,13 @@ export function createPaperBoyMcpServer(
       },
     );
   }
+
+  registerPaperBoyDomainTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.domains,
+  });
 
   return server;
 }

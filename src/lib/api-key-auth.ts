@@ -9,6 +9,7 @@ import {
 } from "@/lib/api-key-crypto";
 
 export type ApiKeyPrincipal = {
+  actorUserId: string | null;
   apiKeyId: string;
   environment: ApiKeyEnvironment;
   orgId: string;
@@ -25,6 +26,7 @@ export async function authenticateApiKey(
 
   const [candidate] = await db
     .select({
+      actorUserId: apiKeys.createdByUserId,
       environment: apiKeys.environment,
       id: apiKeys.id,
       keyHash: apiKeys.keyHash,
@@ -62,6 +64,7 @@ export async function authenticateApiKey(
   }
 
   return {
+    actorUserId: candidate.actorUserId,
     apiKeyId: candidate.id,
     environment: candidate.environment,
     orgId: candidate.orgId,

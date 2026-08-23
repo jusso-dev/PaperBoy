@@ -16,10 +16,12 @@ const matrix = {
     "apiKeys.revoke",
     "domains.create",
     "domains.delete",
+    "domains.read",
+    "domains.verify",
     "members.invite",
     "members.read",
   ]),
-  member: new Set(["members.read"]),
+  member: new Set(["domains.read", "members.read"]),
 };
 
 for (const [role, allowed] of Object.entries(matrix)) {

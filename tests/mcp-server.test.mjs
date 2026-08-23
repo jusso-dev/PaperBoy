@@ -19,10 +19,38 @@ const secondOrganization = {
   name: "Second newsroom",
 };
 const firstPrincipal = {
+  actorUserId: "user-one",
   apiKeyId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   environment: "live",
   orgId: firstOrganization.id,
 };
+const firstDomain = {
+  createdAt: fixedNow,
+  dnsChecks: {
+    dkim: "pending",
+    dmarc: "unchecked",
+    ownership: "unchecked",
+    spf: "unchecked",
+  },
+  id: "33333333-3333-4333-8333-333333333333",
+  lastCheckedAt: null,
+  name: "mail.example.com",
+  status: "pending",
+  updatedAt: fixedNow,
+  verificationToken: "44444444-4444-4444-8444-444444444444",
+  verifiedAt: null,
+};
+
+function domainServices(overrides = {}) {
+  return {
+    create: async () => firstDomain,
+    delete: async () => undefined,
+    list: async () => [firstDomain],
+    records: () => [],
+    verify: async () => firstDomain,
+    ...overrides,
+  };
+}
 
 async function withClient(dependencies, run) {
   const server = createPaperBoyMcpServer({
@@ -48,6 +76,7 @@ async function withClient(dependencies, run) {
 function dependencies(overrides = {}) {
   return {
     authorize: async () => firstPrincipal,
+    domains: domainServices(),
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
     ...overrides,
@@ -58,6 +87,19 @@ test("initializes and publishes versioned tool schemas", async () => {
   await withClient(dependencies(), async (client) => {
     const { tools } = await client.listTools();
     const outputSchemaSnapshots = {
+      paperboy_create_domain: [
+        "domain",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
+      paperboy_delete_domain: [
+        "deleted",
+        "domainId",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
       paperboy_get_account_context: [
         "credential",
         "observedAt",
@@ -73,6 +115,34 @@ test("initializes and publishes versioned tool schemas", async () => {
         "tools",
         "transports",
       ],
+      paperboy_list_domains: [
+        "domains",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
+      paperboy_verify_domain: [
+        "domain",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
+    };
+    const inputSchemaSnapshots = {
+      paperboy_create_domain: ["name"],
+      paperboy_delete_domain: ["confirm", "domainId"],
+      paperboy_get_account_context: [],
+      paperboy_list_capabilities: [],
+      paperboy_list_domains: [],
+      paperboy_verify_domain: ["domainId"],
+    };
+    const annotationSnapshots = {
+      paperboy_create_domain: { destructive: false, readOnly: false },
+      paperboy_delete_domain: { destructive: true, readOnly: false },
+      paperboy_get_account_context: { destructive: false, readOnly: true },
+      paperboy_list_capabilities: { destructive: false, readOnly: true },
+      paperboy_list_domains: { destructive: false, readOnly: true },
+      paperboy_verify_domain: { destructive: false, readOnly: false },
     };
 
     assert.deepEqual(
@@ -81,18 +151,32 @@ test("initializes and publishes versioned tool schemas", async () => {
     );
 
     for (const tool of tools) {
-      assert.deepEqual(tool.inputSchema, {
-        $schema: "https://json-schema.org/draft/2020-12/schema",
-        additionalProperties: false,
-        properties: {},
-        type: "object",
-      });
+      assert.equal(
+        tool.inputSchema.$schema,
+        "https://json-schema.org/draft/2020-12/schema",
+      );
+      assert.equal(tool.inputSchema.additionalProperties, false);
+      assert.equal(tool.inputSchema.type, "object");
+      assert.deepEqual(
+        Object.keys(tool.inputSchema.properties),
+        inputSchemaSnapshots[tool.name],
+      );
+      assert.deepEqual(
+        tool.inputSchema.required ?? [],
+        inputSchemaSnapshots[tool.name],
+      );
       assert.equal(
         tool._meta?.["paperboy/schemaVersion"],
         PAPERBOY_MCP_SCHEMA_VERSION,
       );
-      assert.equal(tool.annotations?.readOnlyHint, true);
-      assert.equal(tool.annotations?.destructiveHint, false);
+      assert.equal(
+        tool.annotations?.readOnlyHint,
+        annotationSnapshots[tool.name].readOnly,
+      );
+      assert.equal(
+        tool.annotations?.destructiveHint,
+        annotationSnapshots[tool.name].destructive,
+      );
       assert.equal(tool.outputSchema?.type, "object");
       assert.deepEqual(
         Object.keys(tool.outputSchema.properties),
@@ -187,6 +271,35 @@ test("a revoked stdio principal cannot call tenant tools", async () => {
       assert.equal(result.isError, true);
       assert.match(result.content[0].text, /Authorization failed/);
       assert.equal(JSON.stringify(result).includes(firstOrganization.id), false);
+    },
+  );
+});
+
+test("domain tools pass the authenticated tenant and actor to shared services", async () => {
+  let received = null;
+
+  await withClient(
+    dependencies({
+      domains: domainServices({
+        create: async (principal, name) => {
+          received = { name, principal };
+          return firstDomain;
+        },
+      }),
+    }),
+    async (client) => {
+      const result = await client.callTool({
+        arguments: { name: "mail.example.com" },
+        name: "paperboy_create_domain",
+      });
+
+      assert.equal(result.isError, undefined);
+      assert.equal(result.structuredContent.domain.name, firstDomain.name);
+      assert.equal(result.structuredContent.protocolTimeZone, "UTC");
+      assert.deepEqual(received, {
+        name: "mail.example.com",
+        principal: firstPrincipal,
+      });
     },
   );
 });

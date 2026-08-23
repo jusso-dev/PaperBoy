@@ -8,6 +8,8 @@ export const ORG_PERMISSIONS = [
   "apiKeys.revoke",
   "domains.create",
   "domains.delete",
+  "domains.read",
+  "domains.verify",
   "members.invite",
   "members.remove",
   "members.read",
@@ -23,10 +25,12 @@ const rolePermissions: Record<OrgRole, ReadonlySet<OrgPermission>> = {
     "apiKeys.revoke",
     "domains.create",
     "domains.delete",
+    "domains.read",
+    "domains.verify",
     "members.invite",
     "members.read",
   ]),
-  member: new Set(["members.read"]),
+  member: new Set(["domains.read", "members.read"]),
 };
 
 export class AuthorizationError extends Error {

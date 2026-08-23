@@ -13,9 +13,14 @@ async function main() {
     return;
   }
 
-  const [{ authenticateApiKey }, { findOrganizationById }] = await Promise.all([
+  const [
+    { authenticateApiKey },
+    { findOrganizationById },
+    { paperBoyMcpDomainServices },
+  ] = await Promise.all([
     import("@/lib/api-key-auth"),
     import("@/lib/organization-reader"),
+    import("@/mcp/domain-services"),
   ]);
   const principal = await authenticateApiKey(rawApiKey);
 
@@ -29,6 +34,7 @@ async function main() {
     () =>
       createPaperBoyMcpServer({
         authorize: () => authenticateApiKey(rawApiKey),
+        domains: paperBoyMcpDomainServices,
         findOrganization: findOrganizationById,
       }),
     {

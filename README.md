@@ -35,6 +35,14 @@ The matching SQL in `drizzle/down/` exists only to prove rollback on a throwaway
 
 The console mints `pb_live_` and `pb_test_` bearer keys. A key contains a public identifier and a 256-bit secret; PostgreSQL stores the identifier and SHA-256 hash, never the raw key. The raw value is shown once. Revocation is enforced by the shared HTTP/MCP authentication boundary on the next request.
 
+## Sending domains
+
+Add a domain in the console or through MCP to get exact ownership and SPF TXT records, plus starter DMARC guidance. PaperBoy checks DNS from the application host. Ownership and SPF must both match before the domain becomes verified; a later failed check returns it to pending so live delivery cannot continue on stale state.
+
+The default SPF value is `v=spf1 mx ~all`. Operators whose outbound host is not authorized by the domain's MX records must set `PAPERBOY_SPF_RECORD` to their exact policy before adding or checking domains. Publish only one SPF record. DKIM shows a reserved selector but no fake key: #9 generates the publishable public key and makes it part of verification.
+
+Shared delivery policy blocks live keys unless the normalized From domain is verified in that key's organization. Test keys always resolve to the isolated test sink and never bypass into live delivery.
+
 ## MCP server
 
 PaperBoy exposes the same organization-safe application services to agents through two MCP transports:
@@ -61,7 +69,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 
 Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
 
-The first contract exposes `paperboy_list_capabilities`, `paperboy_get_account_context`, and authenticated configuration/operator-safety resources. Every tool schema carries `paperboy/schemaVersion`. The account context comes from the key; callers cannot select another organization. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly.
+The contract exposes capability/account context plus first-class domain list/create/verify/delete tools and authenticated configuration/operator-safety resources. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Domain mutations re-read the key creator's current membership and role, and deletion requires an explicit confirmation argument. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly.
 
 HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
 

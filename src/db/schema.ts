@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { DomainDnsCheckSnapshot } from "@/lib/domain-core";
 
 export const orgs = pgTable("orgs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -247,17 +248,30 @@ export const domains = pgTable(
       .references(() => orgs.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     status: text("status").default("pending").notNull(),
+    verificationToken: uuid("verification_token")
+      .defaultRandom()
+      .notNull(),
+    dnsChecks: jsonb("dns_checks").$type<DomainDnsCheckSnapshot>(),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
+      .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [
     uniqueIndex("domains_org_id_name_unique").on(table.orgId, table.name),
+    uniqueIndex("domains_verification_token_unique").on(
+      table.verificationToken,
+    ),
     index("domains_name_idx").on(table.name),
+    check(
+      "domains_status_check",
+      sql`${table.status} in ('pending', 'verified')`,
+    ),
   ],
 );
 

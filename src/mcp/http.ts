@@ -8,6 +8,7 @@ import {
 import { isApiKeyEnvironment } from "@/lib/api-key-crypto";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import { findOrganizationById } from "@/lib/organization-reader";
+import { paperBoyMcpDomainServices } from "@/mcp/domain-services";
 import { createPaperBoyMcpServer } from "@/mcp/server";
 
 const principalKey = "paperboyPrincipal";
@@ -24,6 +25,8 @@ function principalFromRequestContext(
   const principal = value as Partial<ApiKeyPrincipal>;
 
   if (
+    (principal.actorUserId !== null &&
+      typeof principal.actorUserId !== "string") ||
     typeof principal.apiKeyId !== "string" ||
     typeof principal.orgId !== "string" ||
     !isApiKeyEnvironment(principal.environment)
@@ -32,6 +35,7 @@ function principalFromRequestContext(
   }
 
   return {
+    actorUserId: principal.actorUserId,
     apiKeyId: principal.apiKeyId,
     environment: principal.environment,
     orgId: principal.orgId,
@@ -51,6 +55,7 @@ export const paperBoyMcpHttpHandler = createMcpHandler(
   (context) =>
     createPaperBoyMcpServer({
       authorize: async () => principalFromRequestContext(context),
+      domains: paperBoyMcpDomainServices,
       findOrganization: findOrganizationById,
     }),
   {

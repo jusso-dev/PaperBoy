@@ -492,6 +492,135 @@ select:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* ---- Sending domains ------------------------------------------------- */
+
+.domain-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  margin-top: 18px;
+}
+
+.domain-form .field {
+  margin-bottom: 0;
+}
+
+.domain-list {
+  display: grid;
+  gap: 20px;
+}
+
+.domain-card {
+  margin-bottom: 0;
+}
+
+.domain-heading,
+.domain-actions {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.domain-name {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.domain-meta,
+.dns-description,
+.dns-requirement,
+.dns-pending-value {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.domain-explainer {
+  background: var(--paper-deep);
+  border-left: 4px solid var(--accent);
+  margin: 16px 0;
+  padding: 12px 14px;
+}
+
+.domain-explainer p + p {
+  margin-top: 6px;
+}
+
+.dns-record-table {
+  min-width: 860px;
+}
+
+.dns-record-table th:nth-child(1) {
+  width: 24%;
+}
+
+.dns-record-table th:nth-child(2) {
+  width: 7%;
+}
+
+.dns-record-table th:nth-child(5) {
+  width: 13%;
+}
+
+.dns-record-table code {
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.dns-requirement {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dns-check {
+  border-bottom: 2px solid var(--rule-heavy);
+  display: inline-block;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dns-check-matched {
+  border-color: #557a5f;
+}
+
+.dns-check-error,
+.dns-check-missing {
+  border-color: #a14b3d;
+}
+
+.domain-actions {
+  align-items: flex-start;
+  border-top: 1px solid var(--rule);
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.domain-delete {
+  max-width: 360px;
+  text-align: right;
+}
+
+.domain-delete summary {
+  cursor: pointer;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.domain-delete p {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.btn-danger {
+  border-color: #84382f;
+  color: #84382f;
+}
+
 /* ---- Tables ------------------------------------------------------------ */
 
 .table {
@@ -610,6 +739,21 @@ select:focus-visible {
 
   .api-key-form {
     grid-template-columns: 1fr;
+  }
+
+  .domain-form {
+    grid-template-columns: 1fr;
+  }
+
+  .domain-heading,
+  .domain-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .domain-delete {
+    max-width: none;
+    text-align: left;
   }
 
   .organization-switcher {
