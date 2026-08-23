@@ -217,3 +217,26 @@ test("an unknown organization template returns 404", async () => {
   assert.equal(response.status, 404);
   assert.equal(body.error.code, "template_not_found");
 });
+
+test("missing required template variables return field-level 422 details", async () => {
+  const { dependencies } = testDependencies();
+  dependencies.queue = async () => {
+    throw new TemplateError("MISSING_REQUIRED_VARIABLES", [
+      {
+        field: "data.reader.name",
+        message: "This required template variable is missing.",
+      },
+    ]);
+  };
+  const response = await handleSendEmailRequest(request(validBody), dependencies);
+  const body = await response.json();
+
+  assert.equal(response.status, 422);
+  assert.equal(body.error.code, "missing_template_variables");
+  assert.deepEqual(body.error.fields, [
+    {
+      field: "data.reader.name",
+      message: "This required template variable is missing.",
+    },
+  ]);
+});

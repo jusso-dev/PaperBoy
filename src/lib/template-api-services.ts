@@ -8,6 +8,7 @@ import {
   deleteTemplate,
   getTemplate,
   listTemplates,
+  previewStoredTemplate,
   updateTemplate,
 } from "@/lib/templates";
 
@@ -42,6 +43,13 @@ export const templateApiServices: TemplateHttpServices = {
     listTemplates({
       actorUserId: actorUserId(principal),
       orgId: principal.orgId,
+    }),
+  preview: (principal, templateId, data) =>
+    previewStoredTemplate({
+      actorUserId: actorUserId(principal),
+      data,
+      orgId: principal.orgId,
+      templateId,
     }),
   update: (principal, templateId, payload) =>
     updateTemplate({

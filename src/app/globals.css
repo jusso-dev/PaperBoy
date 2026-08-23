@@ -661,11 +661,18 @@ select:focus-visible {
   padding: 0;
 }
 
-.template-heading > code {
+.template-heading-actions > code {
   color: var(--ink-soft);
+  display: block;
   font-size: 12px;
   overflow-wrap: anywhere;
   text-align: right;
+}
+
+.template-heading-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
 }
 
 .template-meta {
@@ -691,6 +698,52 @@ select:focus-visible {
   overflow-x: auto;
   padding: 10px;
   white-space: pre-wrap;
+}
+
+.template-readonly ul,
+.template-preview-output ul {
+  margin-left: 20px;
+}
+
+.template-preview-title {
+  margin-top: 18px;
+}
+
+.template-preview-form textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.template-preview-output {
+  margin-top: 20px;
+}
+
+.template-preview-output h3 {
+  font-size: 15px;
+  margin: 18px 0 6px;
+}
+
+.template-preview-output pre {
+  background: var(--paper-deep);
+  border: 1px solid var(--rule);
+  overflow-x: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
+.template-preview-output iframe {
+  background: #fff;
+  border: 1px solid var(--rule-heavy);
+  min-height: 280px;
+  width: 100%;
+}
+
+.template-preview-output details {
+  margin-top: 10px;
+}
+
+.template-preview-output summary {
+  cursor: pointer;
+  font-size: 13px;
 }
 
 .template-delete {
@@ -853,8 +906,12 @@ select:focus-visible {
     flex-direction: column;
   }
 
-  .template-heading > code {
+  .template-heading-actions > code {
     text-align: left;
+  }
+
+  .template-heading-actions {
+    justify-items: start;
   }
 
   .domain-delete {

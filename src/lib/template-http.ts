@@ -2,6 +2,7 @@ import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import { AuthorizationError } from "@/lib/authorization";
 import {
   TemplateError,
+  type TemplatePreview,
   type TemplateRecord,
 } from "@/lib/template-core";
 
@@ -19,6 +20,11 @@ export type TemplateHttpServices = {
     templateId: string,
   ) => Promise<TemplateRecord>;
   list: (principal: ApiKeyPrincipal) => Promise<TemplateRecord[]>;
+  preview: (
+    principal: ApiKeyPrincipal,
+    templateId: string,
+    data: unknown,
+  ) => Promise<TemplatePreview>;
   update: (
     principal: ApiKeyPrincipal,
     templateId: string,
@@ -134,10 +140,34 @@ function serialize(template: TemplateRecord) {
     html: template.html,
     id: template.id,
     name: template.name,
+    required_variables: template.requiredVariables,
     subject: template.subject,
     text: template.text,
     updated_at: template.updatedAt.toISOString(),
   };
+}
+
+function previewData(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new TemplateError("VALIDATION_ERROR", [
+      { field: "body", message: "Must be a JSON object." },
+    ]);
+  }
+
+  const input = payload as Record<string, unknown>;
+  const unsupported = Object.keys(input).filter((field) => field !== "data");
+
+  if (unsupported.length > 0) {
+    throw new TemplateError(
+      "VALIDATION_ERROR",
+      unsupported.map((field) => ({
+        field,
+        message: "This field is not supported.",
+      })),
+    );
+  }
+
+  return Object.hasOwn(input, "data") ? input.data : {};
 }
 
 async function requestBody(request: Request): Promise<unknown> {
@@ -268,6 +298,46 @@ export async function handleDeleteTemplateRequest(
   try {
     await dependencies.services.delete(principal, templateId);
     return json({ deleted: true, id: templateId }, 200);
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function handlePreviewTemplateRequest(
+  request: Request,
+  templateId: string,
+  dependencies: TemplateHttpDependencies,
+): Promise<Response> {
+  const principal = await dependencies.authenticate(request);
+
+  if (!principal) {
+    return unauthorized();
+  }
+
+  let payload: unknown;
+
+  try {
+    payload = await requestBody(request);
+  } catch {
+    return invalidJson();
+  }
+
+  try {
+    const preview = await dependencies.services.preview(
+      principal,
+      templateId,
+      previewData(payload),
+    );
+    return json(
+      {
+        html: preview.html,
+        missing_variables: preview.missingVariables,
+        subject: preview.subject,
+        template_id: templateId,
+        text: preview.text,
+      },
+      200,
+    );
   } catch (error) {
     return failure(error);
   }

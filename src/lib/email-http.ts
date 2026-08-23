@@ -39,6 +39,19 @@ export function describeEmailFailure(error: unknown) {
       };
     }
 
+    if (error.code === "MISSING_REQUIRED_VARIABLES") {
+      return {
+        body: {
+          error: {
+            code: "missing_template_variables",
+            fields: error.issues,
+            message: "Provide every required template variable and try again.",
+          },
+        },
+        status: 422,
+      };
+    }
+
     return {
       body: {
         error: {

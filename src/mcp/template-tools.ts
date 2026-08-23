@@ -7,6 +7,7 @@ import {
   MAX_TEMPLATE_NAME_LENGTH,
   MAX_TEMPLATE_SUBJECT_LENGTH,
   TemplateError,
+  type TemplatePreview,
   type TemplateRecord,
 } from "@/lib/template-core";
 import { protocolTimestamp } from "@/lib/time";
@@ -18,6 +19,7 @@ export const PAPERBOY_TEMPLATE_MCP_TOOL_NAMES = [
   "paperboy_create_template",
   "paperboy_update_template",
   "paperboy_delete_template",
+  "paperboy_preview_template",
 ] as const;
 
 export const PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS = [
@@ -56,6 +58,13 @@ export const PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS = [
     name: PAPERBOY_TEMPLATE_MCP_TOOL_NAMES[4],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
   },
+  {
+    description:
+      "Render a template with sample JSON and report missing required variables without sending mail.",
+    mutating: false,
+    name: PAPERBOY_TEMPLATE_MCP_TOOL_NAMES[5],
+    schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+  },
 ] as const;
 
 export type PaperBoyMcpTemplateServices = {
@@ -72,6 +81,11 @@ export type PaperBoyMcpTemplateServices = {
     templateId: string,
   ) => Promise<TemplateRecord>;
   list: (principal: ApiKeyPrincipal) => Promise<TemplateRecord[]>;
+  preview: (
+    principal: ApiKeyPrincipal,
+    templateId: string,
+    data: unknown,
+  ) => Promise<TemplatePreview>;
   update: (
     principal: ApiKeyPrincipal,
     templateId: string,
@@ -82,6 +96,7 @@ export type PaperBoyMcpTemplateServices = {
 const templateFields = {
   html: z.string().max(MAX_TEMPLATE_BODY_LENGTH).nullable().optional(),
   name: z.string().min(1).max(MAX_TEMPLATE_NAME_LENGTH),
+  requiredVariables: z.array(z.string().min(1).max(256)).max(100).optional(),
   subject: z.string().min(1).max(MAX_TEMPLATE_SUBJECT_LENGTH),
   text: z.string().max(MAX_TEMPLATE_BODY_LENGTH).nullable().optional(),
 };
@@ -98,6 +113,7 @@ const updateTemplateInputSchema = z
   .object({
     html: templateFields.html,
     name: templateFields.name.optional(),
+    requiredVariables: templateFields.requiredVariables,
     subject: templateFields.subject.optional(),
     templateId: z.string().uuid(),
     text: templateFields.text,
@@ -107,6 +123,7 @@ const updateTemplateInputSchema = z
     (value) =>
       value.html !== undefined ||
       value.name !== undefined ||
+      value.requiredVariables !== undefined ||
       value.subject !== undefined ||
       value.text !== undefined,
     {
@@ -126,11 +143,19 @@ const deleteTemplateInputSchema = z
   })
   .strict();
 
+const previewTemplateInputSchema = z
+  .object({
+    data: z.record(z.string(), z.unknown()),
+    templateId: z.string().uuid(),
+  })
+  .strict();
+
 const templateOutputSchema = z.object({
   createdAt: z.iso.datetime({ offset: true }),
   html: z.string().nullable(),
   id: z.string().uuid(),
   name: z.string(),
+  requiredVariables: z.array(z.string()),
   subject: z.string(),
   text: z.string().nullable(),
   updatedAt: z.iso.datetime({ offset: true }),
@@ -164,12 +189,24 @@ const deleteTemplateOutputSchema = z.object({
   templateId: z.string().uuid(),
 });
 
+const previewTemplateOutputSchema = z.object({
+  html: z.string().nullable(),
+  missingVariables: z.array(z.string()),
+  observedAt: responseMetadata.observedAt,
+  protocolTimeZone: responseMetadata.protocolTimeZone,
+  schemaVersion: responseMetadata.schemaVersion,
+  subject: z.string(),
+  templateId: z.string().uuid(),
+  text: z.string().nullable(),
+});
+
 function serializeTemplate(template: TemplateRecord) {
   return {
     createdAt: protocolTimestamp(template.createdAt),
     html: template.html,
     id: template.id,
     name: template.name,
+    requiredVariables: template.requiredVariables,
     subject: template.subject,
     text: template.text,
     updatedAt: protocolTimestamp(template.updatedAt),
@@ -409,6 +446,48 @@ export function registerPaperBoyTemplateTools(input: {
           deleted: true,
           ...metadata(),
           templateId,
+        });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  input.server.registerTool(
+    PAPERBOY_TEMPLATE_MCP_TOOL_NAMES[5],
+    {
+      annotations: {
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+        readOnlyHint: true,
+      },
+      description: PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS[5].description,
+      inputSchema: previewTemplateInputSchema,
+      outputSchema: previewTemplateOutputSchema,
+      title: "Preview a PaperBoy template",
+      _meta: { "paperboy/schemaVersion": PAPERBOY_MCP_SCHEMA_VERSION },
+    },
+    async ({ data, templateId }) => {
+      const principal = await input.authorize();
+
+      if (!principal) {
+        return unauthorizedResult();
+      }
+
+      try {
+        const preview = await input.services.preview(
+          principal,
+          templateId,
+          data,
+        );
+        return successResult({
+          html: preview.html,
+          missingVariables: preview.missingVariables,
+          ...metadata(),
+          subject: preview.subject,
+          templateId,
+          text: preview.text,
         });
       } catch (error) {
         return errorResult(error);

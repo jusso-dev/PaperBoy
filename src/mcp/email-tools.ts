@@ -240,17 +240,24 @@ function errorDetails(error: unknown) {
             message: "Correct the invalid email fields and try again.",
         };
   } else if (error instanceof TemplateError) {
-    details =
-      error.code === "TEMPLATE_NOT_FOUND"
-        ? {
-            code: "template_not_found",
-            message: "No template with that ID exists in this organization.",
-          }
-        : {
-            code: "validation_error",
-            fields: error.issues,
-            message: "Correct the invalid template fields and try again.",
-          };
+    if (error.code === "TEMPLATE_NOT_FOUND") {
+      details = {
+        code: "template_not_found",
+        message: "No template with that ID exists in this organization.",
+      };
+    } else if (error.code === "MISSING_REQUIRED_VARIABLES") {
+      details = {
+        code: "missing_template_variables",
+        fields: error.issues,
+        message: "Provide every required template variable and try again.",
+      };
+    } else {
+      details = {
+        code: "validation_error",
+        fields: error.issues,
+        message: "Correct the invalid template fields and try again.",
+      };
+    }
   } else if (error instanceof DomainError) {
     details = {
       code:

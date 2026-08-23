@@ -6,6 +6,7 @@ import {
   DNS_OPERATOR_GUIDE,
 } from "../src/lib/dns-operator-guide.ts";
 import { EmailError } from "../src/lib/email-core.ts";
+import { TemplateError } from "../src/lib/template-core.ts";
 import {
   PAPERBOY_MCP_RESOURCE_URIS,
   PAPERBOY_MCP_SCHEMA_VERSION,
@@ -72,6 +73,7 @@ const firstTemplate = {
   html: "<p>Hello {{reader.name}}</p>",
   id: "88888888-8888-4888-8888-888888888888",
   name: "Welcome reader",
+  requiredVariables: ["reader.name"],
   subject: "Welcome, {{reader.name}}",
   text: "Hello {{reader.name}}",
   updatedAt: fixedNow,
@@ -105,6 +107,12 @@ function templateServices(overrides = {}) {
     delete: async () => undefined,
     get: async () => firstTemplate,
     list: async () => [firstTemplate],
+    preview: async () => ({
+      html: "<p>Hello </p>",
+      missingVariables: ["reader.name"],
+      subject: "Welcome, ",
+      text: "Hello ",
+    }),
     update: async () => firstTemplate,
     ...overrides,
   };
@@ -212,6 +220,16 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "templates",
       ],
+      paperboy_preview_template: [
+        "html",
+        "missingVariables",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "subject",
+        "templateId",
+        "text",
+      ],
       paperboy_send_email: [
         "deliveryMode",
         "environment",
@@ -254,7 +272,13 @@ test("initializes and publishes versioned tool schemas", async () => {
     };
     const inputSchemaSnapshots = {
       paperboy_create_domain: ["name"],
-      paperboy_create_template: ["html", "name", "subject", "text"],
+      paperboy_create_template: [
+        "html",
+        "name",
+        "requiredVariables",
+        "subject",
+        "text",
+      ],
       paperboy_delete_domain: ["confirm", "domainId"],
       paperboy_delete_template: ["confirm", "templateId"],
       paperboy_finalize_domain_dkim_rotation: ["confirm", "domainId"],
@@ -263,6 +287,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_capabilities: [],
       paperboy_list_domains: [],
       paperboy_list_templates: [],
+      paperboy_preview_template: ["data", "templateId"],
       paperboy_rotate_domain_dkim: ["domainId"],
       paperboy_send_email: [
         "attachments",
@@ -281,6 +306,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_template: [
         "html",
         "name",
+        "requiredVariables",
         "subject",
         "templateId",
         "text",
@@ -306,6 +332,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_capabilities: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
       paperboy_list_templates: { destructive: false, readOnly: true },
+      paperboy_preview_template: { destructive: false, readOnly: true },
       paperboy_rotate_domain_dkim: { destructive: false, readOnly: false },
       paperboy_send_email: { destructive: false, readOnly: false },
       paperboy_send_email_batch: { destructive: false, readOnly: false },
@@ -508,6 +535,15 @@ test("template CRUD is tenant-bound and reports UTC protocol timestamps", async 
           calls.push(["list", principal]);
           return [firstTemplate];
         },
+        preview: async (principal, templateId, data) => {
+          calls.push(["preview", principal, templateId, data]);
+          return {
+            html: "<p>Hello </p>",
+            missingVariables: ["reader.name"],
+            subject: "Welcome, ",
+            text: "Hello ",
+          };
+        },
       }),
     }),
     async (client) => {
@@ -523,6 +559,13 @@ test("template CRUD is tenant-bound and reports UTC protocol timestamps", async 
         },
         name: "paperboy_create_template",
       });
+      const previewed = await client.callTool({
+        arguments: {
+          data: {},
+          templateId: firstTemplate.id,
+        },
+        name: "paperboy_preview_template",
+      });
       const deleted = await client.callTool({
         arguments: { confirm: true, templateId: firstTemplate.id },
         name: "paperboy_delete_template",
@@ -535,6 +578,16 @@ test("template CRUD is tenant-bound and reports UTC protocol timestamps", async 
         fixedNow.toISOString(),
       );
       assert.equal(created.structuredContent.template.id, firstTemplate.id);
+      assert.deepEqual(previewed.structuredContent, {
+        html: "<p>Hello </p>",
+        missingVariables: ["reader.name"],
+        observedAt: fixedNow.toISOString(),
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+        subject: "Welcome, ",
+        templateId: firstTemplate.id,
+        text: "Hello ",
+      });
       assert.deepEqual(deleted.structuredContent, {
         deleted: true,
         observedAt: fixedNow.toISOString(),
@@ -553,6 +606,7 @@ test("template CRUD is tenant-bound and reports UTC protocol timestamps", async 
             text: firstTemplate.text,
           },
         ],
+        ["preview", firstPrincipal, firstTemplate.id, {}],
         ["delete", firstPrincipal, firstTemplate.id],
       ]);
     },
@@ -720,6 +774,52 @@ test("batch sending preserves order and reports per-item MCP failures", async ()
       });
       assert.equal(JSON.stringify(result).includes("First body"), false);
       assert.equal(JSON.stringify(result).includes("Second body"), false);
+    },
+  );
+});
+
+test("batch sending reports missing required template variables", async () => {
+  await withClient(
+    dependencies({
+      emails: emailServices({
+        queueBatch: async () => [
+          {
+            error: new TemplateError("MISSING_REQUIRED_VARIABLES", [
+              {
+                field: "data.reader.name",
+                message: "This required template variable is missing.",
+              },
+            ]),
+            ok: false,
+          },
+        ],
+      }),
+    }),
+    async (client) => {
+      const result = await client.callTool({
+        arguments: {
+          emails: [
+            {
+              data: {},
+              from: "sender@example.com",
+              template_id: firstTemplate.id,
+              to: ["reader@example.net"],
+            },
+          ],
+        },
+        name: "paperboy_send_email_batch",
+      });
+
+      assert.deepEqual(result.structuredContent.data[0].error, {
+        code: "missing_template_variables",
+        fields: [
+          {
+            field: "data.reader.name",
+            message: "This required template variable is missing.",
+          },
+        ],
+        message: "Provide every required template variable and try again.",
+      });
     },
   );
 });

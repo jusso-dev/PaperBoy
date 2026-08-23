@@ -11,8 +11,10 @@ import {
 import {
   parseCreateTemplateInput,
   parseUpdateTemplateInput,
-  renderTemplate,
+  previewTemplate,
+  renderTemplateForSend,
   TemplateError,
+  type TemplatePreview,
   type TemplateRecord,
   type TemplateValidationIssue,
 } from "@/lib/template-core";
@@ -25,6 +27,7 @@ const templateSelection = {
   html: emailTemplates.html,
   id: emailTemplates.id,
   name: emailTemplates.name,
+  requiredVariables: emailTemplates.requiredVariables,
   subject: emailTemplates.subject,
   text: emailTemplates.textBody,
   updatedAt: emailTemplates.updatedAt,
@@ -107,6 +110,7 @@ export async function createTemplate(input: {
           html: definition.html,
           name: definition.name,
           orgId: input.orgId,
+          requiredVariables: definition.requiredVariables,
           subject: definition.subject,
           textBody: definition.text,
         })
@@ -215,6 +219,7 @@ export async function updateTemplate(input: {
         .set({
           html: definition.html,
           name: definition.name,
+          requiredVariables: definition.requiredVariables,
           subject: definition.subject,
           textBody: definition.text,
           updatedAt: new Date(),
@@ -297,6 +302,7 @@ async function renderStoredTemplate(input: {
   const [template] = await db
     .select({
       html: emailTemplates.html,
+      requiredVariables: emailTemplates.requiredVariables,
       subject: emailTemplates.subject,
       text: emailTemplates.textBody,
     })
@@ -313,7 +319,17 @@ async function renderStoredTemplate(input: {
     throw new TemplateError("TEMPLATE_NOT_FOUND");
   }
 
-  return renderTemplate(template, input.data);
+  return renderTemplateForSend(template, input.data);
+}
+
+export async function previewStoredTemplate(input: {
+  actorUserId: string;
+  data: unknown;
+  orgId: string;
+  templateId: string;
+}): Promise<TemplatePreview> {
+  const template = await getTemplate(input);
+  return previewTemplate(template, input.data);
 }
 
 export async function materializeTemplateSendPayload(input: {

@@ -10,6 +10,7 @@ export type TemplateValidationIssue = {
 
 export type TemplateErrorCode =
   | "MEMBERSHIP_REQUIRED"
+  | "MISSING_REQUIRED_VARIABLES"
   | "TEMPLATE_EXISTS"
   | "TEMPLATE_NOT_FOUND"
   | "VALIDATION_ERROR";
@@ -27,6 +28,7 @@ export class TemplateError extends Error {
 export type TemplateDefinition = {
   html: string | null;
   name: string;
+  requiredVariables: string[];
   subject: string;
   text: string | null;
 };
@@ -43,7 +45,17 @@ export type RenderedTemplate = {
   text: string | null;
 };
 
-const TEMPLATE_FIELDS = new Set(["html", "name", "subject", "text"]);
+export type TemplatePreview = RenderedTemplate & {
+  missingVariables: string[];
+};
+
+const TEMPLATE_FIELDS = new Set([
+  "html",
+  "name",
+  "required_variables",
+  "subject",
+  "text",
+]);
 const TEMPLATE_PATH_PATTERN =
   /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*$/;
 const TEMPLATE_TOKEN_PATTERN = /{{\s*([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*)\s*}}/g;
@@ -72,6 +84,10 @@ function hasForbiddenPathPart(path: string): boolean {
   );
 }
 
+function validVariablePath(path: string): boolean {
+  return TEMPLATE_PATH_PATTERN.test(path) && !hasForbiddenPathPart(path);
+}
+
 function validTemplateSyntax(source: string): boolean {
   if (source.includes("{{{") || source.includes("}}}")) {
     return false;
@@ -88,8 +104,7 @@ function validTemplateSyntax(source: string): boolean {
     if (
       between.includes("{{") ||
       between.includes("}}") ||
-      !TEMPLATE_PATH_PATTERN.test(path) ||
-      hasForbiddenPathPart(path)
+      !validVariablePath(path)
     ) {
       return false;
     }
@@ -99,6 +114,108 @@ function validTemplateSyntax(source: string): boolean {
 
   const tail = source.slice(cursor);
   return !tail.includes("{{") && !tail.includes("}}");
+}
+
+function variablePathsFromSources(sources: Array<string | null>): string[] {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+
+  for (const source of sources) {
+    if (!source) {
+      continue;
+    }
+
+    const matcher = new RegExp(TEMPLATE_TOKEN_PATTERN.source, "g");
+
+    for (const match of source.matchAll(matcher)) {
+      const path = match[1];
+
+      if (!seen.has(path)) {
+        seen.add(path);
+        paths.push(path);
+      }
+    }
+  }
+
+  return paths;
+}
+
+function parseRequiredVariables(
+  value: unknown,
+  issues: TemplateValidationIssue[],
+): string[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    issues.push({
+      field: "required_variables",
+      message: "Must be an array of dotted variable paths.",
+    });
+    return [];
+  }
+
+  if (value.length > 100) {
+    issues.push({
+      field: "required_variables",
+      message: "Declare at most 100 required variables.",
+    });
+  }
+
+  const paths: string[] = [];
+  const seen = new Set<string>();
+
+  value.slice(0, 100).forEach((candidate, index) => {
+    const path = typeof candidate === "string" ? candidate.trim() : "";
+
+    if (!path || !validVariablePath(path)) {
+      issues.push({
+        field: `required_variables.${index}`,
+        message:
+          "Use a dotted path such as reader.name with letter-led segments of at most 64 characters.",
+      });
+      return;
+    }
+
+    if (!seen.has(path)) {
+      seen.add(path);
+      paths.push(path);
+    }
+  });
+
+  return paths;
+}
+
+function validateVariableRelationships(
+  variables: string[],
+  requiredVariables: string[],
+  issues: TemplateValidationIssue[],
+): void {
+  const referenced = new Set(variables);
+
+  for (const required of requiredVariables) {
+    if (!referenced.has(required)) {
+      issues.push({
+        field: "required_variables",
+        message: `${required} must appear in the subject, HTML, or plain-text template.`,
+      });
+    }
+  }
+
+  const sorted = [...variables].sort();
+
+  for (let index = 0; index < sorted.length - 1; index += 1) {
+    const parent = sorted[index];
+    const child = sorted[index + 1];
+
+    if (child.startsWith(`${parent}.`)) {
+      issues.push({
+        field: "body",
+        message: `Do not reference both ${parent} and its nested path ${child}.`,
+      });
+    }
+  }
 }
 
 function validateSyntax(
@@ -184,6 +301,7 @@ function parseBody(
 function definitionFromValues(input: {
   html: unknown;
   name: unknown;
+  required_variables: unknown;
   subject: unknown;
   text: unknown;
 }): TemplateDefinition {
@@ -191,6 +309,10 @@ function definitionFromValues(input: {
   const definition = {
     html: parseBody(input.html, "html", issues),
     name: parseName(input.name, issues),
+    requiredVariables: parseRequiredVariables(
+      input.required_variables,
+      issues,
+    ),
     subject: parseSubject(input.subject, issues),
     text: parseBody(input.text, "text", issues),
   };
@@ -201,6 +323,17 @@ function definitionFromValues(input: {
       message: "Provide non-empty html or text template content.",
     });
   }
+
+  const variables = variablePathsFromSources([
+    definition.subject,
+    definition.html,
+    definition.text,
+  ]);
+  validateVariableRelationships(
+    variables,
+    definition.requiredVariables,
+    issues,
+  );
 
   if (issues.length > 0) {
     throw new TemplateError("VALIDATION_ERROR", issues);
@@ -239,6 +372,7 @@ export function parseCreateTemplateInput(value: unknown): TemplateDefinition {
   return definitionFromValues({
     html: input.html,
     name: input.name,
+    required_variables: input.required_variables,
     subject: input.subject,
     text: input.text,
   });
@@ -259,11 +393,54 @@ export function parseUpdateTemplateInput(
   return definitionFromValues({
     html: Object.hasOwn(input, "html") ? input.html : current.html,
     name: Object.hasOwn(input, "name") ? input.name : current.name,
+    required_variables: Object.hasOwn(input, "required_variables")
+      ? input.required_variables
+      : current.requiredVariables,
     subject: Object.hasOwn(input, "subject")
       ? input.subject
       : current.subject,
     text: Object.hasOwn(input, "text") ? input.text : current.text,
   });
+}
+
+export function templateVariablePaths(
+  template: Pick<TemplateDefinition, "html" | "subject" | "text">,
+): string[] {
+  return variablePathsFromSources([
+    template.subject,
+    template.html,
+    template.text,
+  ]);
+}
+
+export function templateSampleData(
+  template: Pick<TemplateDefinition, "html" | "subject" | "text">,
+): Record<string, unknown> {
+  const data: Record<string, unknown> = {};
+
+  for (const path of templateVariablePaths(template)) {
+    const parts = path.split(".");
+    let target = data;
+
+    parts.forEach((part, index) => {
+      if (index === parts.length - 1) {
+        target[part] = `Example ${path}`;
+        return;
+      }
+
+      const existing = target[part];
+
+      if (isRecord(existing)) {
+        target = existing;
+      } else {
+        const child: Record<string, unknown> = {};
+        target[part] = child;
+        target = child;
+      }
+    });
+  }
+
+  return data;
 }
 
 function validateTemplateData(data: unknown): Record<string, unknown> {
@@ -455,17 +632,29 @@ function renderSource(
   });
 }
 
-export function renderTemplate(
-  template: Pick<TemplateDefinition, "html" | "subject" | "text">,
+type RenderableTemplate = Pick<
+  TemplateDefinition,
+  "html" | "subject" | "text"
+> & {
+  requiredVariables?: readonly string[];
+};
+
+export function previewTemplate(
+  template: RenderableTemplate,
   rawData: unknown,
-): RenderedTemplate {
+): TemplatePreview {
   const definition = definitionFromValues({
     html: template.html,
     name: "Stored template",
+    required_variables: template.requiredVariables ?? [],
     subject: template.subject,
     text: template.text,
   });
   const data = validateTemplateData(rawData);
+
+  const missingVariables = definition.requiredVariables.filter(
+    (path) => lookup(data, path) === null,
+  );
 
   return {
     html: definition.html
@@ -477,6 +666,7 @@ export function renderTemplate(
           MAX_TEMPLATE_BODY_LENGTH,
         )
       : null,
+    missingVariables,
     subject: renderSource(
       definition.subject,
       data,
@@ -494,4 +684,34 @@ export function renderTemplate(
         )
       : null,
   };
+}
+
+export function renderTemplate(
+  template: RenderableTemplate,
+  rawData: unknown,
+): RenderedTemplate {
+  const { missingVariables: _missingVariables, ...rendered } = previewTemplate(
+    template,
+    rawData,
+  );
+  return rendered;
+}
+
+export function renderTemplateForSend(
+  template: RenderableTemplate,
+  rawData: unknown,
+): RenderedTemplate {
+  const { missingVariables, ...rendered } = previewTemplate(template, rawData);
+
+  if (missingVariables.length > 0) {
+    throw new TemplateError(
+      "MISSING_REQUIRED_VARIABLES",
+      missingVariables.map((path) => ({
+        field: `data.${path}`,
+        message: "This required template variable is missing.",
+      })),
+    );
+  }
+
+  return rendered;
 }

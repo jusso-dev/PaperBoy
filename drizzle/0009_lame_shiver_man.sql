@@ -1,0 +1,2 @@
+ALTER TABLE "email_templates" ADD COLUMN "required_variables" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "email_templates" ADD CONSTRAINT "email_templates_required_variables_array_check" CHECK (jsonb_typeof("email_templates"."required_variables") = 'array');

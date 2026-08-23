@@ -39,11 +39,16 @@ function errorRedirect(error: unknown): never {
 
 function templatePayload(formData: FormData) {
   const html = String(formData.get("html") ?? "");
+  const requiredVariables = String(formData.get("requiredVariables") ?? "")
+    .split(/\r?\n/)
+    .map((path) => path.trim())
+    .filter(Boolean);
   const text = String(formData.get("text") ?? "");
 
   return {
     html: html.length > 0 ? html : null,
     name: formData.get("name"),
+    required_variables: requiredVariables,
     subject: formData.get("subject"),
     text: text.length > 0 ? text : null,
   };

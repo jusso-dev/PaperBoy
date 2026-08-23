@@ -7,6 +7,7 @@ import {
   handleDeleteTemplateRequest,
   handleGetTemplateRequest,
   handleListTemplatesRequest,
+  handlePreviewTemplateRequest,
   handleUpdateTemplateRequest,
 } from "../src/lib/template-http.ts";
 
@@ -22,6 +23,7 @@ const template = {
   html: "<p>Hello {{reader.name}}</p>",
   id: "33333333-3333-4333-8333-333333333333",
   name: "Welcome",
+  requiredVariables: ["reader.name"],
   subject: "Welcome, {{reader.name}}",
   text: "Hello {{reader.name}}",
   updatedAt: fixedNow,
@@ -33,6 +35,12 @@ function services(overrides = {}) {
     delete: async () => undefined,
     get: async () => template,
     list: async () => [template],
+    preview: async () => ({
+      html: "<p>Hello </p>",
+      missingVariables: ["reader.name"],
+      subject: "Welcome, ",
+      text: "Hello ",
+    }),
     update: async () => template,
     ...overrides,
   };
@@ -123,6 +131,7 @@ test("template REST CRUD stays bound to the authenticated principal", async () =
     html: template.html,
     id: template.id,
     name: template.name,
+    required_variables: template.requiredVariables,
     subject: template.subject,
     text: template.text,
     updated_at: fixedNow.toISOString(),
@@ -138,6 +147,66 @@ test("template REST CRUD stays bound to the authenticated principal", async () =
     ["update", principal, template.id, { subject: "Updated" }],
     ["delete", principal, template.id],
   ]);
+});
+
+test("preview returns rendered content and missing variables without mutation", async () => {
+  const calls = [];
+  const deps = dependencies({
+    services: services({
+      preview: async (received, templateId, data) => {
+        calls.push({ data, received, templateId });
+        return {
+          html: "<p>Hello </p>",
+          missingVariables: ["reader.name"],
+          subject: "Welcome, ",
+          text: "Hello ",
+        };
+      },
+    }),
+  });
+  const response = await handlePreviewTemplateRequest(
+    request("POST", JSON.stringify({ data: { publication: "Daily" } })),
+    template.id,
+    deps,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    html: "<p>Hello </p>",
+    missing_variables: ["reader.name"],
+    subject: "Welcome, ",
+    template_id: template.id,
+    text: "Hello ",
+  });
+  assert.deepEqual(calls, [
+    {
+      data: { publication: "Daily" },
+      received: principal,
+      templateId: template.id,
+    },
+  ]);
+});
+
+test("preview rejects unsupported envelope fields", async () => {
+  let called = false;
+  const response = await handlePreviewTemplateRequest(
+    request("POST", JSON.stringify({ data: {}, send: true })),
+    template.id,
+    dependencies({
+      services: services({
+        preview: async () => {
+          called = true;
+          return {};
+        },
+      }),
+    }),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 422);
+  assert.equal(body.error.code, "validation_error");
+  assert.equal(body.error.fields[0].field, "send");
+  assert.equal(called, false);
 });
 
 test("unknown templates return 404 without leaking another tenant", async () => {

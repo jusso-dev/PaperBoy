@@ -143,6 +143,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - A key is bound to one organization and one environment (\`live\` or \`test\`).
 - Domain mutations re-check the key creator's current organization role.
 - Template CRUD re-checks the key creator's current organization role. Sending an existing template is authorized by the active organization-bound API key.
+- Template preview renders sample JSON and reports missing required variables without queueing or sending a message.
 - DKIM tools return public DNS material only. PaperBoy private keys remain encrypted at rest and never enter tool output.
 - paperboy_send_email and paperboy_send_email_batch use the same validation, domain authorization, and queue services as their HTTP peers. Single sends can persist private attachments outside PostgreSQL; batch sends reject them. Tool output never includes attachment content. Test keys always select the test sink; batch results preserve input order and report failures per item.
 - Send tools accept either inline subject/body fields or \`template_id\` plus a JSON \`data\` object. Template rendering finishes before provider delivery, so SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text.
@@ -163,11 +164,12 @@ const operatorSafetyDocument = `# PaperBoy MCP operator safety
 const templateDocument = `# PaperBoy email templates
 
 - Templates belong to the organization bound to the API key. Never pass an organization ID to a template tool.
-- A template stores a name, subject, and at least one of HTML or plain text.
+- A template stores a name, subject, at least one of HTML or plain text, and an explicit list of required variable paths.
 - Variables use dotted double-brace paths such as \`{{reader.name}}\`.
 - Helpers, sections, expressions, triple braces, and executable template code are rejected.
 - Values inserted into HTML are escaped. Subject and plain-text values are interpolated as text.
-- Missing variables render as empty text. Required-variable validation and preview are separate capabilities.
+- Missing optional variables render as empty text. Preview lists missing required variables; sending fails until all required values are supplied.
+- Use paperboy_preview_template to render sample JSON without queueing or sending mail.
 - Queue email with \`template_id\` and an optional JSON \`data\` object. Do not combine those fields with inline subject, HTML, or text.
 - Rendering happens before provider delivery, so Cloudflare Email Sending and SMTP receive the same content.
 - Read a template before deleting it, then pass \`confirm: true\` to paperboy_delete_template.

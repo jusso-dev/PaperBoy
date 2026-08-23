@@ -90,16 +90,19 @@ Message instants are PostgreSQL `timestamptz` values. MCP exposes them as RFC 33
 
 ## Email templates
 
-Templates are organization-owned records with a case-insensitively unique name, subject, and at least one of HTML or plain text. Owners and admins manage them in the console; members can read them. The console formats template timestamps using the signed-in user's persisted IANA timezone. REST timestamps and MCP timestamps are RFC 3339 UTC.
+Templates are organization-owned records with a case-insensitively unique name, subject, at least one of HTML or plain text, and an explicit `required_variables` list. Owners and admins manage them in the console; members can read and preview them. The console formats template timestamps using the signed-in user's persisted IANA timezone. REST timestamps and MCP timestamps are RFC 3339 UTC.
 
 The bearer-key REST surface is:
 
 - `GET /api/v1/templates` and `POST /api/v1/templates`
 - `GET`, `PATCH`, and `DELETE /api/v1/templates/:templateId`
+- `POST /api/v1/templates/:templateId/preview` with `{ "data": { ... } }`
 
 REST tenant context always comes from the key. Template CRUD also re-checks the key creator's current organization membership and role. A missing or cross-organization template returns 404; duplicate names return 409. API responses never accept a caller-supplied organization ID.
 
-Template variables use dotted double braces such as `{{reader.name}}`. PaperBoy deliberately supports no helpers, sections, expressions, triple braces, or executable template code. Data must be a bounded JSON object containing nested objects and scalar values; arrays and prototype-sensitive keys are rejected. HTML substitutions are escaped, while subject and plain-text substitutions remain text. Missing variables render as empty text; required-variable validation and preview are separate capabilities.
+Template variables use dotted double braces such as `{{reader.name}}`. PaperBoy deliberately supports no helpers, sections, expressions, triple braces, or executable template code. Data must be a bounded JSON object containing nested objects and scalar values; arrays and prototype-sensitive keys are rejected. HTML substitutions are escaped, while subject and plain-text substitutions remain text. Missing optional variables render as empty text. Missing required variables are listed by preview and return `missing_template_variables` with field-level details from send; they never silently queue a partial message.
+
+The dedicated console preview route opens with generated sample JSON and renders without a full document navigation. It never queues or sends mail. HTML preview runs in a sandboxed iframe with scripts, form submission, top-level navigation, credentialed same-origin access, and remote subresources blocked; referrers are suppressed. Rendered subject, plain text, source, and every missing required path remain visible outside the frame.
 
 Queue a template through the single or batch send API with the normal envelope fields plus `template_id` and optional `data`:
 
@@ -160,7 +163,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 
 Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
 
-The contract exposes capability/account context plus first-class single/batch sending, template list/get/create/update/delete, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, templates, and DNS. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Template, domain, and DKIM CRUD re-read the key creator's current membership and role; destructive deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
+The contract exposes capability/account context plus first-class single/batch sending, template list/get/create/update/delete/preview, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, templates, and DNS. `paperboy_preview_template` renders sample JSON and lists missing required variables without queueing or sending mail. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Template, domain, and DKIM CRUD re-read the key creator's current membership and role; destructive deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
 
 HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
 

@@ -343,6 +343,10 @@ export const emailTemplates = pgTable(
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    requiredVariables: jsonb("required_variables")
+      .$type<string[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
     subject: text("subject").notNull(),
     html: text("html"),
     textBody: text("text"),
@@ -363,6 +367,10 @@ export const emailTemplates = pgTable(
     check(
       "email_templates_name_length_check",
       sql`char_length(btrim(${table.name})) between 1 and 120`,
+    ),
+    check(
+      "email_templates_required_variables_array_check",
+      sql`jsonb_typeof(${table.requiredVariables}) = 'array'`,
     ),
     check(
       "email_templates_subject_length_check",

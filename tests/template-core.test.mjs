@@ -5,7 +5,10 @@ import {
   TemplateError,
   parseCreateTemplateInput,
   parseUpdateTemplateInput,
+  previewTemplate,
   renderTemplate,
+  renderTemplateForSend,
+  templateSampleData,
 } from "../src/lib/template-core.ts";
 
 const definition = parseCreateTemplateInput({
@@ -38,6 +41,78 @@ test("missing variables become empty text", () => {
   assert.equal(rendered.subject, "Welcome, ");
   assert.equal(rendered.html, "<h1>Hello </h1><p></p>");
   assert.equal(rendered.text, "Hello  from ");
+});
+
+test("preview lists missing required variables while optional variables stay blank", () => {
+  const required = parseCreateTemplateInput({
+    html: "<p>{{reader.name}} {{reader.nickname}}</p>",
+    name: "Required reader",
+    required_variables: ["reader.name"],
+    subject: "Hello {{reader.name}}",
+    text: "Hello {{reader.name}} from {{publication.name}}",
+  });
+  const preview = previewTemplate(required, { publication: { name: "News" } });
+
+  assert.deepEqual(preview.missingVariables, ["reader.name"]);
+  assert.equal(preview.subject, "Hello ");
+  assert.equal(preview.html, "<p> </p>");
+  assert.equal(preview.text, "Hello  from News");
+
+  assert.throws(
+    () => renderTemplateForSend(required, { publication: { name: "News" } }),
+    (error) =>
+      error instanceof TemplateError &&
+      error.code === "MISSING_REQUIRED_VARIABLES" &&
+      error.issues[0].field === "data.reader.name",
+  );
+
+  assert.equal(
+    renderTemplateForSend(required, { reader: { name: "Ada" } }).subject,
+    "Hello Ada",
+  );
+});
+
+test("required variables must be referenced and variable paths cannot conflict", () => {
+  assert.throws(
+    () =>
+      parseCreateTemplateInput({
+        name: "Unused required path",
+        required_variables: ["reader.email"],
+        subject: "Hello {{reader.name}}",
+        text: "Body",
+      }),
+    (error) =>
+      error instanceof TemplateError &&
+      error.issues.some((issue) => issue.field === "required_variables"),
+  );
+
+  assert.throws(
+    () =>
+      parseCreateTemplateInput({
+        name: "Conflicting paths",
+        subject: "Hello {{reader}} {{reader.name}}",
+        text: "Body",
+      }),
+    (error) =>
+      error instanceof TemplateError &&
+      error.issues.some((issue) => /nested path/.test(issue.message)),
+  );
+});
+
+test("sample JSON includes sibling dotted paths", () => {
+  const sample = templateSampleData({
+    html: "<p>{{reader.name}} {{reader.email}}</p>",
+    subject: "{{publication.name}}",
+    text: null,
+  });
+
+  assert.deepEqual(sample, {
+    publication: { name: "Example publication.name" },
+    reader: {
+      email: "Example reader.email",
+      name: "Example reader.name",
+    },
+  });
 });
 
 test("rejects helpers, sections, triple braces, expressions, and prototype paths", () => {
@@ -136,11 +211,17 @@ test("partial updates preserve omitted fields and can clear one body format", ()
   );
 });
 
-test("Cloudflare Email Sending receives the rendered provider-neutral content", () => {
-  const rendered = renderTemplate(definition, {
-    publication: { name: "Daily Planet" },
-    reader: { name: "Lois" },
-  });
+test("Cloudflare Email Sending receives required, rendered provider-neutral content", () => {
+  const rendered = renderTemplateForSend(
+    {
+      ...definition,
+      requiredVariables: ["publication.name", "reader.name"],
+    },
+    {
+      publication: { name: "Daily Planet" },
+      reader: { name: "Lois" },
+    },
+  );
   const payload = prepareCloudflareEmailMessage({
     attachments: [],
     from: "news@example.com",

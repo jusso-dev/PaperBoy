@@ -3,6 +3,7 @@ import {
   deleteTemplateAction,
   updateTemplateAction,
 } from "./actions";
+import Link from "next/link";
 import { can } from "@/lib/authorization";
 import { requireOrganization } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
@@ -97,6 +98,20 @@ export default async function TemplatesPage({
               </div>
             </div>
             <div className="field">
+              <label htmlFor="template-required-variables">
+                Required variables
+              </label>
+              <textarea
+                id="template-required-variables"
+                name="requiredVariables"
+                placeholder={"reader.name\npublication.name"}
+                rows={3}
+              />
+              <p className="field-help">
+                One referenced dotted path per line. Other variables remain optional.
+              </p>
+            </div>
+            <div className="field">
               <label htmlFor="template-html">HTML</label>
               <textarea
                 id="template-html"
@@ -151,7 +166,15 @@ export default async function TemplatesPage({
                     )}`}
                   </p>
                 </div>
-                <code>{template.id}</code>
+                <div className="template-heading-actions">
+                  <code>{template.id}</code>
+                  <Link
+                    className="btn btn-compact"
+                    href={`/app/templates/${template.id}/preview`}
+                  >
+                    Preview
+                  </Link>
+                </div>
               </div>
 
               {canUpdate ? (
@@ -184,6 +207,20 @@ export default async function TemplatesPage({
                     </div>
                   </div>
                   <div className="field">
+                    <label htmlFor={`template-required-${template.id}`}>
+                      Required variables
+                    </label>
+                    <textarea
+                      defaultValue={template.requiredVariables.join("\n")}
+                      id={`template-required-${template.id}`}
+                      name="requiredVariables"
+                      rows={3}
+                    />
+                    <p className="field-help">
+                      One referenced dotted path per line.
+                    </p>
+                  </div>
+                  <div className="field">
                     <label htmlFor={`template-html-${template.id}`}>HTML</label>
                     <textarea
                       defaultValue={template.html ?? ""}
@@ -213,6 +250,18 @@ export default async function TemplatesPage({
                 <div className="template-readonly">
                   <h3>Subject</h3>
                   <pre>{template.subject}</pre>
+                  <h3>Required variables</h3>
+                  {template.requiredVariables.length > 0 ? (
+                    <ul>
+                      {template.requiredVariables.map((path) => (
+                        <li key={path}>
+                          <code>{path}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>None. Every variable is optional.</p>
+                  )}
                   {template.html ? (
                     <>
                       <h3>HTML</h3>
