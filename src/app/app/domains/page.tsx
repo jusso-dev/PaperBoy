@@ -161,10 +161,11 @@ export default async function DomainsPage({ searchParams }: DomainsPageProps) {
                     Ownership, SPF, and the active DKIM selector are required.
                     DMARC is recommended. The starter SPF policy assumes your
                     outbound host is authorised by this domain&apos;s MX records.
-                    Cloudflare Email Routing users must merge{" "}
-                    <code>include:_spf.mx.cloudflare.net</code> into this one
-                    SPF record; PaperBoy&apos;s <code>pb…</code> selectors coexist
-                    with Cloudflare&apos;s selectors.
+                    When Cloudflare Email Routing uses this same hostname,
+                    merge <code>include:_spf.mx.cloudflare.net</code> into this
+                    one SPF record. Different owner names keep one SPF record
+                    each. PaperBoy&apos;s <code>pb…</code> selectors coexist with
+                    Cloudflare&apos;s provider-managed selectors.
                   </p>
                   {domain.verifiedAt ? (
                     <p>

@@ -158,7 +158,7 @@ export function buildDomainDnsRecords(input: {
     },
     {
       description:
-        "Authorises the mail exchangers for this domain as sending hosts. Publish only one SPF record.",
+        "Authorises this domain's configured outbound sending hosts. Publish only one SPF record at this name.",
       key: "spf",
       name: input.domain,
       required: true,

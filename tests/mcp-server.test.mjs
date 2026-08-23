@@ -3,6 +3,9 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import {
+  DNS_OPERATOR_GUIDE,
+} from "../src/lib/dns-operator-guide.ts";
+import {
   PAPERBOY_MCP_RESOURCE_URIS,
   PAPERBOY_MCP_SCHEMA_VERSION,
   PAPERBOY_MCP_TOOL_NAMES,
@@ -295,6 +298,12 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     });
     assert.match(configuration.contents[0].text, /Streamable HTTP/);
     assert.match(configuration.contents[0].text, /Revocation denies/);
+
+    const dnsGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[2],
+    });
+    assert.equal(dnsGuide.contents[0].text, DNS_OPERATOR_GUIDE);
+    assert.match(dnsGuide.contents[0].text, /Cloudflare Email Sending/);
   });
 });
 

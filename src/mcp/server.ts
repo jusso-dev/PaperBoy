@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
+import { DNS_OPERATOR_GUIDE } from "@/lib/dns-operator-guide";
 import type { OrganizationRecord } from "@/lib/organization-reader";
 import { protocolTimestamp } from "@/lib/time";
 import {
@@ -25,6 +26,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
 export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/configuration",
   "paperboy://docs/operator-safety",
+  "paperboy://docs/dns",
 ] as const;
 
 type PaperBoyMcpDependencies = {
@@ -103,6 +105,10 @@ const resourceDefinitions = [
   {
     description: "Operate PaperBoy safely through an agent.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[1],
+  },
+  {
+    description: "Publish and verify PaperBoy SPF and DMARC records.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[2],
   },
 ] as const;
 
@@ -241,6 +247,7 @@ export function createPaperBoyMcpServer(
   for (const [resource, text] of [
     [resourceDefinitions[0], configurationDocument],
     [resourceDefinitions[1], operatorSafetyDocument],
+    [resourceDefinitions[2], DNS_OPERATOR_GUIDE],
   ] as const) {
     server.registerResource(
       resource.uri,
