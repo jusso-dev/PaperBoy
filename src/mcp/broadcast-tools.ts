@@ -1,15 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
+import { AudienceError } from "@/lib/audience-core";
 import { AuthorizationError } from "@/lib/authorization";
 import {
   BroadcastError,
   MAX_BROADCAST_NAME_LENGTH,
-  MAX_BROADCAST_RECIPIENTS,
 } from "@/lib/broadcast-core";
 import type { BroadcastRecord } from "@/lib/broadcasts";
 import { protocolTimestamp } from "@/lib/time";
 import { TemplateError } from "@/lib/template-core";
+import { UnsubscribeConfigurationError } from "@/lib/unsubscribe-core";
 import { PAPERBOY_MCP_SCHEMA_VERSION } from "@/mcp/contract";
 
 export const PAPERBOY_BROADCAST_MCP_TOOL_NAMES = [
@@ -38,7 +39,7 @@ export const PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS = [
   },
   {
     description:
-      "Send one template now to a bounded audience snapshot, skipping organization suppressions.",
+      "Send one template now to a stored audience snapshot with signed unsubscribe links and suppression checks.",
     mutating: true,
     name: PAPERBOY_BROADCAST_MCP_TOOL_NAMES[2],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
@@ -88,19 +89,9 @@ export type PaperBoyMcpBroadcastServices = {
   ) => Promise<BroadcastRecord>;
 };
 
-const audienceMemberSchema = z
-  .object({
-    data: z.record(z.string(), z.unknown()).optional(),
-    email: z.string().min(3).max(320),
-  })
-  .strict();
-
 const createBroadcastInputSchema = z
   .object({
-    audience: z
-      .array(audienceMemberSchema)
-      .min(1)
-      .max(MAX_BROADCAST_RECIPIENTS),
+    audienceId: z.string().uuid(),
     from: z.string().min(3).max(320),
     name: z.string().min(1).max(MAX_BROADCAST_NAME_LENGTH),
     templateId: z.string().uuid(),
@@ -138,6 +129,7 @@ const broadcastSchema = z.object({
   name: z.string(),
   pausedAt: z.iso.datetime({ offset: true }).nullable(),
   progress: progressSchema,
+  sourceAudienceId: z.string().uuid().nullable(),
   sourceTemplateId: z.string().uuid().nullable(),
   status: z.enum(["running", "paused", "completed", "cancelled"]),
   templateName: z.string(),
@@ -175,6 +167,7 @@ function serialize(record: BroadcastRecord) {
     name: record.name,
     pausedAt: record.pausedAt ? protocolTimestamp(record.pausedAt) : null,
     progress: record.progress,
+    sourceAudienceId: record.sourceAudienceId,
     sourceTemplateId: record.sourceTemplateId,
     status: record.status,
     templateName: record.templateName,
@@ -214,6 +207,15 @@ function errorResult(error: unknown) {
       error.code === "TEMPLATE_NOT_FOUND"
         ? "No template with that ID exists in this organization."
         : error.issues[0]?.message ?? "Check the template fields.";
+  } else if (error instanceof AudienceError) {
+    message =
+      error.code === "AUDIENCE_NOT_FOUND"
+        ? "No audience with that ID exists in this organization."
+        : error.code === "AUDIENCE_EMPTY"
+          ? "The audience has no active subscribed contacts."
+          : "The audience exceeds the 100-contact broadcast limit.";
+  } else if (error instanceof UnsubscribeConfigurationError) {
+    message = "The operator must configure PAPERBOY_UNSUBSCRIBE_SIGNING_KEY before sending broadcasts.";
   } else {
     console.error("PaperBoy MCP broadcast operation failed.");
   }

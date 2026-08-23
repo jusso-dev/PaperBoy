@@ -10,8 +10,10 @@ function servicePayload(payload: unknown): unknown {
   const input = payload as Record<string, unknown>;
   const mapped: Record<string, unknown> = {
     ...input,
+    audience_id: input.audienceId,
     template_id: input.templateId,
   };
+  delete mapped.audienceId;
   delete mapped.templateId;
   return mapped;
 }

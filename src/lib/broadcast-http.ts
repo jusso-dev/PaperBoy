@@ -1,4 +1,5 @@
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
+import { AudienceError } from "@/lib/audience-core";
 import { AuthorizationError } from "@/lib/authorization";
 import {
   BroadcastError,
@@ -6,6 +7,7 @@ import {
 } from "@/lib/broadcast-core";
 import type { BroadcastRecord } from "@/lib/broadcasts";
 import { TemplateError } from "@/lib/template-core";
+import { UnsubscribeConfigurationError } from "@/lib/unsubscribe-core";
 
 export type BroadcastHttpServices = {
   cancel: (
@@ -117,6 +119,24 @@ function failure(error: unknown): Response {
       message = "Correct the invalid template fields and try again.";
       status = 422;
     }
+  } else if (error instanceof AudienceError) {
+    if (error.code === "AUDIENCE_NOT_FOUND") {
+      code = "audience_not_found";
+      message = "No audience with that ID exists in this organization.";
+      status = 404;
+    } else if (error.code === "AUDIENCE_EMPTY") {
+      code = "audience_empty";
+      message = "The audience has no active subscribed contacts.";
+      status = 409;
+    } else if (error.code === "AUDIENCE_FULL") {
+      code = "audience_too_large";
+      message = "The audience exceeds the 100-contact broadcast limit.";
+      status = 409;
+    }
+  } else if (error instanceof UnsubscribeConfigurationError) {
+    code = "unsubscribe_unavailable";
+    message = "The operator must configure PaperBoy unsubscribe signing before sending broadcasts.";
+    status = 503;
   } else {
     console.error("PaperBoy broadcast operation failed.");
   }
@@ -144,6 +164,7 @@ export function serializeBroadcast(record: BroadcastRecord) {
     name: record.name,
     paused_at: record.pausedAt?.toISOString() ?? null,
     progress: record.progress,
+    source_audience_id: record.sourceAudienceId,
     source_template_id: record.sourceTemplateId,
     status: record.status,
     template_name: record.templateName,

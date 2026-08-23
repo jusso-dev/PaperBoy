@@ -1,0 +1,10 @@
+ALTER TABLE "email_suppressions" DROP CONSTRAINT "email_suppressions_reason_check";
+UPDATE "email_suppressions" SET "reason" = 'manual' WHERE "reason" = 'unsubscribed';
+ALTER TABLE "email_suppressions" ADD CONSTRAINT "email_suppressions_reason_check" CHECK ("email_suppressions"."reason" in ('manual', 'bounced', 'complained'));
+DROP INDEX "broadcast_recipients_contact_id_idx";
+ALTER TABLE "broadcast_recipients" DROP CONSTRAINT "broadcast_recipients_contact_id_contacts_id_fk";
+ALTER TABLE "broadcasts" DROP CONSTRAINT "broadcasts_source_audience_id_audiences_id_fk";
+ALTER TABLE "broadcast_recipients" DROP COLUMN "contact_id";
+ALTER TABLE "broadcasts" DROP COLUMN "source_audience_id";
+DROP TABLE "contacts";
+DROP TABLE "audiences";

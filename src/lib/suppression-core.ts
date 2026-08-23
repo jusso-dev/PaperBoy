@@ -2,6 +2,7 @@ import { normalizeEmailAddress } from "@/lib/email-core";
 
 export const SUPPRESSION_REASONS = [
   "manual",
+  "unsubscribed",
   "bounced",
   "complained",
 ] as const;
@@ -127,7 +128,7 @@ export function parseCreateSuppressionInput(
   if (!isSuppressionReason(reason)) {
     issues.push({
       field: "reason",
-      message: "Must be manual, bounced, or complained.",
+      message: "Must be manual, unsubscribed, bounced, or complained.",
     });
   }
 
@@ -169,7 +170,7 @@ export function parseUpdateSuppressionInput(
     } else {
       issues.push({
         field: "reason",
-        message: "Must be manual, bounced, or complained.",
+        message: "Must be manual, unsubscribed, bounced, or complained.",
       });
     }
   }
@@ -220,7 +221,7 @@ export function parseSuppressionListInput(
   if (reason !== null && reason !== "" && !isSuppressionReason(reason)) {
     issues.push({
       field: "reason",
-      message: "Must be manual, bounced, or complained.",
+      message: "Must be manual, unsubscribed, bounced, or complained.",
     });
   }
 
@@ -330,8 +331,9 @@ function strongerReason(
 ): SuppressionReason {
   const rank: Record<SuppressionReason, number> = {
     manual: 0,
-    bounced: 1,
-    complained: 2,
+    unsubscribed: 1,
+    bounced: 2,
+    complained: 3,
   };
   return rank[candidate] > rank[current] ? candidate : current;
 }
@@ -389,7 +391,7 @@ export function parseSuppressionCsv(value: string): SuppressionCsvImport {
     if (!isSuppressionReason(rawReason)) {
       issues.push({
         field: `csv.${line}.reason`,
-        message: "Must be manual, bounced, or complained.",
+        message: "Must be manual, unsubscribed, bounced, or complained.",
       });
     }
 

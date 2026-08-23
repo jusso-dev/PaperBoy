@@ -8,6 +8,8 @@ import {
   orgMembers,
 } from "@/db/schema";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
+import { AudienceError } from "@/lib/audience-core";
+import { getActiveAudienceContacts } from "@/lib/audiences";
 import {
   isOrgRole,
   requirePermission,
@@ -24,6 +26,10 @@ import { EmailError } from "@/lib/email-core";
 import { queueEmail, type QueuedMessageRecord } from "@/lib/messages";
 import { TemplateError, renderTemplateForSend } from "@/lib/template-core";
 import { getTemplate } from "@/lib/templates";
+import {
+  createUnsubscribeUrl,
+  withUnsubscribeFooter,
+} from "@/lib/unsubscribe-core";
 
 export type BroadcastProgress = {
   cancelled: number;
@@ -45,6 +51,7 @@ export type BroadcastRecord = {
   name: string;
   pausedAt: Date | null;
   progress: BroadcastProgress;
+  sourceAudienceId: string | null;
   sourceTemplateId: string | null;
   status: BroadcastStatus;
   templateName: string;
@@ -61,6 +68,7 @@ export type BroadcastQueue = (input: {
 type ProcessBroadcastDependencies = {
   now?: () => Date;
   queue?: BroadcastQueue;
+  unsubscribeUrl?: (contactId: string) => string;
 };
 
 const broadcastSelection = {
@@ -75,6 +83,7 @@ const broadcastSelection = {
   name: broadcasts.name,
   orgId: broadcasts.orgId,
   pausedAt: broadcasts.pausedAt,
+  sourceAudienceId: broadcasts.sourceAudienceId,
   sourceTemplateId: broadcasts.sourceTemplateId,
   status: broadcasts.status,
   templateHtml: broadcasts.templateHtml,
@@ -163,6 +172,7 @@ async function recordFromRow(
     name: row.name,
     pausedAt: row.pausedAt,
     progress: await broadcastProgress(row.id),
+    sourceAudienceId: row.sourceAudienceId,
     sourceTemplateId: row.sourceTemplateId,
     status: row.status,
     templateName: row.templateName,
@@ -399,10 +409,10 @@ export async function processBroadcast(
         idempotencyKey: `broadcast:${broadcast.id}:${recipient.id}`,
         payload: {
           from: broadcast.from,
-          html: rendered.html,
+          ...(rendered.html === null ? {} : { html: rendered.html }),
           subject: rendered.subject,
           tags: [{ name: "broadcast_id", value: broadcast.id }],
-          text: rendered.text,
+          ...(rendered.text === null ? {} : { text: rendered.text }),
           to: [recipient.email],
         },
         principal: {
@@ -446,11 +456,36 @@ export async function createBroadcast(
     permission: "broadcasts.create",
   });
   const definition = parseCreateBroadcastInput(input.payload);
-  const template = await getTemplate({
-    actorUserId,
-    orgId: input.principal.orgId,
-    templateId: definition.templateId,
+  const [template, audience] = await Promise.all([
+    getTemplate({
+      actorUserId,
+      orgId: input.principal.orgId,
+      templateId: definition.templateId,
+    }),
+    getActiveAudienceContacts({
+      audienceId: definition.audienceId,
+      orgId: input.principal.orgId,
+    }),
+  ]);
+  if (audience.length === 0) throw new AudienceError("AUDIENCE_EMPTY");
+  const unsubscribeUrl =
+    dependencies.unsubscribeUrl ??
+    ((contactId: string) => createUnsubscribeUrl({ contactId }));
+  const templateBodies = withUnsubscribeFooter({
+    html: template.html,
+    text: template.text,
   });
+  const recipients = audience.map((contact) => ({
+    contactId: contact.id,
+    data: {
+      contact: { email: contact.email, name: contact.name ?? "" },
+      email: contact.email,
+      name: contact.name ?? "",
+      unsubscribe_url: unsubscribeUrl(contact.id),
+    },
+    email: contact.email,
+    position: contact.position,
+  }));
   const created = await db.transaction(async (tx) => {
     const [broadcast] = await tx
       .insert(broadcasts)
@@ -461,12 +496,13 @@ export async function createBroadcast(
         from: definition.from,
         name: definition.name,
         orgId: input.principal.orgId,
+        sourceAudienceId: definition.audienceId,
         sourceTemplateId: template.id,
-        templateHtml: template.html,
+        templateHtml: templateBodies.html,
         templateName: template.name,
         templateRequiredVariables: template.requiredVariables,
         templateSubject: template.subject,
-        templateText: template.text,
+        templateText: templateBodies.text,
       })
       .returning({ id: broadcasts.id });
 
@@ -475,8 +511,9 @@ export async function createBroadcast(
     }
 
     await tx.insert(broadcastRecipients).values(
-      definition.audience.map((recipient) => ({
+      recipients.map((recipient) => ({
         broadcastId: broadcast.id,
+        contactId: recipient.contactId,
         data: recipient.data,
         email: recipient.email,
         position: recipient.position,

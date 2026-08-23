@@ -35,6 +35,7 @@ const record = {
     suppressed: 2,
     total: 20,
   },
+  sourceAudienceId: "77777777-7777-4777-8777-777777777777",
   sourceTemplateId: "88888888-8888-4888-8888-888888888888",
   status: "completed",
   templateName: "Welcome reader",
@@ -72,7 +73,7 @@ function dependencies(overrides = {}) {
 test("broadcast REST create is tenant-bound and returns UTC progress", async () => {
   let received = null;
   const payload = {
-    audience: [{ data: { reader: { name: "Ada" } }, email: "ada@example.net" }],
+    audience_id: record.sourceAudienceId,
     from: "news@example.com",
     name: "Morning edition",
     template_id: record.sourceTemplateId,
@@ -98,7 +99,7 @@ test("broadcast REST create is tenant-bound and returns UTC progress", async () 
   assert.equal(body.data.created_at, fixedNow.toISOString());
   assert.equal(body.data.completed_at, fixedNow.toISOString());
   assert.equal(body.data.progress.suppressed, 2);
-  assert.equal(JSON.stringify(body).includes("ada@example.net"), false);
+  assert.equal(body.data.source_audience_id, record.sourceAudienceId);
 });
 
 test("broadcast REST list, get, and controls share one authenticated service", async () => {

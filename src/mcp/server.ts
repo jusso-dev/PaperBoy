@@ -9,6 +9,12 @@ import {
   PAPERBOY_MCP_VERSION,
 } from "@/mcp/contract";
 import {
+  PAPERBOY_AUDIENCE_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_AUDIENCE_MCP_TOOL_NAMES,
+  registerPaperBoyAudienceTools,
+  type PaperBoyMcpAudienceServices,
+} from "@/mcp/audience-tools";
+import {
   PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS,
   PAPERBOY_BROADCAST_MCP_TOOL_NAMES,
   registerPaperBoyBroadcastTools,
@@ -62,6 +68,7 @@ export { PAPERBOY_MCP_SCHEMA_VERSION, PAPERBOY_MCP_VERSION };
 export const PAPERBOY_MCP_TOOL_NAMES = [
   "paperboy_list_capabilities",
   "paperboy_get_account_context",
+  ...PAPERBOY_AUDIENCE_MCP_TOOL_NAMES,
   ...PAPERBOY_EMAIL_MCP_TOOL_NAMES,
   ...PAPERBOY_DELIVERY_MCP_TOOL_NAMES,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_NAMES,
@@ -82,10 +89,12 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/webhooks",
   "paperboy://docs/feedback",
   "paperboy://docs/suppressions",
+  "paperboy://docs/audiences",
 ] as const;
 
 type PaperBoyMcpDependencies = {
   authorize: () => Promise<ApiKeyPrincipal | null>;
+  audiences: PaperBoyMcpAudienceServices;
   broadcasts: PaperBoyMcpBroadcastServices;
   deliveries: PaperBoyMcpDeliveryServices;
   domains: PaperBoyMcpDomainServices;
@@ -156,6 +165,7 @@ const toolDefinitions = [
     name: PAPERBOY_MCP_TOOL_NAMES[1],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
   },
+  ...PAPERBOY_AUDIENCE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_DEFINITIONS,
@@ -203,24 +213,30 @@ const resourceDefinitions = [
     description: "Manage the organization suppression list safely.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[8],
   },
+  {
+    description: "Manage permission-based audiences, contacts, and unsubscribe state.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[9],
+  },
 ] as const;
 
 const configurationDocument = `# PaperBoy MCP configuration
 
 - Remote agents use Streamable HTTP at \`/api/mcp\` with \`Authorization: Bearer <PaperBoy API key>\`.
-- Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\`, \`PAPERBOY_API_KEY\`, \`PAPERBOY_DKIM_ENCRYPTION_KEY\`, and the private \`PAPERBOY_ATTACHMENT_STORAGE_PATH\` injected through the process environment.
+- Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\`, \`PAPERBOY_API_KEY\`, \`PAPERBOY_PUBLIC_URL\`, \`PAPERBOY_UNSUBSCRIBE_SIGNING_KEY\`, and other feature secrets injected through the process environment.
 - Never put an API key in a tool argument, URL, command-line argument, source file, or diagnostic log.
 - A key is bound to one organization and one environment (\`live\` or \`test\`).
+- Audience and contact tools derive organization context from that key and never accept an organization ID.
 - Domain mutations re-check the key creator's current organization role.
 - Template CRUD re-checks the key creator's current organization role. Sending an existing template is authorized by the active organization-bound API key.
 - Template preview renders sample JSON and reports missing required variables without queueing or sending a message.
-- Broadcast tools send one template to a bounded audience snapshot, check organization suppressions before every enqueue, and expose progress without returning recipient data.
+- Broadcast tools send one template to a stored audience snapshot, add signed unsubscribe links, check organization suppressions before every enqueue, and expose progress without returning recipient data.
 - DKIM tools return public DNS material only. PaperBoy private keys remain encrypted at rest and never enter tool output.
 - paperboy_send_email and paperboy_send_email_batch use the same validation, domain authorization, and queue services as their HTTP peers. Single sends can persist private attachments outside PostgreSQL; batch sends reject them. Tool output never includes attachment content. Test keys always select the test sink; batch results preserve input order and report failures per item.
 - paperboy_list_message_events returns the same tenant- and environment-scoped ordered timeline as GET /api/v1/emails/:id/events. It omits recipients, content, event data, and provider payloads.
 - paperboy_get_webhook and paperboy_configure_webhook manage one organization webhook without accepting an organization ID. A new signing secret is returned only on first creation and is never returned by reads.
 - paperboy_ingest_feedback accepts a bounded Base64 DSN or ARF, correlates only within the authenticated organization, and never sends a test message.
 - Suppression CRUD and CSV import use the same organization blocklist checked before HTTP, MCP, batch, broadcast, SMTP, or Cloudflare delivery can be queued.
+- Broadcast creation accepts an audience ID, snapshots active contacts, and adds a PaperBoy-signed unsubscribe URL before the provider-neutral queue.
 - Send tools accept either inline subject/body fields or \`template_id\` plus a JSON \`data\` object. Template rendering finishes before provider delivery, so SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text.
 - Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
@@ -255,8 +271,9 @@ const templateDocument = `# PaperBoy email templates
 const broadcastDocument = `# PaperBoy broadcasts
 
 - Broadcasts belong to the organization bound to the API key. Never pass an organization ID.
-- Create accepts one stored template and 1-100 audience members. Each member supplies an email and optional JSON template data.
-- PaperBoy snapshots the template, checks the per-organization suppression table before each enqueue, and never injects an open-tracking pixel.
+- Create accepts one stored template and one tenant-owned audience ID containing 1-100 active contacts.
+- PaperBoy snapshots the template and active contacts, appends a signed unsubscribe link when missing, checks the per-organization suppression table before each enqueue, and never injects an open-tracking pixel.
+- Template data contains name, email, contact.name, contact.email, and unsubscribe_url. Opening the link is read-only; the recipient confirms before PaperBoy records the opt-out.
 - Progress separates pending, processing, queued, suppressed, failed, and cancelled recipients. Tool output never returns audience addresses or rendered message content.
 - Pause stops before the next recipient. Resume processes remaining recipients. Cancel marks every pending recipient cancelled and prevents further claims; an already-processing recipient may finish.
 - Queue records remain provider-neutral. SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text through the normal worker path.
@@ -306,10 +323,23 @@ const suppressionDocument = `# PaperBoy suppression list
 
 - Suppressions belong to the organization bound to the API key. Never pass an organization ID to a suppression tool.
 - paperboy_list_suppressions and paperboy_get_suppression are available to current members. Create, update, delete, and import require an owner or admin.
-- Reasons are manual, bounced, or complained. The send path returns recipient_suppressed with the reason before inserting a queue row, so the address never reaches SMTP or Cloudflare Email Sending.
-- CSV import accepts UTF-8 with an email header and optional reason column, at most 1 MiB and 5,000 data rows. The entire file validates before mutation. Duplicate rows and existing entries keep the strongest reason: complained, then bounced, then manual.
+- Reasons are manual, unsubscribed, bounced, or complained. The send path returns recipient_suppressed with the reason before inserting a queue row, so the address never reaches SMTP or Cloudflare Email Sending.
+- CSV import accepts UTF-8 with an email header and optional reason column, at most 1 MiB and 5,000 data rows. The entire file validates before mutation. Duplicate rows and existing entries keep the strongest reason: complained, then bounced, then unsubscribed, then manual.
 - Read a suppression before deleting it and pass confirm: true. Deletion means the address may receive future mail; it does not modify Cloudflare provider suppressions.
 - PaperBoy suppression state is provider-neutral and complements, but does not replace, the Cloudflare-managed cf-bounce and provider suppression pipeline.
+- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
+`;
+
+const audienceDocument = `# PaperBoy audiences and contacts
+
+- Audiences and contacts belong to the organization bound to the API key. Never pass an organization ID.
+- Current members can list and read. Owners and admins create, rename, delete, and import.
+- Each audience contains at most 100 contacts. CSV import accepts UTF-8 with an email header and optional name column, at most 1 MiB and 100 data rows. The complete file validates before mutation.
+- Import only contacts who gave the sender permission. PaperBoy does not provide a purchased-list marketplace.
+- paperboy_create_broadcast accepts audienceId, snapshots only active contacts, and appends a signed unsubscribe link when the template omitted one. Template data includes name, email, contact, and unsubscribe_url.
+- Opening an unsubscribe URL is read-only. The recipient must confirm; confirmation sets unsubscribed_at and creates an organization-wide unsubscribed suppression atomically.
+- PaperBoy links are HMAC-SHA256 signed with PAPERBOY_UNSUBSCRIBE_SIGNING_KEY and have no provider dependency. SMTP and Cloudflare Email Sending receive the same rendered link and body.
+- Cloudflare keeps its independent cf-bounce return path and provider suppression pipeline. PaperBoy unsubscribe state complements it and blocks before provider queue insertion.
 - Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
 `;
 
@@ -433,6 +463,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[6], webhookDocument],
     [resourceDefinitions[7], feedbackDocument],
     [resourceDefinitions[8], suppressionDocument],
+    [resourceDefinitions[9], audienceDocument],
   ] as const) {
     server.registerResource(
       resource.uri,
@@ -461,6 +492,13 @@ export function createPaperBoyMcpServer(
       },
     );
   }
+
+  registerPaperBoyAudienceTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.audiences,
+  });
 
   registerPaperBoyEmailTools({
     authorize: dependencies.authorize,

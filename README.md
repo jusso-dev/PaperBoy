@@ -139,7 +139,7 @@ For self-hosted SMTP, set `PAPERBOY_BOUNCE_ADDRESS` and route that address to th
 
 ### Suppression list
 
-The console, REST API, and first-class MCP tools manage the same organization suppression list. Owners and admins can create, update, remove, and atomically import UTF-8 CSV records; members can read them. Search and reason filters expose manual, permanent-bounce, and complaint entries with console timestamps in the signed-in user's IANA timezone and protocol timestamps in UTC.
+The console, REST API, and first-class MCP tools manage the same organization suppression list. Owners and admins can create, update, remove, and atomically import UTF-8 CSV records; members can read them. Search and reason filters expose manual, unsubscribed, permanent-bounce, and complaint entries with console timestamps in the signed-in user's IANA timezone and protocol timestamps in UTC.
 
 REST provides `GET`/`POST /api/v1/suppressions`, `GET`/`PATCH`/`DELETE /api/v1/suppressions/:suppressionId`, and `POST /api/v1/suppressions/import` with `Content-Type: text/csv`. CSV is bounded to 1 MiB and 5,000 rows, validates fully before mutation, and keeps the strongest reason across duplicates. The matching MCP tools expose the same CRUD/import services without accepting an organization ID.
 
@@ -193,24 +193,36 @@ Queue a template through the single or batch send API with the normal envelope f
 
 Do not combine `template_id` with inline `subject`, `html`, or `text`. PaperBoy resolves and validates rendered content before calculating idempotency or persisting the message. The stored queue record therefore contains the exact semantic content delivered later. SMTP MIME and Cloudflare Email Sending's structured payload are built from that same rendered subject, HTML, and text; Cloudflare remains responsible for its own Date and DKIM signature.
 
-### Simple broadcasts
+### Audiences, contacts, and broadcasts
 
-`POST /api/v1/broadcasts` sends one stored template now to a one-off audience snapshot of 1-100 unique addresses:
+Audiences are organization-owned collections of up to 100 permission-based contacts. Owners and admins manage them; members can read them. REST provides:
+
+- `GET`/`POST /api/v1/audiences`
+- `GET`/`PATCH`/`DELETE /api/v1/audiences/:audienceId`
+- `GET`/`POST /api/v1/audiences/:audienceId/contacts`
+- `GET`/`PATCH`/`DELETE /api/v1/audiences/:audienceId/contacts/:contactId`
+- `POST /api/v1/audiences/:audienceId/contacts/import` with `Content-Type: text/csv`
+
+Each contact stores normalized `email`, optional `name`, and UTC `unsubscribed_at`. CSV accepts UTF-8 with an `email` header and optional `name`, at most 1 MiB and 100 non-empty rows. The complete file validates before mutation, duplicate rows resolve deterministically, and replays report unchanged contacts. Import only recipients who gave permission; PaperBoy has no purchased-list marketplace.
+
+`POST /api/v1/broadcasts` sends one stored template now to a snapshot of one audience's active contacts:
 
 ```json
 {
   "name": "Morning edition",
   "from": "Newsroom <news@example.com>",
   "template_id": "00000000-0000-4000-8000-000000000000",
-  "audience": [
-    { "email": "reader@example.net", "data": { "reader": { "name": "Ada" } } }
-  ]
+  "audience_id": "00000000-0000-4000-8000-000000000001"
 }
 ```
 
-Creation snapshots the template and begins enqueueing immediately. Before each recipient is enqueued, PaperBoy checks the organization-owned `email_suppressions` table and confirms the originating API key remains active. Suppressed addresses never create message rows and are counted separately; key revocation pauses the broadcast. Every queued message uses the normal semantic queue path, so Cloudflare Email Sending and SMTP receive the same rendered provider-neutral content. Broadcasts do not inject open pixels or click tracking.
+Creation snapshots the template and active contacts, then begins enqueueing immediately. Template data exposes `name`, `email`, `contact.name`, `contact.email`, and `unsubscribe_url`. PaperBoy appends an unsubscribe footer to every available body format when the stored template omitted that variable. Before each recipient is enqueued, PaperBoy checks `unsubscribed_at`, the organization-owned `email_suppressions` table, and whether the originating API key remains active. Suppressed addresses never create message rows and are counted separately; key revocation pauses the broadcast. Broadcasts do not inject open pixels or click tracking.
 
-Progress is available from `GET /api/v1/broadcasts` and `GET /api/v1/broadcasts/:broadcastId`. Use `POST` on `/pause`, `/resume`, or `/cancel` beneath that broadcast URL. Pause takes effect after an already-processing recipient; resume handles pending recipients; cancel irreversibly marks pending recipients cancelled so they cannot be claimed. Responses expose counts, never audience addresses or rendered bodies. REST timestamps are RFC 3339 UTC; the console renders them in the signed-in user's persisted IANA timezone.
+Set `PAPERBOY_PUBLIC_URL` to the stable externally reachable origin and `PAPERBOY_UNSUBSCRIBE_SIGNING_KEY` to a dedicated Base64-encoded 32-byte key in every web and MCP process that can create broadcasts. Opening `/unsubscribe?token=...` is read-only so mail scanners cannot opt a contact out. Explicit confirmation verifies the HMAC-SHA256 PaperBoy token, sets `unsubscribed_at` for that address across the organization's audiences, and creates an `unsubscribed` suppression in one transaction. Tokens intentionally remain valid for old mail; rotating the signing key invalidates outstanding links.
+
+The signed URL and rendered footer are part of the provider-neutral semantic body before queue insertion. SMTP and Cloudflare Email Sending therefore receive the same unsubscribe behavior; PaperBoy does not replace or bypass Cloudflare's independent `cf-bounce` and provider suppression pipeline. See [audience, CSV, unsubscribe, MCP, timezone, and Cloudflare behavior](docs/audiences.md).
+
+Progress is available from `GET /api/v1/broadcasts` and `GET /api/v1/broadcasts/:broadcastId`. Use `POST` on `/pause`, `/resume`, or `/cancel` beneath that broadcast URL. Pause takes effect after an already-processing recipient; resume handles pending recipients; cancel irreversibly marks pending recipients cancelled so they cannot be claimed. Responses expose counts and the source audience ID, never contact addresses or rendered bodies. REST timestamps are RFC 3339 UTC; the console renders them in the signed-in user's persisted IANA timezone.
 
 ## Sending domains
 
@@ -250,6 +262,8 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
         "PAPERBOY_API_KEY": "<injected PaperBoy API key>",
         "PAPERBOY_DKIM_ENCRYPTION_KEY": "<injected base64-encoded 32-byte key>",
         "PAPERBOY_WEBHOOK_ENCRYPTION_KEY": "<injected different base64-encoded 32-byte key>",
+        "PAPERBOY_UNSUBSCRIBE_SIGNING_KEY": "<injected dedicated base64-encoded 32-byte key>",
+        "PAPERBOY_PUBLIC_URL": "https://paperboy.example",
         "PAPERBOY_ATTACHMENT_STORAGE_PATH": "<private shared attachment path>"
       }
     }
@@ -259,7 +273,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 
 Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
 
-The contract exposes capability/account context plus first-class single/batch sending, delivery-status list/get, ordered message-event timelines, signed webhook get/configure, template list/get/create/update/delete/preview, broadcast list/get/create/pause/resume/cancel, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, worker operation, signed webhook verification, templates, broadcasts, and DNS. `paperboy_list_delivery_statuses` and `paperboy_get_delivery_status` expose attempts, state times, and sanitized failures without recipients or message content. `paperboy_list_message_events` exposes the ordered lifecycle without recipients, content, event data, provider payloads, or the internal sequence. `paperboy_get_webhook` omits all secret material; `paperboy_configure_webhook` returns a signing secret only when first creating the endpoint. `paperboy_preview_template` renders sample JSON and lists missing required variables without queueing or sending mail. Broadcast tools expose aggregate progress without returning audience addresses or message bodies; cancellation requires explicit confirmation. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Template, broadcast, delivery, webhook, domain, and DKIM reads or mutations re-read the key creator's current membership and role; destructive cancellation/deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
+The contract exposes capability/account context plus first-class audience/contact CRUD and CSV import, single/batch sending, delivery-status list/get, ordered message-event timelines, signed webhook get/configure, template list/get/create/update/delete/preview, broadcast list/get/create/pause/resume/cancel, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, audiences, worker operation, signed webhook verification, templates, broadcasts, suppressions, and DNS. Audience/contact tools never accept an organization ID; destructive deletions require explicit confirmation. `paperboy_list_delivery_statuses` and `paperboy_get_delivery_status` expose attempts, state times, and sanitized failures without recipients or message content. `paperboy_list_message_events` exposes the ordered lifecycle without recipients, content, event data, provider payloads, or the internal sequence. `paperboy_get_webhook` omits all secret material; `paperboy_configure_webhook` returns a signing secret only when first creating the endpoint. `paperboy_preview_template` renders sample JSON and lists missing required variables without queueing or sending mail. Broadcast tools accept an audience ID and expose aggregate progress without returning contact addresses or message bodies; cancellation requires explicit confirmation. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Template, audience, contact, broadcast, delivery, webhook, domain, and DKIM reads or mutations re-read the key creator's current membership and role. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
 
 HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
 

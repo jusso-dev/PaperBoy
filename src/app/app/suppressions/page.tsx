@@ -31,6 +31,7 @@ const reasonLabels: Record<SuppressionReason, string> = {
   bounced: "Permanent bounce",
   complained: "Complaint",
   manual: "Manual",
+  unsubscribed: "Unsubscribed",
 };
 
 function safeCount(value: string | undefined): number {
@@ -141,7 +142,7 @@ export default async function SuppressionsPage({
               <p className="field-help">
                 UTF-8, at most 1 MiB and 5,000 rows. Header: <code>email</code>
                 {" "}with optional <code>reason</code>. Duplicate rows keep the
-                strongest reason: complaint, then bounce, then manual.
+                strongest reason: complaint, then bounce, unsubscribe, then manual.
               </p>
             </div>
             <button className="btn" type="submit">

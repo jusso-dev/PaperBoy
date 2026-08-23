@@ -1,6 +1,6 @@
 # Suppression list
 
-PaperBoy keeps one suppression list per organization. Reasons are `manual`, `bounced`, and `complained`. The same table is checked by single sends, idempotent replays, batches, broadcasts, HTTP, and MCP before a queue row is inserted. The gate is provider-neutral, so a suppressed address never reaches either the SMTP adapter or Cloudflare Email Sending.
+PaperBoy keeps one suppression list per organization. Reasons are `manual`, `unsubscribed`, `bounced`, and `complained`. The same table is checked by single sends, idempotent replays, batches, broadcasts, HTTP, and MCP before a queue row is inserted. The gate is provider-neutral, so a suppressed address never reaches either the SMTP adapter or Cloudflare Email Sending.
 
 Owners and admins can create, update, delete, and import suppressions. Current organization members can read them. Tenant context always comes from the signed-in session or bearer key; callers never supply an organization ID.
 
@@ -22,11 +22,12 @@ CSV must be UTF-8, no larger than 1 MiB, and contain at most 5,000 non-empty dat
 ```csv
 email,reason
 former-reader@example.net,manual
+opted-out@example.net,unsubscribed
 hard-bounce@example.net,bounced
 complaint@example.net,complained
 ```
 
-Quoted RFC-style fields, CRLF, LF, and a UTF-8 BOM are accepted. Unsupported columns, malformed quoting, invalid addresses, and unknown reasons reject the whole import before mutation. Duplicate CSV rows and existing records preserve the strongest reason: `complained`, then `bounced`, then `manual`. Replaying the same import is safe and reports unchanged rows.
+Quoted RFC-style fields, CRLF, LF, and a UTF-8 BOM are accepted. Unsupported columns, malformed quoting, invalid addresses, and unknown reasons reject the whole import before mutation. Duplicate CSV rows and existing records preserve the strongest reason: `complained`, then `bounced`, then `unsubscribed`, then `manual`. Replaying the same import is safe and reports unchanged rows.
 
 ## MCP and timezones
 

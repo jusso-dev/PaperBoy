@@ -79,7 +79,7 @@ function deliveryMode(value: string): MessageDeliveryMode {
 
 type RecipientSuppression = {
   email: string;
-  reason: "manual" | "bounced" | "complained";
+  reason: "manual" | "unsubscribed" | "bounced" | "complained";
 };
 
 function requireRecipientsNotSuppressed(
@@ -104,6 +104,8 @@ function requireRecipientsNotSuppressed(
               ? "Recipient is suppressed after a permanent bounce."
               : reason === "complained"
                 ? "Recipient is suppressed after a complaint."
+                : reason === "unsubscribed"
+                  ? "Recipient unsubscribed from organization mail."
                 : "Recipient is on the organization suppression list.",
         },
       ];

@@ -94,7 +94,12 @@ export type PaperBoyMcpSuppressionServices = {
   ) => Promise<SuppressionRecord>;
 };
 
-const suppressionReasonSchema = z.enum(["manual", "bounced", "complained"]);
+const suppressionReasonSchema = z.enum([
+  "manual",
+  "unsubscribed",
+  "bounced",
+  "complained",
+]);
 const suppressionIdSchema = z.string().uuid();
 const suppressionOutputSchema = z.object({
   createdAt: z.iso.datetime({ offset: true }),

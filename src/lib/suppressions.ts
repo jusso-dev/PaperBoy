@@ -77,7 +77,13 @@ function searchPattern(query: string): string {
 }
 
 function reasonRank(reason: SuppressionReason): number {
-  return reason === "complained" ? 2 : reason === "bounced" ? 1 : 0;
+  return reason === "complained"
+    ? 3
+    : reason === "bounced"
+      ? 2
+      : reason === "unsubscribed"
+        ? 1
+        : 0;
 }
 
 export async function listSuppressions(input: {

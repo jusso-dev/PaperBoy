@@ -7,6 +7,7 @@ test("the stdio service graph loads outside the Next.js compiler", async () => {
   const [
     apiKeyAuth,
     organizations,
+    audiences,
     broadcasts,
     deliveries,
     domains,
@@ -15,6 +16,7 @@ test("the stdio service graph loads outside the Next.js compiler", async () => {
   ] = await Promise.all([
     import("../src/lib/api-key-auth.ts"),
     import("../src/lib/organization-reader.ts"),
+    import("../src/mcp/audience-services.ts"),
     import("../src/mcp/broadcast-services.ts"),
     import("../src/mcp/delivery-services.ts"),
     import("../src/mcp/domain-services.ts"),
@@ -24,6 +26,7 @@ test("the stdio service graph loads outside the Next.js compiler", async () => {
 
   assert.equal(typeof apiKeyAuth.authenticateApiKey, "function");
   assert.equal(typeof organizations.findOrganizationById, "function");
+  assert.equal(typeof audiences.paperBoyMcpAudienceServices.listAudiences, "function");
   assert.equal(typeof broadcasts.paperBoyMcpBroadcastServices.list, "function");
   assert.equal(typeof deliveries.paperBoyMcpDeliveryServices.list, "function");
   assert.equal(typeof domains.paperBoyMcpDomainServices.list, "function");

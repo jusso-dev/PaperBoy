@@ -11,6 +11,8 @@ import {
 const matrix = {
   owner: new Set(ORG_PERMISSIONS),
   admin: new Set([
+    "audiences.manage",
+    "audiences.read",
     "apiKeys.create",
     "apiKeys.read",
     "apiKeys.revoke",
@@ -36,6 +38,7 @@ const matrix = {
     "webhooks.read",
   ]),
   member: new Set([
+    "audiences.read",
     "broadcasts.read",
     "domains.read",
     "members.read",
@@ -65,6 +68,8 @@ test("members cannot mint API keys or delete domains", () => {
   assert.equal(can("member", "feedback.ingest"), false);
   assert.equal(can("member", "suppressions.read"), true);
   assert.equal(can("member", "suppressions.manage"), false);
+  assert.equal(can("member", "audiences.read"), true);
+  assert.equal(can("member", "audiences.manage"), false);
   assert.throws(
     () => requirePermission("member", "apiKeys.create"),
     AuthorizationError,

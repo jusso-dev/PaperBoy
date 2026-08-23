@@ -1,7 +1,8 @@
 import { normalizeEmailAddress } from "@/lib/email-core";
+import { MAX_AUDIENCE_CONTACTS } from "@/lib/audience-core";
 
 export const MAX_BROADCAST_NAME_LENGTH = 120;
-export const MAX_BROADCAST_RECIPIENTS = 100;
+export const MAX_BROADCAST_RECIPIENTS = MAX_AUDIENCE_CONTACTS;
 
 export const BROADCAST_STATUSES = [
   "running",
@@ -43,21 +44,14 @@ export class BroadcastError extends Error {
   }
 }
 
-export type BroadcastAudienceMember = {
-  data: Record<string, unknown>;
-  email: string;
-  position: number;
-};
-
 export type CreateBroadcastInput = {
-  audience: BroadcastAudienceMember[];
+  audienceId: string;
   from: string;
   name: string;
   templateId: string;
 };
 
-const CREATE_FIELDS = new Set(["audience", "from", "name", "template_id"]);
-const AUDIENCE_FIELDS = new Set(["data", "email"]);
+const CREATE_FIELDS = new Set(["audience_id", "from", "name", "template_id"]);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -118,70 +112,13 @@ export function parseCreateBroadcastInput(value: unknown): CreateBroadcastInput 
     });
   }
 
-  if (!Array.isArray(value.audience)) {
+  const audienceId =
+    typeof value.audience_id === "string" ? value.audience_id : "";
+
+  if (!UUID_PATTERN.test(audienceId)) {
     issues.push({
-      field: "audience",
-      message: "Provide an array of audience members.",
-    });
-  } else if (
-    value.audience.length === 0 ||
-    value.audience.length > MAX_BROADCAST_RECIPIENTS
-  ) {
-    issues.push({
-      field: "audience",
-      message: `Provide 1-${MAX_BROADCAST_RECIPIENTS} audience members.`,
-    });
-  }
-
-  const audience: BroadcastAudienceMember[] = [];
-  const seen = new Set<string>();
-
-  if (Array.isArray(value.audience)) {
-    value.audience.slice(0, MAX_BROADCAST_RECIPIENTS).forEach((candidate, position) => {
-      const field = `audience.${position}`;
-
-      if (!isRecord(candidate)) {
-        issues.push({ field, message: "Must be an object." });
-        return;
-      }
-
-      Object.keys(candidate)
-        .filter((key) => !AUDIENCE_FIELDS.has(key))
-        .forEach((key) => {
-          issues.push({
-            field: `${field}.${key}`,
-            message: "This field is not supported.",
-          });
-        });
-
-      const email = normalizeEmailAddress(candidate.email);
-
-      if (!email) {
-        issues.push({
-          field: `${field}.email`,
-          message: "Enter a valid email address.",
-        });
-      } else if (seen.has(email)) {
-        issues.push({
-          field: `${field}.email`,
-          message: "Each audience email must be unique.",
-        });
-      } else {
-        seen.add(email);
-      }
-
-      const data = candidate.data === undefined ? {} : candidate.data;
-
-      if (!isRecord(data)) {
-        issues.push({
-          field: `${field}.data`,
-          message: "Must be a JSON object.",
-        });
-      }
-
-      if (email && isRecord(data)) {
-        audience.push({ data, email, position });
-      }
+      field: "audience_id",
+      message: "Provide a valid audience UUID.",
     });
   }
 
@@ -189,5 +126,5 @@ export function parseCreateBroadcastInput(value: unknown): CreateBroadcastInput 
     throw new BroadcastError("VALIDATION_ERROR", issues.slice(0, 100));
   }
 
-  return { audience, from, name, templateId };
+  return { audienceId, from, name, templateId };
 }

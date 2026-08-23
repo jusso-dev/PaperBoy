@@ -431,7 +431,74 @@ export const emailSuppressions = pgTable(
     ),
     check(
       "email_suppressions_reason_check",
-      sql`${table.reason} in ('manual', 'bounced', 'complained')`,
+      sql`${table.reason} in ('manual', 'unsubscribed', 'bounced', 'complained')`,
+    ),
+  ],
+);
+
+export const audiences = pgTable(
+  "audiences",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("audiences_org_id_name_unique").on(
+      table.orgId,
+      sql`lower(${table.name})`,
+    ),
+    index("audiences_org_id_created_at_idx").on(table.orgId, table.createdAt),
+    check(
+      "audiences_name_length_check",
+      sql`char_length(btrim(${table.name})) between 1 and 120`,
+    ),
+  ],
+);
+
+export const contacts = pgTable(
+  "contacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    audienceId: uuid("audience_id")
+      .notNull()
+      .references(() => audiences.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    name: text("name"),
+    unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("contacts_audience_id_email_unique").on(
+      table.audienceId,
+      table.email,
+    ),
+    index("contacts_audience_id_created_at_idx").on(
+      table.audienceId,
+      table.createdAt,
+    ),
+    check(
+      "contacts_email_check",
+      sql`char_length(${table.email}) between 3 and 254 and lower(${table.email}) = ${table.email}`,
+    ),
+    check(
+      "contacts_name_length_check",
+      sql`${table.name} is null or char_length(btrim(${table.name})) between 1 and 200`,
     ),
   ],
 );
@@ -449,6 +516,10 @@ export const broadcasts = pgTable(
     createdByUserId: text("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    sourceAudienceId: uuid("source_audience_id").references(
+      () => audiences.id,
+      { onDelete: "set null" },
+    ),
     sourceTemplateId: uuid("source_template_id").references(
       () => emailTemplates.id,
       { onDelete: "set null" },
@@ -643,6 +714,9 @@ export const broadcastRecipients = pgTable(
     broadcastId: uuid("broadcast_id")
       .notNull()
       .references(() => broadcasts.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
     messageId: uuid("message_id").references(() => messages.id, {
       onDelete: "set null",
     }),
@@ -681,6 +755,7 @@ export const broadcastRecipients = pgTable(
       table.position,
     ),
     index("broadcast_recipients_message_id_idx").on(table.messageId),
+    index("broadcast_recipients_contact_id_idx").on(table.contactId),
     check(
       "broadcast_recipients_position_check",
       sql`${table.position} between 0 and 99`,

@@ -16,6 +16,13 @@ test("suppression CRUD input normalizes one plain address and bounded filters", 
     { email: "reader@example.net", reason: "manual" },
   );
   assert.deepEqual(
+    parseCreateSuppressionInput({
+      email: "opted-out@example.net",
+      reason: "unsubscribed",
+    }),
+    { email: "opted-out@example.net", reason: "unsubscribed" },
+  );
+  assert.deepEqual(
     parseUpdateSuppressionInput({
       email: "new@example.net",
       reason: "complained",

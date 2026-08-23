@@ -44,8 +44,8 @@ export default async function BroadcastsPage({
     <section>
       <h1 className="page-title">Broadcasts</h1>
       <p className="page-sub">
-        Send-now audience snapshots created through REST or MCP. Progress times
-        use <code>{session.user.timezone}</code>.
+        Send-now snapshots of stored audiences created through REST or MCP.
+        Progress times use <code>{session.user.timezone}</code>.
       </p>
 
       {status.error ? (
@@ -64,7 +64,8 @@ export default async function BroadcastsPage({
       ) : records.length === 0 ? (
         <p className="empty-state">
           No broadcasts yet. Use <code>POST /api/v1/broadcasts</code> or the
-          MCP broadcast tool to send one template to up to 100 recipients.
+          MCP broadcast tool with an audience ID to send one template to up to
+          100 active contacts.
         </p>
       ) : (
         <div className="broadcast-list">

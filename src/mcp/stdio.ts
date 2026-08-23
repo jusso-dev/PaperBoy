@@ -16,6 +16,7 @@ async function main() {
   const [
     { authenticateApiKey },
     { findOrganizationById },
+    { paperBoyMcpAudienceServices },
     { paperBoyMcpBroadcastServices },
     { paperBoyMcpDomainServices },
     { paperBoyMcpDeliveryServices },
@@ -27,6 +28,7 @@ async function main() {
   ] = await Promise.all([
     import("@/lib/api-key-auth"),
     import("@/lib/organization-reader"),
+    import("@/mcp/audience-services"),
     import("@/mcp/broadcast-services"),
     import("@/mcp/domain-services"),
     import("@/mcp/delivery-services"),
@@ -48,6 +50,7 @@ async function main() {
     () =>
       createPaperBoyMcpServer({
         authorize: () => authenticateApiKey(rawApiKey),
+        audiences: paperBoyMcpAudienceServices,
         broadcasts: paperBoyMcpBroadcastServices,
         deliveries: paperBoyMcpDeliveryServices,
         domains: paperBoyMcpDomainServices,

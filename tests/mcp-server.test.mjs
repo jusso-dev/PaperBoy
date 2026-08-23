@@ -114,6 +114,23 @@ const firstSuppression = {
   reason: "complained",
   updatedAt: fixedNow,
 };
+const firstAudience = {
+  activeContactCount: 1,
+  contactCount: 1,
+  createdAt: fixedNow,
+  id: "12121212-1212-4212-8212-121212121212",
+  name: "Weekly readers",
+  updatedAt: fixedNow,
+};
+const firstContact = {
+  audienceId: firstAudience.id,
+  createdAt: fixedNow,
+  email: "reader@example.net",
+  id: "13131313-1313-4313-8313-131313131313",
+  name: "Ada",
+  unsubscribedAt: null,
+  updatedAt: fixedNow,
+};
 const firstTemplate = {
   createdAt: fixedNow,
   html: "<p>Hello {{reader.name}}</p>",
@@ -142,11 +159,36 @@ const firstBroadcast = {
     suppressed: 2,
     total: 20,
   },
+  sourceAudienceId: firstAudience.id,
   sourceTemplateId: firstTemplate.id,
   status: "completed",
   templateName: firstTemplate.name,
   updatedAt: fixedNow,
 };
+
+function audienceServices(overrides = {}) {
+  return {
+    createAudience: async () => firstAudience,
+    createContact: async () => firstContact,
+    deleteAudience: async () => undefined,
+    deleteContact: async () => undefined,
+    getAudience: async () => firstAudience,
+    getContact: async () => firstContact,
+    importContacts: async () => ({
+      created: 1,
+      importedAt: fixedNow,
+      inputRows: 2,
+      unchanged: 1,
+      uniqueRows: 2,
+      updated: 0,
+    }),
+    listAudiences: async () => [firstAudience],
+    listContacts: async () => [firstContact],
+    updateAudience: async () => firstAudience,
+    updateContact: async () => firstContact,
+    ...overrides,
+  };
+}
 
 function broadcastServices(overrides = {}) {
   return {
@@ -269,6 +311,7 @@ async function withClient(dependencies, run) {
 function dependencies(overrides = {}) {
   return {
     authorize: async () => firstPrincipal,
+    audiences: audienceServices(),
     broadcasts: broadcastServices(),
     deliveries: deliveryServices(),
     domains: domainServices(),
@@ -287,6 +330,17 @@ test("initializes and publishes versioned tool schemas", async () => {
   await withClient(dependencies(), async (client) => {
     const { tools } = await client.listTools();
     const outputSchemaSnapshots = {
+      paperboy_create_audience: ["audience", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_create_contact: ["contact", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_delete_audience: ["deletedId", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_delete_contact: ["deletedId", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_get_audience: ["audience", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_get_contact: ["contact", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_import_contacts: ["created", "importedAt", "inputRows", "unchanged", "uniqueRows", "updated", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_list_audiences: ["audiences", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_list_contacts: ["contacts", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_update_audience: ["audience", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_update_contact: ["contact", "observedAt", "protocolTimeZone", "schemaVersion"],
       paperboy_cancel_broadcast: [
         "broadcast",
         "observedAt",
@@ -516,8 +570,19 @@ test("initializes and publishes versioned tool schemas", async () => {
       ],
     };
     const inputSchemaSnapshots = {
+      paperboy_create_audience: ["name"],
+      paperboy_create_contact: ["audienceId", "email", "name"],
+      paperboy_delete_audience: ["audienceId", "confirm"],
+      paperboy_delete_contact: ["audienceId", "contactId", "confirm"],
+      paperboy_get_audience: ["audienceId"],
+      paperboy_get_contact: ["audienceId", "contactId"],
+      paperboy_import_contacts: ["audienceId", "csv"],
+      paperboy_list_audiences: [],
+      paperboy_list_contacts: ["audienceId"],
+      paperboy_update_audience: ["audienceId", "name"],
+      paperboy_update_contact: ["audienceId", "contactId", "email", "name"],
       paperboy_cancel_broadcast: ["broadcastId", "confirm"],
-      paperboy_create_broadcast: ["audience", "from", "name", "templateId"],
+      paperboy_create_broadcast: ["audienceId", "from", "name", "templateId"],
       paperboy_create_domain: ["name"],
       paperboy_create_template: [
         "html",
@@ -577,7 +642,8 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_verify_domain: ["domainId"],
     };
     const requiredInputSchemaSnapshots = {
-      paperboy_create_broadcast: ["audience", "from", "name", "templateId"],
+      paperboy_create_broadcast: ["audienceId", "from", "name", "templateId"],
+      paperboy_create_contact: ["audienceId", "email"],
       paperboy_create_template: ["name", "subject"],
       paperboy_create_suppression: ["email"],
       paperboy_ingest_feedback: ["rawReportBase64"],
@@ -587,8 +653,20 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_send_email: ["from", "to"],
       paperboy_update_template: ["templateId"],
       paperboy_update_suppression: ["suppressionId"],
+      paperboy_update_contact: ["audienceId", "contactId"],
     };
     const annotationSnapshots = {
+      paperboy_create_audience: { destructive: false, readOnly: false },
+      paperboy_create_contact: { destructive: false, readOnly: false },
+      paperboy_delete_audience: { destructive: true, readOnly: false },
+      paperboy_delete_contact: { destructive: true, readOnly: false },
+      paperboy_get_audience: { destructive: false, readOnly: true },
+      paperboy_get_contact: { destructive: false, readOnly: true },
+      paperboy_import_contacts: { destructive: false, readOnly: false },
+      paperboy_list_audiences: { destructive: false, readOnly: true },
+      paperboy_list_contacts: { destructive: false, readOnly: true },
+      paperboy_update_audience: { destructive: false, readOnly: false },
+      paperboy_update_contact: { destructive: false, readOnly: false },
       paperboy_cancel_broadcast: { destructive: true, readOnly: false },
       paperboy_create_broadcast: { destructive: false, readOnly: false },
       paperboy_create_domain: { destructive: false, readOnly: false },
@@ -786,6 +864,13 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     assert.match(suppressionGuide.contents[0].text, /5,000 data rows/);
     assert.match(suppressionGuide.contents[0].text, /recipient_suppressed/);
     assert.match(suppressionGuide.contents[0].text, /Cloudflare Email Sending/);
+
+    const audienceGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[9],
+    });
+    assert.match(audienceGuide.contents[0].text, /PAPERBOY_UNSUBSCRIBE_SIGNING_KEY/);
+    assert.match(audienceGuide.contents[0].text, /permission/);
+    assert.match(audienceGuide.contents[0].text, /Cloudflare Email Sending/);
   });
 });
 
@@ -844,15 +929,75 @@ test("domain tools pass the authenticated tenant and actor to shared services", 
   );
 });
 
+test("audiences and contacts are first-class tenant-bound MCP operations", async () => {
+  const calls = [];
+  await withClient(
+    dependencies({
+      audiences: audienceServices({
+        createContact: async (principal, audienceId, payload) => {
+          calls.push(["createContact", principal, audienceId, payload]);
+          return firstContact;
+        },
+        importContacts: async (principal, audienceId, csv) => {
+          calls.push(["importContacts", principal, audienceId, csv]);
+          return audienceServices().importContacts();
+        },
+        listAudiences: async (principal) => {
+          calls.push(["listAudiences", principal]);
+          return [firstAudience];
+        },
+      }),
+    }),
+    async (client) => {
+      const listed = await client.callTool({
+        arguments: {},
+        name: "paperboy_list_audiences",
+      });
+      const created = await client.callTool({
+        arguments: {
+          audienceId: firstAudience.id,
+          email: firstContact.email,
+          name: firstContact.name,
+        },
+        name: "paperboy_create_contact",
+      });
+      const imported = await client.callTool({
+        arguments: {
+          audienceId: firstAudience.id,
+          csv: "email,name\nreader@example.net,Ada\n",
+        },
+        name: "paperboy_import_contacts",
+      });
+
+      assert.equal(listed.structuredContent.audiences[0].name, firstAudience.name);
+      assert.equal(listed.structuredContent.protocolTimeZone, "UTC");
+      assert.equal(created.structuredContent.contact.email, firstContact.email);
+      assert.equal(created.structuredContent.contact.unsubscribedAt, null);
+      assert.equal(imported.structuredContent.importedAt, fixedNow.toISOString());
+      assert.deepEqual(calls, [
+        ["listAudiences", firstPrincipal],
+        [
+          "createContact",
+          firstPrincipal,
+          firstAudience.id,
+          { email: firstContact.email, name: firstContact.name },
+        ],
+        [
+          "importContacts",
+          firstPrincipal,
+          firstAudience.id,
+          "email,name\nreader@example.net,Ada\n",
+        ],
+      ]);
+      assert.equal(JSON.stringify(calls).includes("organizationId"), false);
+    },
+  );
+});
+
 test("broadcasts are first-class tenant-bound MCP operations with UTC progress", async () => {
   const calls = [];
   const payload = {
-    audience: [
-      {
-        data: { reader: { name: "Ada" } },
-        email: "reader@example.net",
-      },
-    ],
+    audienceId: firstAudience.id,
     from: "news@example.com",
     name: "Morning edition",
     templateId: firstTemplate.id,
