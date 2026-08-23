@@ -452,6 +452,42 @@ select:focus-visible {
   margin-bottom: 0;
 }
 
+.send-compose-form {
+  display: grid;
+  gap: 18px;
+}
+
+.send-envelope-grid,
+.send-body-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.send-compose-form .field {
+  margin-bottom: 0;
+}
+
+.send-body-grid textarea {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  resize: vertical;
+}
+
+.send-submit-row {
+  align-items: center;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding-top: 16px;
+}
+
+.send-submit-row p {
+  color: var(--ink-soft);
+  font-size: 14px;
+  max-width: 62ch;
+}
+
 .pending-invitations {
   border-top: 1px solid var(--rule);
   margin-top: 22px;
@@ -1196,8 +1232,15 @@ select:focus-visible {
   }
 
   .rate-limit-form,
-  .rate-limit-summary {
+  .rate-limit-summary,
+  .send-envelope-grid,
+  .send-body-grid {
     grid-template-columns: 1fr;
+  }
+
+  .send-submit-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .api-key-form {

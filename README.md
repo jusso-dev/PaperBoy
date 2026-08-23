@@ -43,6 +43,12 @@ Windows are fixed UTC minutes. The counter update and queue insert share one dat
 
 The gate runs before provider queue insertion. Self-hosted SMTP and Cloudflare Email Sending therefore receive identical behavior, without Redis or a provider-specific counter. See the [rate-limit API, MCP, concurrency, timezone, and Cloudflare guide](docs/rate-limits.md).
 
+## Console test send
+
+The signed-in console at `/app/send` lets owners and admins compose one provider test from a verified domain. It enters the same live queue used by `POST /api/v1/emails` and `paperboy_send_email`, including domain/DKIM authorisation, suppressions, organization rate limits, delivery events, and logs. Members can inspect delivery records but cannot queue a console send. Success timestamps render in the signed-in user's IANA timezone; stored and protocol timestamps remain UTC.
+
+This is a real provider check rather than isolated test-sink traffic. A development worker configured for Mailpit captures it, while a production worker configured for Cloudflare Email Service submits it through the same live SMTP adapter. Use a safe recipient address.
+
 ## Send API
 
 `POST /api/v1/emails` accepts a Resend-shaped JSON body and returns the queued message ID:

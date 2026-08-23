@@ -43,6 +43,10 @@ export type QueuedMessageRecord = {
   status: MessageStatus;
 };
 
+export type MessageQueuePrincipal = Omit<ApiKeyPrincipal, "apiKeyId"> & {
+  apiKeyId: string | null;
+};
+
 export type QueuedMessageBatchItem =
   | {
       error: unknown;
@@ -160,7 +164,7 @@ export async function queueEmail(input: {
   attachmentStore?: AttachmentStore;
   idempotencyKey?: unknown;
   payload: unknown;
-  principal: ApiKeyPrincipal;
+  principal: MessageQueuePrincipal;
   rateLimitNow?: Date;
 }): Promise<QueuedMessageRecord> {
   const payload = await materializeTemplateSendPayload({
@@ -171,14 +175,18 @@ export async function queueEmail(input: {
     allowAttachments: input.allowAttachments,
   });
   const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
+  const apiKeyId = input.principal.apiKeyId;
+  if (idempotencyKey && !apiKeyId) {
+    throw new Error("Idempotency keys require an API-key queue principal.");
+  }
   const requestHash = emailRequestHash(email);
   const normalizedRecipients = email.to.flatMap(
     (recipient) => normalizeEmailAddress(recipient) ?? [],
   );
 
-  if (idempotencyKey) {
+  if (idempotencyKey && apiKeyId) {
     const existing = await findIdempotentMessage(
-      input.principal.apiKeyId,
+      apiKeyId,
       idempotencyKey,
     );
 
@@ -236,7 +244,7 @@ export async function queueEmail(input: {
       const [inserted] = await tx
         .insert(messages)
         .values({
-          apiKeyId: input.principal.apiKeyId,
+          apiKeyId,
           deliveryMode: domain.mode,
           domainId: domain.domainId,
           environment: input.principal.environment,
@@ -313,9 +321,9 @@ export async function queueEmail(input: {
       storedKeys.map((storageKey) => attachmentStore.delete(storageKey)),
     );
 
-    if (idempotencyKey && isUniqueViolation(error)) {
+    if (idempotencyKey && apiKeyId && isUniqueViolation(error)) {
       const existing = await findIdempotentMessage(
-        input.principal.apiKeyId,
+        apiKeyId,
         idempotencyKey,
       );
 
@@ -330,7 +338,7 @@ export async function queueEmail(input: {
 
 export async function queueEmailBatch(input: {
   payloads: unknown[];
-  principal: ApiKeyPrincipal;
+  principal: MessageQueuePrincipal;
   rateLimitNow?: Date;
 }): Promise<QueuedMessageBatchItem[]> {
   return Promise.all(
