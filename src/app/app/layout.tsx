@@ -9,8 +9,8 @@ const navItems = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      <aside>
+    <div className="shell">
+      <aside className="sidebar">
         <Link href="/" className="masthead">PaperBoy</Link>
         <nav>
           <ul>
@@ -22,7 +22,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </ul>
         </nav>
       </aside>
-      <main>{children}</main>
+      <main className="console-main">{children}</main>
     </div>
   );
 }
