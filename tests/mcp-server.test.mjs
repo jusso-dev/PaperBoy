@@ -57,6 +57,15 @@ const firstDomain = {
   verificationToken: "44444444-4444-4444-8444-444444444444",
   verifiedAt: null,
 };
+const firstMessage = {
+  createdAt: fixedNow,
+  deliveryMode: "test-sink",
+  domainId: null,
+  environment: "test",
+  id: "66666666-6666-4666-8666-666666666666",
+  replayed: false,
+  status: "queued",
+};
 
 function domainServices(overrides = {}) {
   return {
@@ -68,6 +77,13 @@ function domainServices(overrides = {}) {
     rotateDkim: async () => firstDomain,
     setupDkim: async () => firstDomain,
     verify: async () => firstDomain,
+    ...overrides,
+  };
+}
+
+function emailServices(overrides = {}) {
+  return {
+    queue: async () => firstMessage,
     ...overrides,
   };
 }
@@ -97,6 +113,7 @@ function dependencies(overrides = {}) {
   return {
     authorize: async () => firstPrincipal,
     domains: domainServices(),
+    emails: emailServices(),
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
     ...overrides,
@@ -147,6 +164,16 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
       ],
+      paperboy_send_email: [
+        "deliveryMode",
+        "environment",
+        "id",
+        "protocolTimeZone",
+        "queuedAt",
+        "replayed",
+        "schemaVersion",
+        "status",
+      ],
       paperboy_rotate_domain_dkim: [
         "domain",
         "observedAt",
@@ -174,8 +201,20 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_capabilities: [],
       paperboy_list_domains: [],
       paperboy_rotate_domain_dkim: ["domainId"],
+      paperboy_send_email: [
+        "from",
+        "html",
+        "idempotencyKey",
+        "subject",
+        "tags",
+        "text",
+        "to",
+      ],
       paperboy_setup_domain_dkim: ["domainId"],
       paperboy_verify_domain: ["domainId"],
+    };
+    const requiredInputSchemaSnapshots = {
+      paperboy_send_email: ["from", "subject", "to"],
     };
     const annotationSnapshots = {
       paperboy_create_domain: { destructive: false, readOnly: false },
@@ -188,6 +227,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_capabilities: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
       paperboy_rotate_domain_dkim: { destructive: false, readOnly: false },
+      paperboy_send_email: { destructive: false, readOnly: false },
       paperboy_setup_domain_dkim: { destructive: false, readOnly: false },
       paperboy_verify_domain: { destructive: false, readOnly: false },
     };
@@ -210,7 +250,8 @@ test("initializes and publishes versioned tool schemas", async () => {
       );
       assert.deepEqual(
         tool.inputSchema.required ?? [],
-        inputSchemaSnapshots[tool.name],
+        requiredInputSchemaSnapshots[tool.name] ??
+          inputSchemaSnapshots[tool.name],
       );
       assert.equal(
         tool._meta?.["paperboy/schemaVersion"],
@@ -358,6 +399,58 @@ test("domain tools pass the authenticated tenant and actor to shared services", 
         name: "mail.example.com",
         principal: firstPrincipal,
       });
+    },
+  );
+});
+
+test("sending is a first-class tenant-bound MCP operation with UTC metadata", async () => {
+  let received = null;
+
+  await withClient(
+    dependencies({
+      emails: emailServices({
+        queue: async (principal, payload, idempotencyKey) => {
+          received = { idempotencyKey, payload, principal };
+          return firstMessage;
+        },
+      }),
+    }),
+    async (client) => {
+      const result = await client.callTool({
+        arguments: {
+          from: "sender@example.com",
+          idempotencyKey: "message-123",
+          subject: "Hello",
+          tags: [{ name: "kind", value: "receipt" }],
+          text: "Body",
+          to: ["reader@example.net"],
+        },
+        name: "paperboy_send_email",
+      });
+
+      assert.equal(result.isError, undefined);
+      assert.deepEqual(received, {
+        idempotencyKey: "message-123",
+        payload: {
+          from: "sender@example.com",
+          subject: "Hello",
+          tags: [{ name: "kind", value: "receipt" }],
+          text: "Body",
+          to: ["reader@example.net"],
+        },
+        principal: firstPrincipal,
+      });
+      assert.deepEqual(result.structuredContent, {
+        deliveryMode: "test-sink",
+        environment: "test",
+        id: firstMessage.id,
+        protocolTimeZone: "UTC",
+        queuedAt: fixedNow.toISOString(),
+        replayed: false,
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+        status: "queued",
+      });
+      assert.equal(JSON.stringify(result).includes("Body"), false);
     },
   );
 });

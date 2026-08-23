@@ -1,0 +1,21 @@
+-- Throwaway-database rollback for queued email content and idempotency.
+ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_idempotency_key_length_check";
+ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_idempotency_state_check";
+ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_body_check";
+ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_tags_array_check";
+ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_to_array_check";
+ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_delivery_mode_check";
+ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_environment_check";
+ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_status_check";
+DROP INDEX IF EXISTS "messages_status_created_at_idx";
+DROP INDEX IF EXISTS "messages_api_key_id_idempotency_key_unique";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "request_hash";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "idempotency_key";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "delivery_mode";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "environment";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "tags";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "text";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "html";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "subject";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "to";
+ALTER TABLE "messages" DROP COLUMN IF EXISTS "from";

@@ -1,22 +1,10 @@
-import {
-  apiKeyUnauthorizedResponse,
-  authenticateApiRequest,
-} from "@/lib/api-key-request";
+import { authenticateApiRequest } from "@/lib/api-key-request";
+import { handleSendEmailRequest } from "@/lib/email-http";
+import { queueEmail } from "@/lib/messages";
 
 export async function POST(request: Request) {
-  const principal = await authenticateApiRequest(request);
-
-  if (!principal) {
-    return apiKeyUnauthorizedResponse();
-  }
-
-  return Response.json(
-    {
-      error: {
-        code: "not_implemented",
-        message: "Email sending is not available in this build.",
-      },
-    },
-    { status: 501 },
-  );
+  return handleSendEmailRequest(request, {
+    authenticate: authenticateApiRequest,
+    queue: queueEmail,
+  });
 }

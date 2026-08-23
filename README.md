@@ -35,6 +35,37 @@ The matching SQL in `drizzle/down/` exists only to prove rollback on a throwaway
 
 The console mints `pb_live_` and `pb_test_` bearer keys. A key contains a public identifier and a 256-bit secret; PostgreSQL stores the identifier and SHA-256 hash, never the raw key. The raw value is shown once. Revocation is enforced by the shared HTTP/MCP authentication boundary on the next request.
 
+## Send API
+
+`POST /api/v1/emails` accepts a Resend-shaped JSON body and returns the queued message ID:
+
+```sh
+curl https://paperboy.example/api/v1/emails \
+  -H 'Authorization: Bearer <PaperBoy API key>' \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: order-123-receipt' \
+  --data '{
+    "from": "PaperBoy <news@mail.example.com>",
+    "to": ["reader@example.net"],
+    "subject": "Morning edition",
+    "html": "<p>Hello</p>",
+    "text": "Hello",
+    "tags": [{"name": "edition", "value": "morning"}]
+  }'
+```
+
+```json
+{"id":"00000000-0000-4000-8000-000000000000"}
+```
+
+`to` accepts one address or an array of up to 50. Provide non-empty `html` or `text`; `subject` is required. Tags use `{name, value}` pairs with ASCII letters, numbers, underscores, or dashes. Invalid JSON returns 400. Invalid fields, including missing `from` or `to`, return structured JSON with 422.
+
+A live key can queue only from a verified domain in its organization with an active PaperBoy DKIM key. A test key always queues to the isolated `test-sink` mode and cannot become live delivery. `Idempotency-Key` is optional, scoped to the API key, and limited to 256 visible ASCII characters. Repeating the same normalized request returns the original ID; changing the request under the same key returns 409.
+
+The queue stores semantic `from`, `to`, subject, HTML/text, and tags rather than prebuilt MIME. This leaves Date and DKIM ownership to the selected outbound adapter: a self-hosted SMTP path can use PaperBoy signing, while Cloudflare Email Sending can construct and sign its provider-managed message without double-signing. This endpoint persists `queued` rows; the outbound worker is a separate deployment component.
+
+Message instants are PostgreSQL `timestamptz` values. MCP exposes them as RFC 3339 UTC; future console presentation uses the signed-in user's persisted IANA timezone.
+
 ## Sending domains
 
 Add a domain in the console or through MCP to get exact ownership, SPF, and DKIM TXT records, plus starter DMARC guidance. PaperBoy checks DNS from the application host. Ownership, SPF, and an active DKIM selector must match before the domain becomes verified; a later failed check returns it to pending so live delivery cannot continue on stale state.

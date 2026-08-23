@@ -12,6 +12,11 @@ import {
 } from "drizzle-orm/pg-core";
 import type { DomainDnsCheckSnapshot } from "@/lib/domain-core";
 import type { DkimKeyStatus } from "@/lib/dkim-core";
+import type {
+  EmailTag,
+  MessageDeliveryMode,
+  MessageStatus,
+} from "@/lib/email-core";
 
 export const orgs = pgTable("orgs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -342,18 +347,71 @@ export const messages = pgTable(
     apiKeyId: uuid("api_key_id").references(() => apiKeys.id, {
       onDelete: "set null",
     }),
-    status: text("status").default("queued").notNull(),
+    from: text("from").notNull(),
+    to: jsonb("to").$type<string[]>().notNull(),
+    subject: text("subject").notNull(),
+    html: text("html"),
+    textBody: text("text"),
+    tags: jsonb("tags")
+      .$type<EmailTag[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    environment: text("environment").default("test").notNull(),
+    deliveryMode: text("delivery_mode")
+      .$type<MessageDeliveryMode>()
+      .default("test-sink")
+      .notNull(),
+    idempotencyKey: text("idempotency_key"),
+    requestHash: text("request_hash"),
+    status: text("status").$type<MessageStatus>().default("queued").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
+      .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [
+    uniqueIndex("messages_api_key_id_idempotency_key_unique")
+      .on(table.apiKeyId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} is not null`),
     index("messages_org_id_idx").on(table.orgId),
     index("messages_domain_id_idx").on(table.domainId),
     index("messages_created_at_idx").on(table.createdAt),
+    index("messages_status_created_at_idx").on(table.status, table.createdAt),
+    check(
+      "messages_status_check",
+      sql`${table.status} in ('queued', 'sending', 'sent', 'failed')`,
+    ),
+    check(
+      "messages_environment_check",
+      sql`${table.environment} in ('live', 'test')`,
+    ),
+    check(
+      "messages_delivery_mode_check",
+      sql`${table.deliveryMode} in ('live', 'test-sink')`,
+    ),
+    check(
+      "messages_to_array_check",
+      sql`jsonb_typeof(${table.to}) = 'array'`,
+    ),
+    check(
+      "messages_tags_array_check",
+      sql`jsonb_typeof(${table.tags}) = 'array'`,
+    ),
+    check(
+      "messages_body_check",
+      sql`${table.html} is not null or ${table.textBody} is not null`,
+    ),
+    check(
+      "messages_idempotency_state_check",
+      sql`(${table.idempotencyKey} is null and ${table.requestHash} is null) or (${table.idempotencyKey} is not null and ${table.requestHash} ~ '^[0-9a-f]{64}$')`,
+    ),
+    check(
+      "messages_idempotency_key_length_check",
+      sql`${table.idempotencyKey} is null or char_length(${table.idempotencyKey}) between 1 and 256`,
+    ),
   ],
 );
 

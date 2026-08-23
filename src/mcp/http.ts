@@ -9,6 +9,7 @@ import { isApiKeyEnvironment } from "@/lib/api-key-crypto";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import { findOrganizationById } from "@/lib/organization-reader";
 import { paperBoyMcpDomainServices } from "@/mcp/domain-services";
+import { paperBoyMcpEmailServices } from "@/mcp/email-services";
 import { createPaperBoyMcpServer } from "@/mcp/server";
 
 const principalKey = "paperboyPrincipal";
@@ -56,6 +57,7 @@ export const paperBoyMcpHttpHandler = createMcpHandler(
     createPaperBoyMcpServer({
       authorize: async () => principalFromRequestContext(context),
       domains: paperBoyMcpDomainServices,
+      emails: paperBoyMcpEmailServices,
       findOrganization: findOrganizationById,
     }),
   {
