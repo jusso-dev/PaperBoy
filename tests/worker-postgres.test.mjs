@@ -32,6 +32,9 @@ test(
     const failedId = randomUUID();
     const liveId = randomUUID();
     const userId = `worker-user-${randomUUID()}`;
+    const integrationLock = await db.$client.connect();
+
+    await integrationLock.query("SELECT pg_advisory_lock($1)", [190019]);
 
     try {
       await db.insert(orgs).values({ id: orgId, name: "Worker integration" });
@@ -209,9 +212,14 @@ test(
       );
       assert.equal(JSON.stringify(mcpRecord).includes("Private body"), false);
     } finally {
-      await db.delete(orgs).where(eq(orgs.id, orgId));
-      await db.delete(users).where(eq(users.id, userId));
-      await db.$client.end();
+      try {
+        await db.delete(orgs).where(eq(orgs.id, orgId));
+        await db.delete(users).where(eq(users.id, userId));
+      } finally {
+        await integrationLock.query("SELECT pg_advisory_unlock($1)", [190019]);
+        integrationLock.release();
+        await db.$client.end();
+      }
     }
   },
 );

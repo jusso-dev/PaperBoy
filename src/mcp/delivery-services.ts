@@ -1,4 +1,5 @@
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
+import { listMessageEvents } from "@/lib/message-events";
 import {
   getMessageDeliveryStatus,
   listMessageDeliveryStatuses,
@@ -22,6 +23,13 @@ export const paperBoyMcpDeliveryServices: PaperBoyMcpDeliveryServices = {
       actorUserId: actorUserId(principal),
       environment: principal.environment,
       limit,
+      orgId: principal.orgId,
+    }),
+  listEvents: (principal, messageId) =>
+    listMessageEvents({
+      actorUserId: actorUserId(principal),
+      environment: principal.environment,
+      messageId,
       orgId: principal.orgId,
     }),
 };

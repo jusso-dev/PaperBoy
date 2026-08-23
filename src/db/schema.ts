@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigserial,
   boolean,
   check,
   index,
@@ -528,6 +529,9 @@ export const messages = pgTable(
       .$type<MessageDeliveryMode>()
       .default("test-sink")
       .notNull(),
+    openTrackingEnabled: boolean("open_tracking_enabled")
+      .default(false)
+      .notNull(),
     idempotencyKey: text("idempotency_key"),
     requestHash: text("request_hash"),
     status: text("status").$type<MessageStatus>().default("queued").notNull(),
@@ -743,19 +747,34 @@ export const events = pgTable(
   "events",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    sequence: bigserial("sequence", { mode: "number" }).notNull(),
     messageId: uuid("message_id")
       .notNull()
       .references(() => messages.id, { onDelete: "cascade" }),
-    type: text("type").notNull(),
-    data: jsonb("data").$type<Record<string, unknown>>(),
+    type: text("type")
+      .$type<"queued" | "delivered" | "bounced" | "complained" | "opened">()
+      .notNull(),
+    data: jsonb("data")
+      .$type<Record<string, unknown>>()
+      .default(sql`'{}'::jsonb`)
+      .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
   (table) => [
-    index("events_message_id_created_at_idx").on(
+    index("events_message_id_created_at_sequence_idx").on(
       table.messageId,
       table.createdAt,
+      table.sequence,
+    ),
+    check(
+      "events_type_check",
+      sql`${table.type} in ('queued', 'delivered', 'bounced', 'complained', 'opened')`,
+    ),
+    check(
+      "events_data_object_check",
+      sql`jsonb_typeof(${table.data}) = 'object'`,
     ),
   ],
 );

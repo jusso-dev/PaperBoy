@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { messages } from "@/db/schema";
+import { events, messages } from "@/db/schema";
 import type { MessageDeliveryMode } from "@/lib/email-core";
 import { loadMessageAttachments } from "@/lib/stored-message-attachments";
 import type { WorkerStore } from "@/lib/worker-core";
@@ -146,15 +146,40 @@ export const postgresWorkerStore: WorkerStore = {
   },
 
   markSent(input) {
-    return markOwnedMessage(input, {
-      failedAt: null,
-      failureReason: null,
-      lastErrorCode: null,
-      leaseExpiresAt: null,
-      sentAt: input.now,
-      status: "sent",
-      updatedAt: input.now,
-      workerId: null,
+    return db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(messages)
+        .set({
+          failedAt: null,
+          failureReason: null,
+          lastErrorCode: null,
+          leaseExpiresAt: null,
+          sentAt: input.now,
+          status: "sent",
+          updatedAt: input.now,
+          workerId: null,
+        })
+        .where(
+          and(
+            eq(messages.id, input.messageId),
+            eq(messages.attemptCount, input.attemptCount),
+            eq(messages.status, "sending"),
+            eq(messages.workerId, input.workerId),
+          ),
+        )
+        .returning({ id: messages.id });
+
+      if (!updated) {
+        return false;
+      }
+
+      await tx.insert(events).values({
+        createdAt: input.now,
+        data: {},
+        messageId: input.messageId,
+        type: "delivered",
+      });
+      return true;
     });
   },
 };

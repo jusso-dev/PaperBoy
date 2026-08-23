@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { messageAttachments, messages } from "@/db/schema";
+import { events, messageAttachments, messages } from "@/db/schema";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import {
   attachmentStorageKey,
@@ -180,6 +180,13 @@ export async function queueEmail(input: {
       if (!inserted) {
         throw new Error("Message insert returned no row.");
       }
+
+      await tx.insert(events).values({
+        createdAt: inserted.createdAt,
+        data: {},
+        messageId: inserted.id,
+        type: "queued",
+      });
 
       for (const [position, attachment] of email.attachments.entries()) {
         const attachmentId = randomUUID();

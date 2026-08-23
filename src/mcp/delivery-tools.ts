@@ -3,6 +3,10 @@ import * as z from "zod/v4";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import { AuthorizationError } from "@/lib/authorization";
 import {
+  MESSAGE_EVENT_TYPES,
+  type MessageEventRecord,
+} from "@/lib/message-event-core";
+import {
   MessageStatusError,
   type MessageDeliveryStatusRecord,
 } from "@/lib/message-status-core";
@@ -12,6 +16,7 @@ import { PAPERBOY_MCP_SCHEMA_VERSION } from "@/mcp/contract";
 export const PAPERBOY_DELIVERY_MCP_TOOL_NAMES = [
   "paperboy_list_delivery_statuses",
   "paperboy_get_delivery_status",
+  "paperboy_list_message_events",
 ] as const;
 
 export const PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS = [
@@ -29,6 +34,13 @@ export const PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS = [
     name: PAPERBOY_DELIVERY_MCP_TOOL_NAMES[1],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
   },
+  {
+    description:
+      "List one organization message's ordered lifecycle events without exposing recipients, content, or provider payloads.",
+    mutating: false,
+    name: PAPERBOY_DELIVERY_MCP_TOOL_NAMES[2],
+    schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+  },
 ] as const;
 
 export type PaperBoyMcpDeliveryServices = {
@@ -40,6 +52,10 @@ export type PaperBoyMcpDeliveryServices = {
     principal: ApiKeyPrincipal,
     limit?: number,
   ) => Promise<MessageDeliveryStatusRecord[]>;
+  listEvents: (
+    principal: ApiKeyPrincipal,
+    messageId: string,
+  ) => Promise<MessageEventRecord[]>;
 };
 
 const deliveryStatusSchema = z.object({
@@ -75,7 +91,19 @@ const deliveriesOutputSchema = z.object({
   ...metadataSchema,
 });
 
-function serialize(record: MessageDeliveryStatusRecord) {
+const messageEventSchema = z.object({
+  createdAt: z.iso.datetime({ offset: true }),
+  id: z.string().uuid(),
+  messageId: z.string().uuid(),
+  type: z.enum(MESSAGE_EVENT_TYPES),
+});
+
+const messageEventsOutputSchema = z.object({
+  events: z.array(messageEventSchema),
+  ...metadataSchema,
+});
+
+function serializeDelivery(record: MessageDeliveryStatusRecord) {
   const timestamp = (value: Date | null) =>
     value ? protocolTimestamp(value) : null;
 
@@ -94,6 +122,15 @@ function serialize(record: MessageDeliveryStatusRecord) {
     sentAt: timestamp(record.sentAt),
     status: record.status,
     updatedAt: protocolTimestamp(record.updatedAt),
+  };
+}
+
+function serializeEvent(event: MessageEventRecord) {
+  return {
+    createdAt: protocolTimestamp(event.createdAt),
+    id: event.id,
+    messageId: event.messageId,
+    type: event.type,
   };
 }
 
@@ -172,7 +209,7 @@ export function registerPaperBoyDeliveryTools(input: {
       try {
         const records = await input.services.list(principal, limit);
         return successResult({
-          deliveries: records.map(serialize),
+          deliveries: records.map(serializeDelivery),
           ...metadata(),
         });
       } catch (error) {
@@ -197,7 +234,36 @@ export function registerPaperBoyDeliveryTools(input: {
 
       try {
         const record = await input.services.get(principal, messageId);
-        return successResult({ delivery: serialize(record), ...metadata() });
+        return successResult({
+          delivery: serializeDelivery(record),
+          ...metadata(),
+        });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  input.server.registerTool(
+    PAPERBOY_DELIVERY_MCP_TOOL_NAMES[2],
+    {
+      annotations,
+      description: PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS[2].description,
+      inputSchema: z.object({ messageId: z.string().uuid() }).strict(),
+      outputSchema: messageEventsOutputSchema,
+      title: "List PaperBoy message events",
+      _meta: { "paperboy/schemaVersion": PAPERBOY_MCP_SCHEMA_VERSION },
+    },
+    async ({ messageId }) => {
+      const principal = await input.authorize();
+      if (!principal) return unauthorizedResult();
+
+      try {
+        const records = await input.services.listEvents(principal, messageId);
+        return successResult({
+          events: records.map(serializeEvent),
+          ...metadata(),
+        });
       } catch (error) {
         return errorResult(error);
       }

@@ -84,6 +84,14 @@ const firstDelivery = {
   status: "queued",
   updatedAt: fixedNow,
 };
+const firstEvent = {
+  createdAt: fixedNow,
+  data: { provider: "private-provider", recipient: "reader@example.net" },
+  id: "77777777-7777-4777-8777-777777777777",
+  messageId: firstMessage.id,
+  sequence: 1,
+  type: "queued",
+};
 const firstTemplate = {
   createdAt: fixedNow,
   html: "<p>Hello {{reader.name}}</p>",
@@ -148,6 +156,7 @@ function deliveryServices(overrides = {}) {
   return {
     get: async () => firstDelivery,
     list: async () => [firstDelivery],
+    listEvents: async () => [firstEvent],
     ...overrides,
   };
 }
@@ -311,6 +320,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
       ],
+      paperboy_list_message_events: [
+        "events",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
       paperboy_list_templates: [
         "observedAt",
         "protocolTimeZone",
@@ -401,6 +416,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_broadcasts: [],
       paperboy_list_domains: [],
       paperboy_list_delivery_statuses: ["limit"],
+      paperboy_list_message_events: ["messageId"],
       paperboy_list_templates: [],
       paperboy_preview_template: ["data", "templateId"],
       paperboy_pause_broadcast: ["broadcastId"],
@@ -456,6 +472,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_broadcasts: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
       paperboy_list_delivery_statuses: { destructive: false, readOnly: true },
+      paperboy_list_message_events: { destructive: false, readOnly: true },
       paperboy_list_templates: { destructive: false, readOnly: true },
       paperboy_preview_template: { destructive: false, readOnly: true },
       paperboy_pause_broadcast: { destructive: false, readOnly: false },
@@ -602,6 +619,8 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     assert.match(workerGuide.contents[0].text, /SMTP_TLS_MODE defaults to required/);
     assert.match(workerGuide.contents[0].text, /smtp\.mx\.cloudflare\.net:465/);
     assert.match(workerGuide.contents[0].text, /Cloudflare Email Sending/);
+    assert.match(workerGuide.contents[0].text, /paperboy_list_message_events/);
+    assert.match(workerGuide.contents[0].text, /persisted tracking opt-in/);
   });
 });
 
@@ -746,6 +765,10 @@ test("delivery status is first-class, tenant-bound, UTC, and content-free", asyn
           calls.push(["list", principal, limit]);
           return [firstDelivery];
         },
+        listEvents: async (principal, messageId) => {
+          calls.push(["listEvents", principal, messageId]);
+          return [firstEvent];
+        },
       }),
     }),
     async (client) => {
@@ -756,6 +779,10 @@ test("delivery status is first-class, tenant-bound, UTC, and content-free", asyn
       const fetched = await client.callTool({
         arguments: { messageId: firstDelivery.id },
         name: "paperboy_get_delivery_status",
+      });
+      const events = await client.callTool({
+        arguments: { messageId: firstDelivery.id },
+        name: "paperboy_list_message_events",
       });
 
       assert.deepEqual(listed.structuredContent, {
@@ -777,11 +804,28 @@ test("delivery status is first-class, tenant-bound, UTC, and content-free", asyn
       });
       assert.equal(fetched.structuredContent.delivery.id, firstDelivery.id);
       assert.equal(fetched.structuredContent.protocolTimeZone, "UTC");
+      assert.deepEqual(events.structuredContent, {
+        events: [
+          {
+            createdAt: fixedNow.toISOString(),
+            id: firstEvent.id,
+            messageId: firstEvent.messageId,
+            type: firstEvent.type,
+          },
+        ],
+        observedAt: fixedNow.toISOString(),
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+      });
       assert.equal(JSON.stringify(listed).includes("reader@example.net"), false);
       assert.equal(JSON.stringify(listed).includes("Hello"), false);
+      assert.equal(JSON.stringify(events).includes("reader@example.net"), false);
+      assert.equal(JSON.stringify(events).includes("private-provider"), false);
+      assert.equal(JSON.stringify(events).includes("sequence"), false);
       assert.deepEqual(calls, [
         ["list", firstPrincipal, 7],
         ["get", firstPrincipal, firstDelivery.id],
+        ["listEvents", firstPrincipal, firstDelivery.id],
       ]);
     },
   );
