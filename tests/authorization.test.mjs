@@ -28,6 +28,8 @@ const matrix = {
     "members.invite",
     "members.read",
     "messages.read",
+    "rateLimits.manage",
+    "rateLimits.read",
     "suppressions.manage",
     "suppressions.read",
     "templates.create",
@@ -43,6 +45,7 @@ const matrix = {
     "domains.read",
     "members.read",
     "messages.read",
+    "rateLimits.read",
     "suppressions.read",
     "templates.read",
   ]),
@@ -70,6 +73,8 @@ test("members cannot mint API keys or delete domains", () => {
   assert.equal(can("member", "suppressions.manage"), false);
   assert.equal(can("member", "audiences.read"), true);
   assert.equal(can("member", "audiences.manage"), false);
+  assert.equal(can("member", "rateLimits.read"), true);
+  assert.equal(can("member", "rateLimits.manage"), false);
   assert.throws(
     () => requirePermission("member", "apiKeys.create"),
     AuthorizationError,

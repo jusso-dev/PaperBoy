@@ -24,6 +24,7 @@ import {
 import { DomainError } from "@/lib/domain-core";
 import { EmailError } from "@/lib/email-core";
 import { queueEmail, type QueuedMessageRecord } from "@/lib/messages";
+import { RateLimitError } from "@/lib/rate-limit-core";
 import { TemplateError, renderTemplateForSend } from "@/lib/template-core";
 import { getTemplate } from "@/lib/templates";
 import {
@@ -358,6 +359,41 @@ async function finishRecipient(input: {
     .where(eq(broadcasts.id, input.broadcastId));
 }
 
+async function pauseRateLimitedRecipient(input: {
+  broadcastId: string;
+  now: Date;
+  recipientId: string;
+}) {
+  await db.transaction(async (tx) => {
+    await tx
+      .update(broadcastRecipients)
+      .set({
+        failureCode: null,
+        status: "pending",
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(broadcastRecipients.id, input.recipientId),
+          eq(broadcastRecipients.status, "processing"),
+        ),
+      );
+    await tx
+      .update(broadcasts)
+      .set({
+        pausedAt: input.now,
+        status: "paused",
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(broadcasts.id, input.broadcastId),
+          eq(broadcasts.status, "running"),
+        ),
+      );
+  });
+}
+
 export async function processBroadcast(
   input: { broadcastId: string; orgId: string },
   dependencies: ProcessBroadcastDependencies = {},
@@ -431,6 +467,14 @@ export async function processBroadcast(
         status: "queued",
       });
     } catch (error) {
+      if (error instanceof RateLimitError) {
+        await pauseRateLimitedRecipient({
+          broadcastId: broadcast.id,
+          now: now(),
+          recipientId: recipient.id,
+        });
+        return;
+      }
       await finishRecipient({
         broadcastId: broadcast.id,
         failureCode: failureCode(error),

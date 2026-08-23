@@ -4,6 +4,7 @@ import test from "node:test";
 import { generateApiKey } from "../src/lib/api-key-crypto.ts";
 import { handleSendEmailBatchRequest } from "../src/lib/email-batch-http.ts";
 import { parseSendEmailInput } from "../src/lib/email-core.ts";
+import { RateLimitError } from "../src/lib/rate-limit-core.ts";
 
 const generated = generateApiKey("test");
 const principal = {
@@ -182,4 +183,46 @@ test("batch idempotency fails explicitly instead of being silently ignored", asy
     "batch_idempotency_not_supported",
   );
   assert.equal(context.batchCalls, 0);
+});
+
+test("batch rate limits preserve accepted neighbors and expose retry timing", async () => {
+  const context = testDependencies();
+  context.dependencies.queueBatch = async ({ payloads }) =>
+    payloads.map((_, index) =>
+      index === 0
+        ? {
+            message: {
+              createdAt: fixedNow,
+              deliveryMode: "test-sink",
+              domainId: null,
+              environment: "test",
+              id: randomUUID(),
+              replayed: false,
+              status: "queued",
+            },
+            ok: true,
+          }
+        : { error: new RateLimitError("test", 600, 21), ok: false },
+    );
+
+  const mixed = await handleSendEmailBatchRequest(
+    request([email(0), email(1)]),
+    context.dependencies,
+  );
+  const mixedBody = await mixed.json();
+  assert.equal(mixed.status, 207);
+  assert.equal(mixed.headers.get("Retry-After"), "21");
+  assert.equal(mixedBody.data[1].error.code, "rate_limit_exceeded");
+
+  context.dependencies.queueBatch = async ({ payloads }) =>
+    payloads.map(() => ({
+      error: new RateLimitError("test", 600, 20),
+      ok: false,
+    }));
+  const capped = await handleSendEmailBatchRequest(
+    request([email(2), email(3)]),
+    context.dependencies,
+  );
+  assert.equal(capped.status, 429);
+  assert.equal(capped.headers.get("Retry-After"), "20");
 });

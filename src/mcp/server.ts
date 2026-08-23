@@ -45,6 +45,12 @@ import {
   type PaperBoyMcpFeedbackServices,
 } from "@/mcp/feedback-tools";
 import {
+  PAPERBOY_RATE_LIMIT_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_RATE_LIMIT_MCP_TOOL_NAMES,
+  registerPaperBoyRateLimitTools,
+  type PaperBoyMcpRateLimitServices,
+} from "@/mcp/rate-limit-tools";
+import {
   PAPERBOY_SUPPRESSION_MCP_TOOL_DEFINITIONS,
   PAPERBOY_SUPPRESSION_MCP_TOOL_NAMES,
   registerPaperBoySuppressionTools,
@@ -70,6 +76,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
   "paperboy_get_account_context",
   ...PAPERBOY_AUDIENCE_MCP_TOOL_NAMES,
   ...PAPERBOY_EMAIL_MCP_TOOL_NAMES,
+  ...PAPERBOY_RATE_LIMIT_MCP_TOOL_NAMES,
   ...PAPERBOY_DELIVERY_MCP_TOOL_NAMES,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_NAMES,
   ...PAPERBOY_SUPPRESSION_MCP_TOOL_NAMES,
@@ -90,6 +97,7 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/feedback",
   "paperboy://docs/suppressions",
   "paperboy://docs/audiences",
+  "paperboy://docs/rate-limits",
 ] as const;
 
 type PaperBoyMcpDependencies = {
@@ -102,6 +110,7 @@ type PaperBoyMcpDependencies = {
   feedback: PaperBoyMcpFeedbackServices;
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
   now?: () => Date;
+  rateLimits: PaperBoyMcpRateLimitServices;
   suppressions: PaperBoyMcpSuppressionServices;
   templates: PaperBoyMcpTemplateServices;
   webhooks: PaperBoyMcpWebhookServices;
@@ -167,6 +176,7 @@ const toolDefinitions = [
   },
   ...PAPERBOY_AUDIENCE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
+  ...PAPERBOY_RATE_LIMIT_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_SUPPRESSION_MCP_TOOL_DEFINITIONS,
@@ -217,6 +227,10 @@ const resourceDefinitions = [
     description: "Manage permission-based audiences, contacts, and unsubscribe state.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[9],
   },
+  {
+    description: "Inspect and manage shared organization send-rate limits.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[10],
+  },
 ] as const;
 
 const configurationDocument = `# PaperBoy MCP configuration
@@ -237,6 +251,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - paperboy_ingest_feedback accepts a bounded Base64 DSN or ARF, correlates only within the authenticated organization, and never sends a test message.
 - Suppression CRUD and CSV import use the same organization blocklist checked before HTTP, MCP, batch, broadcast, SMTP, or Cloudflare delivery can be queued.
 - Broadcast creation accepts an audience ID, snapshots active contacts, and adds a PaperBoy-signed unsubscribe URL before the provider-neutral queue.
+- Live and test API keys share separate organization-wide PostgreSQL rate-limit windows. Read or update overrides with the rate-limit tools; send tools report rate_limit_exceeded with an exact retry delay.
 - Send tools accept either inline subject/body fields or \`template_id\` plus a JSON \`data\` object. Template rendering finishes before provider delivery, so SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text.
 - Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
@@ -250,6 +265,7 @@ const operatorSafetyDocument = `# PaperBoy MCP operator safety
 - Keep stored instants and protocol timestamps in RFC 3339 UTC. Convert only for presentation using an explicit IANA timezone.
 - Read state before future mutating tools, preserve idempotency keys, and require human confirmation for destructive operations.
 - Tool errors must not expose API keys, secrets, message content, or another organization's state.
+- Respect rate_limit_exceeded and its retry delay. Retrying early cannot bypass the organization-wide counter.
 - Broadcast cancellation is irreversible. Read progress first and pass explicit confirmation through MCP.
 `;
 
@@ -341,6 +357,17 @@ const audienceDocument = `# PaperBoy audiences and contacts
 - PaperBoy links are HMAC-SHA256 signed with PAPERBOY_UNSUBSCRIBE_SIGNING_KEY and have no provider dependency. SMTP and Cloudflare Email Sending receive the same rendered link and body.
 - Cloudflare keeps its independent cf-bounce return path and provider suppression pipeline. PaperBoy unsubscribe state complements it and blocks before provider queue insertion.
 - Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
+`;
+
+const rateLimitDocument = `# PaperBoy organization send-rate limits
+
+- Every accepted message consumes one PostgreSQL counter slot for the organization and API-key environment, regardless of which API key, web process, REST route, MCP transport, batch, or broadcast created it.
+- The default caps are PAPERBOY_LIVE_RATE_LIMIT_PER_MINUTE=60 and PAPERBOY_TEST_RATE_LIMIT_PER_MINUTE=600. Both must be whole numbers and the test cap must be higher.
+- Current members can read effective settings. Owners and admins can set an organization override or pass null to restore an operator default. Tools never accept an organization ID.
+- Windows are fixed UTC minutes. A rejected single send returns rate_limit_exceeded with environment, limit, and retryAfterSeconds. HTTP peers return 429 and the same delay in Retry-After.
+- Validation failures, suppressions, attachment-storage rollbacks, and idempotent replays do not consume a slot. Parallel inserts serialize on one organization-and-environment counter row.
+- A broadcast pauses with its unprocessed recipient still pending when the cap is reached. Resume it after the reported window has reset.
+- Rate limiting happens before the provider queue, so SMTP and Cloudflare Email Sending have identical behavior.
 `;
 
 function authorizationError() {
@@ -464,6 +491,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[7], feedbackDocument],
     [resourceDefinitions[8], suppressionDocument],
     [resourceDefinitions[9], audienceDocument],
+    [resourceDefinitions[10], rateLimitDocument],
   ] as const) {
     server.registerResource(
       resource.uri,
@@ -504,6 +532,13 @@ export function createPaperBoyMcpServer(
     authorize: dependencies.authorize,
     server,
     services: dependencies.emails,
+  });
+
+  registerPaperBoyRateLimitTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.rateLimits,
   });
 
   registerPaperBoyDeliveryTools({

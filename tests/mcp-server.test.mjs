@@ -7,6 +7,7 @@ import {
   DNS_OPERATOR_GUIDE,
 } from "../src/lib/dns-operator-guide.ts";
 import { EmailError } from "../src/lib/email-core.ts";
+import { RateLimitError } from "../src/lib/rate-limit-core.ts";
 import { TemplateError } from "../src/lib/template-core.ts";
 import {
   PAPERBOY_MCP_RESOURCE_URIS,
@@ -165,6 +166,15 @@ const firstBroadcast = {
   templateName: firstTemplate.name,
   updatedAt: fixedNow,
 };
+const firstRateLimits = {
+  defaultLiveLimitPerMinute: 60,
+  defaultTestLimitPerMinute: 600,
+  liveLimitPerMinute: 90,
+  liveOverridePerMinute: 90,
+  testLimitPerMinute: 900,
+  testOverridePerMinute: 900,
+  updatedAt: fixedNow,
+};
 
 function audienceServices(overrides = {}) {
   return {
@@ -236,6 +246,14 @@ function emailServices(overrides = {}) {
 function feedbackServices(overrides = {}) {
   return {
     ingest: async () => [firstFeedback],
+    ...overrides,
+  };
+}
+
+function rateLimitServices(overrides = {}) {
+  return {
+    get: async () => firstRateLimits,
+    update: async () => firstRateLimits,
     ...overrides,
   };
 }
@@ -319,6 +337,7 @@ function dependencies(overrides = {}) {
     feedback: feedbackServices(),
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
+    rateLimits: rateLimitServices(),
     templates: templateServices(),
     suppressions: suppressionServices(),
     webhooks: webhookServices(),
@@ -434,6 +453,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
         "webhook",
+      ],
+      paperboy_get_rate_limits: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "settings",
       ],
       paperboy_ingest_feedback: [
         "data",
@@ -562,6 +587,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "suppression",
       ],
+      paperboy_update_rate_limits: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "settings",
+      ],
       paperboy_verify_domain: [
         "domain",
         "observedAt",
@@ -602,6 +633,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_template: ["templateId"],
       paperboy_get_suppression: ["suppressionId"],
       paperboy_get_webhook: [],
+      paperboy_get_rate_limits: [],
       paperboy_ingest_feedback: ["rawReportBase64"],
       paperboy_import_suppressions: ["csv"],
       paperboy_list_capabilities: [],
@@ -639,6 +671,10 @@ test("initializes and publishes versioned tool schemas", async () => {
         "text",
       ],
       paperboy_update_suppression: ["email", "reason", "suppressionId"],
+      paperboy_update_rate_limits: [
+        "liveLimitPerMinute",
+        "testLimitPerMinute",
+      ],
       paperboy_verify_domain: ["domainId"],
     };
     const requiredInputSchemaSnapshots = {
@@ -654,6 +690,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_template: ["templateId"],
       paperboy_update_suppression: ["suppressionId"],
       paperboy_update_contact: ["audienceId", "contactId"],
+      paperboy_update_rate_limits: [],
     };
     const annotationSnapshots = {
       paperboy_create_audience: { destructive: false, readOnly: false },
@@ -685,6 +722,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_template: { destructive: false, readOnly: true },
       paperboy_get_suppression: { destructive: false, readOnly: true },
       paperboy_get_webhook: { destructive: false, readOnly: true },
+      paperboy_get_rate_limits: { destructive: false, readOnly: true },
       paperboy_ingest_feedback: { destructive: false, readOnly: false },
       paperboy_import_suppressions: { destructive: false, readOnly: false },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
@@ -704,6 +742,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_setup_domain_dkim: { destructive: false, readOnly: false },
       paperboy_update_template: { destructive: false, readOnly: false },
       paperboy_update_suppression: { destructive: false, readOnly: false },
+      paperboy_update_rate_limits: { destructive: false, readOnly: false },
       paperboy_verify_domain: { destructive: false, readOnly: false },
     };
 
@@ -871,6 +910,13 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     assert.match(audienceGuide.contents[0].text, /PAPERBOY_UNSUBSCRIBE_SIGNING_KEY/);
     assert.match(audienceGuide.contents[0].text, /permission/);
     assert.match(audienceGuide.contents[0].text, /Cloudflare Email Sending/);
+
+    const rateLimitGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[10],
+    });
+    assert.match(rateLimitGuide.contents[0].text, /fixed UTC minutes/);
+    assert.match(rateLimitGuide.contents[0].text, /Retry-After/);
+    assert.match(rateLimitGuide.contents[0].text, /Cloudflare Email Sending/);
   });
 });
 
@@ -989,6 +1035,54 @@ test("audiences and contacts are first-class tenant-bound MCP operations", async
           "email,name\nreader@example.net,Ada\n",
         ],
       ]);
+      assert.equal(JSON.stringify(calls).includes("organizationId"), false);
+    },
+  );
+});
+
+test("rate limits are first-class tenant-bound MCP settings with UTC metadata", async () => {
+  const calls = [];
+  await withClient(
+    dependencies({
+      rateLimits: rateLimitServices({
+        get: async (principal) => {
+          calls.push(["get", principal]);
+          return firstRateLimits;
+        },
+        update: async (principal, payload) => {
+          calls.push(["update", principal, payload]);
+          return firstRateLimits;
+        },
+      }),
+    }),
+    async (client) => {
+      const read = await client.callTool({
+        arguments: {},
+        name: "paperboy_get_rate_limits",
+      });
+      const updated = await client.callTool({
+        arguments: {
+          liveLimitPerMinute: 90,
+          testLimitPerMinute: 900,
+        },
+        name: "paperboy_update_rate_limits",
+      });
+
+      assert.equal(read.structuredContent.settings.liveLimitPerMinute, 90);
+      assert.equal(read.structuredContent.protocolTimeZone, "UTC");
+      assert.equal(
+        updated.structuredContent.settings.updatedAt,
+        fixedNow.toISOString(),
+      );
+      assert.deepEqual(calls, [
+        ["get", firstPrincipal],
+        [
+          "update",
+          firstPrincipal,
+          { live_limit_per_minute: 90, test_limit_per_minute: 900 },
+        ],
+      ]);
+      assert.equal(JSON.stringify(calls).includes("orgId"), true);
       assert.equal(JSON.stringify(calls).includes("organizationId"), false);
     },
   );
@@ -1539,6 +1633,33 @@ test("MCP sending reports suppression without queueing", async () => {
       assert.equal(result.isError, true);
       assert.match(result.content[0].text, /suppressed after a bounce/);
       assert.equal(JSON.stringify(result).includes("hard-bounce@example.net"), false);
+    },
+  );
+});
+
+test("MCP sending reports the shared cap and retry delay", async () => {
+  await withClient(
+    dependencies({
+      emails: emailServices({
+        queue: async () => {
+          throw new RateLimitError("live", 60, 23);
+        },
+      }),
+    }),
+    async (client) => {
+      const result = await client.callTool({
+        arguments: {
+          from: "news@example.com",
+          subject: "Capped",
+          text: "Try later",
+          to: "reader@example.net",
+        },
+        name: "paperboy_send_email",
+      });
+
+      assert.equal(result.isError, true);
+      assert.match(result.content[0].text, /live send limit/);
+      assert.match(result.content[0].text, /23 seconds/);
     },
   );
 });

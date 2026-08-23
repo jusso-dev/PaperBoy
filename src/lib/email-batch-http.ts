@@ -93,14 +93,32 @@ export async function handleSendEmailBatchRequest(
     principal,
   });
   let hasFailures = false;
+  let rateLimitFailures = 0;
+  let retryAfterSeconds = 0;
   const data = queued.map((item) => {
     if (item.ok) {
       return { id: item.message.id };
     }
 
     hasFailures = true;
-    return { error: describeEmailFailure(item.error).body.error };
+    const failure = describeEmailFailure(item.error);
+    if (failure.status === 429) {
+      rateLimitFailures += 1;
+      retryAfterSeconds = Math.max(
+        retryAfterSeconds,
+        Number(failure.headers?.["Retry-After"] ?? 0),
+      );
+    }
+    return { error: failure.body.error };
   });
 
-  return emailJson({ data }, hasFailures ? 207 : 200);
+  const allRateLimited =
+    rateLimitFailures > 0 && rateLimitFailures === queued.length;
+  return emailJson(
+    { data },
+    allRateLimited ? 429 : hasFailures ? 207 : 200,
+    retryAfterSeconds > 0
+      ? { "Retry-After": String(retryAfterSeconds) }
+      : undefined,
+  );
 }

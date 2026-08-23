@@ -30,13 +30,28 @@ import type { WebhookDeliveryStatus } from "@/lib/webhook-core";
 export const orgs = pgTable("orgs", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
+  liveRateLimitPerMinute: integer("live_rate_limit_per_minute"),
+  testRateLimitPerMinute: integer("test_rate_limit_per_minute"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
-});
+}, (table) => [
+  check(
+    "orgs_live_rate_limit_check",
+    sql`${table.liveRateLimitPerMinute} is null or ${table.liveRateLimitPerMinute} between 1 and 1000000`,
+  ),
+  check(
+    "orgs_test_rate_limit_check",
+    sql`${table.testRateLimitPerMinute} is null or ${table.testRateLimitPerMinute} between 1 and 1000000`,
+  ),
+  check(
+    "orgs_rate_limit_order_check",
+    sql`${table.liveRateLimitPerMinute} is null or ${table.testRateLimitPerMinute} is null or ${table.testRateLimitPerMinute} > ${table.liveRateLimitPerMinute}`,
+  ),
+]);
 
 export const users = pgTable(
   "users",
@@ -250,6 +265,37 @@ export const apiKeys = pgTable(
     check(
       "api_keys_environment_check",
       sql`${table.environment} in ('live', 'test')`,
+    ),
+  ],
+);
+
+export const sendRateLimitWindows = pgTable(
+  "send_rate_limit_windows",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    environment: text("environment").notNull(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true })
+      .notNull(),
+    acceptedCount: integer("accepted_count").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("send_rate_limit_windows_org_environment_unique").on(
+      table.orgId,
+      table.environment,
+    ),
+    check(
+      "send_rate_limit_windows_environment_check",
+      sql`${table.environment} in ('live', 'test')`,
+    ),
+    check(
+      "send_rate_limit_windows_accepted_count_check",
+      sql`${table.acceptedCount} between 1 and 1000000`,
     ),
   ],
 );

@@ -11,6 +11,10 @@ import type {
   QueuedMessageBatchItem,
   QueuedMessageRecord,
 } from "@/lib/messages";
+import {
+  RateLimitConfigurationError,
+  RateLimitError,
+} from "@/lib/rate-limit-core";
 import { TemplateError } from "@/lib/template-core";
 import { protocolTimestamp } from "@/lib/time";
 import { PAPERBOY_MCP_SCHEMA_VERSION } from "@/mcp/contract";
@@ -180,10 +184,13 @@ const sendEmailBatchOutputSchema = z.object({
       z.object({
         error: z.object({
           code: z.string(),
+          environment: z.enum(["live", "test"]).optional(),
           fields: z
             .array(z.object({ field: z.string(), message: z.string() }))
             .optional(),
+          limit: z.number().int().positive().optional(),
           message: z.string(),
+          retryAfterSeconds: z.number().int().positive().optional(),
         }),
         index: z.number().int().min(0).max(99),
       }),
@@ -208,14 +215,31 @@ function unauthorizedResult() {
 function errorDetails(error: unknown) {
   let details: {
     code: string;
+    environment?: "live" | "test";
     fields?: { field: string; message: string }[];
+    limit?: number;
     message: string;
+    retryAfterSeconds?: number;
   } = {
     code: "internal_error",
     message: "The email could not be queued.",
   };
 
-  if (error instanceof EmailError) {
+  if (error instanceof RateLimitError) {
+    details = {
+      code: "rate_limit_exceeded",
+      environment: error.environment,
+      limit: error.limit,
+      message: `This organization reached its ${error.environment} send limit. Retry after ${error.retryAfterSeconds} seconds.`,
+      retryAfterSeconds: error.retryAfterSeconds,
+    };
+  } else if (error instanceof RateLimitConfigurationError) {
+    details = {
+      code: "rate_limit_unavailable",
+      message:
+        "The operator must correct PaperBoy's live and test rate-limit configuration.",
+    };
+  } else if (error instanceof EmailError) {
     details =
       error.code === "RECIPIENT_SUPPRESSED"
         ? {

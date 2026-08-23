@@ -14,6 +14,7 @@ import { paperBoyMcpDomainServices } from "@/mcp/domain-services";
 import { paperBoyMcpDeliveryServices } from "@/mcp/delivery-services";
 import { paperBoyMcpEmailServices } from "@/mcp/email-services";
 import { paperBoyMcpFeedbackServices } from "@/mcp/feedback-services";
+import { paperBoyMcpRateLimitServices } from "@/mcp/rate-limit-services";
 import { paperBoyMcpSuppressionServices } from "@/mcp/suppression-services";
 import { paperBoyMcpTemplateServices } from "@/mcp/template-services";
 import { paperBoyMcpWebhookServices } from "@/mcp/webhook-services";
@@ -70,6 +71,7 @@ export const paperBoyMcpHttpHandler = createMcpHandler(
       emails: paperBoyMcpEmailServices,
       feedback: paperBoyMcpFeedbackServices,
       findOrganization: findOrganizationById,
+      rateLimits: paperBoyMcpRateLimitServices,
       suppressions: paperBoyMcpSuppressionServices,
       templates: paperBoyMcpTemplateServices,
       webhooks: paperBoyMcpWebhookServices,

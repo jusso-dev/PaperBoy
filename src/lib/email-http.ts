@@ -3,6 +3,10 @@ import { AttachmentStorageError } from "@/lib/attachment-storage";
 import { DomainError } from "@/lib/domain-core";
 import { EmailError } from "@/lib/email-core";
 import type { QueuedMessageRecord } from "@/lib/messages";
+import {
+  RateLimitConfigurationError,
+  RateLimitError,
+} from "@/lib/rate-limit-core";
 import { TemplateError } from "@/lib/template-core";
 
 export type EmailHttpDependencies = {
@@ -12,6 +16,18 @@ export type EmailHttpDependencies = {
     payload: unknown;
     principal: ApiKeyPrincipal;
   }) => Promise<QueuedMessageRecord>;
+};
+
+export type EmailFailure = {
+  body: {
+    error: {
+      code: string;
+      message: string;
+      [key: string]: unknown;
+    };
+  };
+  headers?: Record<string, string>;
+  status: number;
 };
 
 export function emailJson(
@@ -25,7 +41,36 @@ export function emailJson(
   });
 }
 
-export function describeEmailFailure(error: unknown) {
+export function describeEmailFailure(error: unknown): EmailFailure {
+  if (error instanceof RateLimitError) {
+    return {
+      body: {
+        error: {
+          code: "rate_limit_exceeded",
+          environment: error.environment,
+          limit: error.limit,
+          message: `This organization reached its ${error.environment} send limit. Retry after ${error.retryAfterSeconds} seconds.`,
+          retry_after_seconds: error.retryAfterSeconds,
+        },
+      },
+      headers: { "Retry-After": String(error.retryAfterSeconds) },
+      status: 429,
+    };
+  }
+
+  if (error instanceof RateLimitConfigurationError) {
+    return {
+      body: {
+        error: {
+          code: "rate_limit_unavailable",
+          message:
+            "The operator must correct PaperBoy's live and test rate-limit configuration.",
+        },
+      },
+      status: 503,
+    };
+  }
+
   if (error instanceof TemplateError) {
     if (error.code === "TEMPLATE_NOT_FOUND") {
       return {
@@ -167,7 +212,7 @@ export function describeEmailFailure(error: unknown) {
 function errorResponse(error: unknown): Response {
   const failure = describeEmailFailure(error);
 
-  return emailJson(failure.body, failure.status);
+  return emailJson(failure.body, failure.status, failure.headers);
 }
 
 export async function handleSendEmailRequest(

@@ -5,7 +5,6 @@ import {
   emailSuppressions,
   messageAttachments,
   messages,
-  orgs,
 } from "@/db/schema";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import {
@@ -26,6 +25,7 @@ import {
 } from "@/lib/email-core";
 import { authorizeSendingDomain } from "@/lib/domains";
 import { insertMessageEvent } from "@/lib/message-events";
+import { consumeSendRateLimit } from "@/lib/rate-limits";
 import { materializeTemplateSendPayload } from "@/lib/templates";
 
 export {
@@ -161,6 +161,7 @@ export async function queueEmail(input: {
   idempotencyKey?: unknown;
   payload: unknown;
   principal: ApiKeyPrincipal;
+  rateLimitNow?: Date;
 }): Promise<QueuedMessageRecord> {
   const payload = await materializeTemplateSendPayload({
     orgId: input.principal.orgId,
@@ -211,11 +212,12 @@ export async function queueEmail(input: {
 
   try {
     const created = await db.transaction(async (tx) => {
-      await tx
-        .select({ id: orgs.id })
-        .from(orgs)
-        .where(eq(orgs.id, input.principal.orgId))
-        .for("share");
+      await consumeSendRateLimit({
+        environment: input.principal.environment,
+        now: input.rateLimitNow,
+        orgId: input.principal.orgId,
+        tx,
+      });
       const suppressions = await tx
         .select({
           email: emailSuppressions.email,
@@ -329,6 +331,7 @@ export async function queueEmail(input: {
 export async function queueEmailBatch(input: {
   payloads: unknown[];
   principal: ApiKeyPrincipal;
+  rateLimitNow?: Date;
 }): Promise<QueuedMessageBatchItem[]> {
   return Promise.all(
     input.payloads.map(async (payload) => {
@@ -338,6 +341,7 @@ export async function queueEmailBatch(input: {
             allowAttachments: false,
             payload,
             principal: input.principal,
+            rateLimitNow: input.rateLimitNow,
           }),
           ok: true as const,
         };

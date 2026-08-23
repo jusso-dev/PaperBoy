@@ -10,6 +10,7 @@ import {
   parseSendEmailInput,
 } from "../src/lib/email-core.ts";
 import { handleSendEmailRequest } from "../src/lib/email-http.ts";
+import { RateLimitError } from "../src/lib/rate-limit-core.ts";
 import { TemplateError } from "../src/lib/template-core.ts";
 
 const generated = generateApiKey("test");
@@ -216,6 +217,26 @@ test("private attachment storage failures return an actionable 503", async () =>
   assert.equal(response.status, 503);
   assert.equal(body.error.code, "attachment_storage_unavailable");
   assert.equal(JSON.stringify(body).includes("WRITE_FAILED"), false);
+});
+
+test("a capped organization receives 429 with an exact Retry-After", async () => {
+  const { dependencies } = testDependencies();
+  dependencies.queue = async () => {
+    throw new RateLimitError("live", 60, 37);
+  };
+  const response = await handleSendEmailRequest(request(validBody), dependencies);
+  const body = await response.json();
+
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("Retry-After"), "37");
+  assert.deepEqual(body.error, {
+    code: "rate_limit_exceeded",
+    environment: "live",
+    limit: 60,
+    message:
+      "This organization reached its live send limit. Retry after 37 seconds.",
+    retry_after_seconds: 37,
+  });
 });
 
 test("an unknown organization template returns 404", async () => {
