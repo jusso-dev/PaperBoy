@@ -21,9 +21,17 @@ type SmtpSendResult = {
   rejected: unknown[];
 };
 
+type SmtpSendMailOptions = SendMailOptions & {
+  dsn?: {
+    id: string;
+    notify: ("delay" | "failure")[];
+    return: "headers";
+  };
+};
+
 export type SmtpTransportClient = {
   close: () => void;
-  sendMail: (options: SendMailOptions) => Promise<SmtpSendResult>;
+  sendMail: (options: SmtpSendMailOptions) => Promise<SmtpSendResult>;
   verify: () => Promise<true>;
 };
 
@@ -68,6 +76,24 @@ function tlsMode(
   }
 
   return configured as SmtpTlsMode;
+}
+
+export function configuredBounceAddress(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string | null {
+  const configured = environment.PAPERBOY_BOUNCE_ADDRESS;
+
+  if (configured === undefined) return null;
+
+  const normalized = normalizeEmailAddress(configured);
+
+  if (!normalized || configured !== configured.trim() || /[<>\r\n]/.test(configured)) {
+    throw configurationError(
+      "PAPERBOY_BOUNCE_ADDRESS must be one plain email address.",
+    );
+  }
+
+  return normalized;
 }
 
 export function smtpTransportOptions(
@@ -211,6 +237,7 @@ export function createSmtpAdapter(
       nodemailer.createTransport(transportOptions) as SmtpTransportClient);
   const transport = transportFactory(options);
   const now = input.now ?? (() => new Date());
+  const bounceAddress = configuredBounceAddress(input.environment);
 
   return {
     name: "smtp",
@@ -233,7 +260,8 @@ export function createSmtpAdapter(
         });
       }
 
-      const envelopeFrom = normalizeEmailAddress(message.from);
+      const envelopeFrom =
+        bounceAddress ?? normalizeEmailAddress(message.from);
       const envelopeTo = message.to.map(normalizeEmailAddress);
 
       if (!envelopeFrom || envelopeTo.some((address) => !address)) {
@@ -248,6 +276,7 @@ export function createSmtpAdapter(
       const raw = await buildSmtpMimeMessage({
         ...message,
         date: now(),
+        headers: { "X-PaperBoy-Message-ID": message.id },
         messageId: `<${message.id}@${senderDomain}>`,
       });
 
@@ -255,6 +284,11 @@ export function createSmtpAdapter(
         const result = await transport.sendMail({
           disableFileAccess: true,
           disableUrlAccess: true,
+          dsn: {
+            id: message.id,
+            notify: ["failure", "delay"],
+            return: "headers",
+          },
           envelope: {
             from: envelopeFrom,
             to: envelopeTo as string[],

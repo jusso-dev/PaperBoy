@@ -183,6 +183,25 @@ test("oversized attachment errors return 413", async () => {
   ]);
 });
 
+test("suppressed recipients return an actionable reason without queueing", async () => {
+  const { dependencies, queued } = testDependencies();
+  dependencies.queue = async () => {
+    throw new EmailError("RECIPIENT_SUPPRESSED", [
+      {
+        field: "to.0",
+        message: "Recipient is suppressed after a permanent bounce.",
+      },
+    ]);
+  };
+  const response = await handleSendEmailRequest(request(validBody), dependencies);
+  const body = await response.json();
+
+  assert.equal(response.status, 422);
+  assert.equal(body.error.code, "recipient_suppressed");
+  assert.match(body.error.fields[0].message, /permanent bounce/);
+  assert.equal(queued.length, 0);
+});
+
 test("private attachment storage failures return an actionable 503", async () => {
   const { dependencies } = testDependencies();
   dependencies.queue = async () => {

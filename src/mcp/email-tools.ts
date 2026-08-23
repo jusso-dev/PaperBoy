@@ -217,7 +217,14 @@ function errorDetails(error: unknown) {
 
   if (error instanceof EmailError) {
     details =
-      error.code === "ATTACHMENTS_TOO_LARGE"
+      error.code === "RECIPIENT_SUPPRESSED"
+        ? {
+            code: "recipient_suppressed",
+            fields: error.issues,
+            message:
+              "One or more recipients are suppressed after a bounce, complaint, or operator action.",
+          }
+        : error.code === "ATTACHMENTS_TOO_LARGE"
         ? {
             code: "attachment_size_exceeded",
             fields: [

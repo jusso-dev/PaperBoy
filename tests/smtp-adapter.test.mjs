@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { simpleParser } from "mailparser";
 import {
+  configuredBounceAddress,
   createSmtpAdapter,
   smtpTransportOptions,
 } from "../src/lib/smtp-adapter.ts";
@@ -108,6 +109,34 @@ test("Cloudflare Email uses authenticated implicit TLS through the SMTP adapter"
   });
 });
 
+test("a dedicated bounce address is explicit and normalized", async () => {
+  assert.equal(
+    configuredBounceAddress({
+      PAPERBOY_BOUNCE_ADDRESS: "Bounce@Bounces.Example",
+    }),
+    "bounce@bounces.example",
+  );
+  assert.throws(
+    () =>
+      configuredBounceAddress({
+        PAPERBOY_BOUNCE_ADDRESS: "PaperBoy <bounce@example.com>",
+      }),
+    /one plain email address/,
+  );
+
+  const fake = fakeTransport();
+  const adapter = createSmtpAdapter({
+    environment: {
+      PAPERBOY_BOUNCE_ADDRESS: "bounce@bounces.example",
+      SMTP_TLS_MODE: "disabled",
+      SMTP_URL: "smtp://127.0.0.1:1025",
+    },
+    transportFactory: () => fake.client,
+  });
+  await adapter.send(message());
+  assert.equal(fake.calls[0].envelope.from, "bounce@bounces.example");
+});
+
 test("SMTP configuration rejects ambiguous or unsafe URLs", () => {
   const invalidEnvironments = [
     {},
@@ -162,10 +191,19 @@ test("SMTP adapter hands one complete MIME message to the configured MTA", async
   });
   assert.equal(fake.calls[0].disableFileAccess, true);
   assert.equal(fake.calls[0].disableUrlAccess, true);
+  assert.deepEqual(fake.calls[0].dsn, {
+    id: "11111111-1111-4111-8111-111111111111",
+    notify: ["failure", "delay"],
+    return: "headers",
+  });
 
   const parsed = await simpleParser(fake.calls[0].raw);
   assert.equal(parsed.subject, "Morning edition");
   assert.equal(parsed.messageId, "<11111111-1111-4111-8111-111111111111@example.com>");
+  assert.equal(
+    parsed.headers.get("x-paperboy-message-id"),
+    "11111111-1111-4111-8111-111111111111",
+  );
   assert.equal(parsed.date.toISOString(), fixedNow.toISOString());
   assert.equal(parsed.attachments[0].filename, "edition.txt");
   assert.deepEqual(

@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:check": "drizzle-kit check"
+    "db:check": "drizzle-kit check",
+    "feedback:ingest": "tsx src/feedback-ingest.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.1",
@@ -24,6 +25,7 @@
     "dotenv": "17.4.2",
     "drizzle-orm": "0.45.2",
     "mailauth": "5.0.2",
+    "mailparser": "3.9.15",
     "next": "^16.3.2",
     "nodemailer": "9.0.5",
     "pg": "8.23.0",
@@ -35,6 +37,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@modelcontextprotocol/client": "2.0.0",
+    "@types/mailparser": "3.4.6",
     "@types/node": "^24.3.0",
     "@types/nodemailer": "8.0.1",
     "@types/pg": "8.23.1",
@@ -43,7 +46,6 @@
     "drizzle-kit": "0.31.10",
     "eslint": "^9.35.0",
     "eslint-config-next": "^16.3.2",
-    "mailparser": "3.9.15",
     "typescript": "^5.9.2"
   }
 }

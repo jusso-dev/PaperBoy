@@ -45,6 +45,7 @@ export type EmailValidationIssue = {
 export type EmailErrorCode =
   | "ATTACHMENTS_TOO_LARGE"
   | "IDEMPOTENCY_CONFLICT"
+  | "RECIPIENT_SUPPRESSED"
   | "VALIDATION_ERROR";
 
 export class EmailError extends Error {

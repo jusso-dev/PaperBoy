@@ -198,7 +198,9 @@ function failureCode(error: unknown): string {
   }
 
   if (error instanceof EmailError) {
-    return "email_validation_error";
+    return error.code === "RECIPIENT_SUPPRESSED"
+      ? "recipient_suppressed"
+      : "email_validation_error";
   }
 
   if (error instanceof DomainError) {
@@ -424,7 +426,11 @@ export async function processBroadcast(
         failureCode: failureCode(error),
         now: now(),
         recipientId: recipient.id,
-        status: "failed",
+        status:
+          error instanceof EmailError &&
+          error.code === "RECIPIENT_SUPPRESSED"
+            ? "suppressed"
+            : "failed",
       });
     }
   }

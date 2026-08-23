@@ -131,6 +131,12 @@ The worker routes test keys only to the isolated test sink and live keys only to
 
 Queue creation stores its `queued` event in the same transaction as the message. A successful worker transition stores `sent` state and its `delivered` event atomically, so self-hosted SMTP, Cloudflare Email Service SMTP, and future structured adapters share one event contract. Equal event instants use an internal sequence tie-break; REST and MCP timelines remain stable without exposing that sequence.
 
+### Bounce and complaint feedback
+
+PaperBoy ingests bounded RFC 3464 DSNs and RFC 5965 ARFs through `pnpm feedback:ingest` or the first-class `paperboy_ingest_feedback` MCP tool. Permanent `5.x.x` bounces and complaints add organization suppressions; transient `4.x.x` bounces do not. Future single, batch, broadcast, HTTP, and MCP sends reject suppressed recipients with `recipient_suppressed` before queue insertion. Raw reports are never stored, exact replays are idempotent, events and signed webhooks contain no recipient or report content, and every timestamp remains UTC.
+
+For self-hosted SMTP, set `PAPERBOY_BOUNCE_ADDRESS` and route that address to the protected Postfix stdin hook. PaperBoy adds a stable correlation header and requests failure/delay DSNs. Cloudflare Email Sending instead owns its `cf-bounce` return path and provider suppression pipeline; do not replace it. Cloudflare SMTP delivery still emits through the same PaperBoy event/webhook path. See the exact [Postfix and Cloudflare feedback guide](docs/feedback.md).
+
 ## Signed webhooks
 
 Owners and admins can configure one organization-wide endpoint with `PUT /api/v1/webhooks` or `paperboy_configure_webhook`:

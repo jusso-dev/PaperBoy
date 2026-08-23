@@ -24,6 +24,7 @@ import type {
   BroadcastStatus,
   SuppressionReason,
 } from "@/lib/broadcast-core";
+import type { FeedbackClassification } from "@/lib/feedback-core";
 import type { WebhookDeliveryStatus } from "@/lib/webhook-core";
 
 export const orgs = pgTable("orgs", {
@@ -776,6 +777,64 @@ export const events = pgTable(
     check(
       "events_data_object_check",
       sql`jsonb_typeof(${table.data}) = 'object'`,
+    ),
+  ],
+);
+
+export const feedbackIngestions = pgTable(
+  "feedback_ingestions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    reportSha256: text("report_sha256").notNull(),
+    recipient: text("recipient").notNull(),
+    classification: text("classification")
+      .$type<FeedbackClassification>()
+      .notNull(),
+    status: text("status"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("feedback_ingestions_event_id_unique").on(table.eventId),
+    uniqueIndex("feedback_ingestions_report_recipient_unique").on(
+      table.reportSha256,
+      table.messageId,
+      table.recipient,
+      table.classification,
+    ),
+    index("feedback_ingestions_org_id_created_at_idx").on(
+      table.orgId,
+      table.createdAt,
+    ),
+    index("feedback_ingestions_message_id_created_at_idx").on(
+      table.messageId,
+      table.createdAt,
+    ),
+    check(
+      "feedback_ingestions_report_sha256_check",
+      sql`${table.reportSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "feedback_ingestions_recipient_check",
+      sql`char_length(${table.recipient}) between 3 and 254 and lower(${table.recipient}) = ${table.recipient}`,
+    ),
+    check(
+      "feedback_ingestions_classification_check",
+      sql`${table.classification} in ('hard_bounce', 'soft_bounce', 'complaint')`,
+    ),
+    check(
+      "feedback_ingestions_status_check",
+      sql`${table.status} is null or ${table.status} ~ '^[245]\\.[0-9]{1,3}\\.[0-9]{1,3}$'`,
     ),
   ],
 );

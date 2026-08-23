@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
@@ -98,6 +99,14 @@ const firstWebhook = {
   updatedAt: fixedNow,
   url: "https://hooks.example.com/paperboy",
 };
+const firstFeedback = {
+  classification: "hard_bounce",
+  createdAt: fixedNow,
+  eventId: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd",
+  messageId: firstMessage.id,
+  replayed: false,
+  suppressed: true,
+};
 const firstTemplate = {
   createdAt: fixedNow,
   html: "<p>Hello {{reader.name}}</p>",
@@ -175,6 +184,13 @@ function emailServices(overrides = {}) {
   };
 }
 
+function feedbackServices(overrides = {}) {
+  return {
+    ingest: async () => [firstFeedback],
+    ...overrides,
+  };
+}
+
 function templateServices(overrides = {}) {
   return {
     create: async () => firstTemplate,
@@ -231,6 +247,7 @@ function dependencies(overrides = {}) {
     deliveries: deliveryServices(),
     domains: domainServices(),
     emails: emailServices(),
+    feedback: feedbackServices(),
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
     templates: templateServices(),
@@ -317,6 +334,11 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
         "webhook",
+      ],
+      paperboy_ingest_feedback: [
+        "data",
+        "protocolTimeZone",
+        "schemaVersion",
       ],
       paperboy_list_capabilities: [
         "generatedAt",
@@ -444,6 +466,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_delivery_status: ["messageId"],
       paperboy_get_template: ["templateId"],
       paperboy_get_webhook: [],
+      paperboy_ingest_feedback: ["rawReportBase64"],
       paperboy_list_capabilities: [],
       paperboy_list_broadcasts: [],
       paperboy_list_domains: [],
@@ -482,6 +505,7 @@ test("initializes and publishes versioned tool schemas", async () => {
     const requiredInputSchemaSnapshots = {
       paperboy_create_broadcast: ["audience", "from", "name", "templateId"],
       paperboy_create_template: ["name", "subject"],
+      paperboy_ingest_feedback: ["rawReportBase64"],
       paperboy_list_delivery_statuses: [],
       paperboy_send_email: ["from", "to"],
       paperboy_update_template: ["templateId"],
@@ -502,6 +526,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_delivery_status: { destructive: false, readOnly: true },
       paperboy_get_template: { destructive: false, readOnly: true },
       paperboy_get_webhook: { destructive: false, readOnly: true },
+      paperboy_ingest_feedback: { destructive: false, readOnly: false },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
       paperboy_list_broadcasts: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
@@ -663,6 +688,13 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     assert.match(webhookGuide.contents[0].text, /webhook-signature/);
     assert.match(webhookGuide.contents[0].text, /HMAC-SHA256/);
     assert.match(webhookGuide.contents[0].text, /Cloudflare Email Service/);
+
+    const feedbackGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[7],
+    });
+    assert.match(feedbackGuide.contents[0].text, /RFC 3464/);
+    assert.match(feedbackGuide.contents[0].text, /recipient_suppressed/);
+    assert.match(feedbackGuide.contents[0].text, /Cloudflare Email Sending/);
   });
 });
 
@@ -924,6 +956,49 @@ test("webhook configuration is first-class and returns a new secret once", async
   );
 });
 
+test("feedback ingestion is tenant-bound, UTC, idempotent, and content-free", async () => {
+  const calls = [];
+  const raw = await readFile(
+    new URL("fixtures/feedback/hard-bounce.eml", import.meta.url),
+  );
+
+  await withClient(
+    dependencies({
+      feedback: feedbackServices({
+        ingest: async (principal, received) => {
+          calls.push([principal, received]);
+          return [firstFeedback];
+        },
+      }),
+    }),
+    async (client) => {
+      const result = await client.callTool({
+        arguments: { rawReportBase64: raw.toString("base64") },
+        name: "paperboy_ingest_feedback",
+      });
+
+      assert.deepEqual(result.structuredContent, {
+        data: [
+          {
+            classification: "hard_bounce",
+            eventId: firstFeedback.eventId,
+            ingestedAt: fixedNow.toISOString(),
+            messageId: firstMessage.id,
+            replayed: false,
+            suppressed: true,
+          },
+        ],
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+      });
+      assert.deepEqual(calls[0][0], firstPrincipal);
+      assert.deepEqual(calls[0][1], raw);
+      assert.equal(JSON.stringify(result).includes("hard-bounce@example.net"), false);
+      assert.equal(JSON.stringify(result).includes(raw.toString("base64")), false);
+    },
+  );
+});
+
 test("template CRUD is tenant-bound and reports UTC protocol timestamps", async () => {
   const calls = [];
 
@@ -1105,6 +1180,38 @@ test("sending is a first-class tenant-bound MCP operation with UTC metadata", as
         principal: firstPrincipal,
       });
       assert.equal(JSON.stringify(templated).includes("Ada"), false);
+    },
+  );
+});
+
+test("MCP sending reports suppression without queueing", async () => {
+  await withClient(
+    dependencies({
+      emails: emailServices({
+        queue: async () => {
+          throw new EmailError("RECIPIENT_SUPPRESSED", [
+            {
+              field: "to.0",
+              message: "Recipient is suppressed after a permanent bounce.",
+            },
+          ]);
+        },
+      }),
+    }),
+    async (client) => {
+      const result = await client.callTool({
+        arguments: {
+          from: "sender@example.com",
+          subject: "Must not send",
+          text: "Body",
+          to: ["hard-bounce@example.net"],
+        },
+        name: "paperboy_send_email",
+      });
+
+      assert.equal(result.isError, true);
+      assert.match(result.content[0].text, /suppressed after a bounce/);
+      assert.equal(JSON.stringify(result).includes("hard-bounce@example.net"), false);
     },
   );
 });

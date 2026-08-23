@@ -33,6 +33,12 @@ import {
   type PaperBoyMcpEmailServices,
 } from "@/mcp/email-tools";
 import {
+  PAPERBOY_FEEDBACK_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_FEEDBACK_MCP_TOOL_NAMES,
+  registerPaperBoyFeedbackTools,
+  type PaperBoyMcpFeedbackServices,
+} from "@/mcp/feedback-tools";
+import {
   PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS,
   PAPERBOY_TEMPLATE_MCP_TOOL_NAMES,
   registerPaperBoyTemplateTools,
@@ -52,6 +58,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
   "paperboy_get_account_context",
   ...PAPERBOY_EMAIL_MCP_TOOL_NAMES,
   ...PAPERBOY_DELIVERY_MCP_TOOL_NAMES,
+  ...PAPERBOY_FEEDBACK_MCP_TOOL_NAMES,
   ...PAPERBOY_WEBHOOK_MCP_TOOL_NAMES,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_NAMES,
   ...PAPERBOY_BROADCAST_MCP_TOOL_NAMES,
@@ -66,6 +73,7 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/broadcasts",
   "paperboy://docs/worker",
   "paperboy://docs/webhooks",
+  "paperboy://docs/feedback",
 ] as const;
 
 type PaperBoyMcpDependencies = {
@@ -74,6 +82,7 @@ type PaperBoyMcpDependencies = {
   deliveries: PaperBoyMcpDeliveryServices;
   domains: PaperBoyMcpDomainServices;
   emails: PaperBoyMcpEmailServices;
+  feedback: PaperBoyMcpFeedbackServices;
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
   now?: () => Date;
   templates: PaperBoyMcpTemplateServices;
@@ -140,6 +149,7 @@ const toolDefinitions = [
   },
   ...PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS,
+  ...PAPERBOY_FEEDBACK_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_WEBHOOK_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS,
@@ -175,6 +185,10 @@ const resourceDefinitions = [
     description: "Configure and verify signed outbound webhooks.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[6],
   },
+  {
+    description: "Ingest bounces and complaints without resending mail.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[7],
+  },
 ] as const;
 
 const configurationDocument = `# PaperBoy MCP configuration
@@ -191,6 +205,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - paperboy_send_email and paperboy_send_email_batch use the same validation, domain authorization, and queue services as their HTTP peers. Single sends can persist private attachments outside PostgreSQL; batch sends reject them. Tool output never includes attachment content. Test keys always select the test sink; batch results preserve input order and report failures per item.
 - paperboy_list_message_events returns the same tenant- and environment-scoped ordered timeline as GET /api/v1/emails/:id/events. It omits recipients, content, event data, and provider payloads.
 - paperboy_get_webhook and paperboy_configure_webhook manage one organization webhook without accepting an organization ID. A new signing secret is returned only on first creation and is never returned by reads.
+- paperboy_ingest_feedback accepts a bounded Base64 DSN or ARF, correlates only within the authenticated organization, and never sends a test message.
 - Send tools accept either inline subject/body fields or \`template_id\` plus a JSON \`data\` object. Template rendering finishes before provider delivery, so SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text.
 - Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
@@ -258,6 +273,18 @@ const webhookDocument = `# PaperBoy signed webhooks
 - Any 2xx response completes delivery. Network failures and 5xx responses retry after one minute, five minutes, thirty minutes, and two hours; other responses fail without retry. Five attempts exhaust the queue.
 - Event bodies contain type, created_at in RFC 3339 UTC, data.email_id, and data.environment. They omit recipients, subject, content, attachments, credentials, and provider payloads. SMTP, Cloudflare Email Service, and future adapters share this event path.
 - Keep stored instants and protocol timestamps in UTC. Convert only receiver presentation with an explicit IANA timezone.
+`;
+
+const feedbackDocument = `# PaperBoy bounce and complaint ingestion
+
+- Use paperboy_ingest_feedback for one Base64 RFC 3464 delivery-status report or RFC 5965 abuse feedback report. The API key creator must remain an organization owner or admin.
+- PaperBoy accepts at most 10 MiB, stores no raw report, and correlates explicit envelope, X-PaperBoy-Message-ID, or Message-ID UUIDs plus the reported recipient to a message in the authenticated organization.
+- Prefer header-only reports. Raw reports are untrusted and may contain original content; pass them only through the authenticated tool transport, never a prompt, URL, log, or command argument.
+- A 5.x.x failed DSN is a hard bounce and creates a bounced event plus a bounced suppression. A 4.x.x delayed or failed DSN is a soft bounce and creates an event without suppression. An ARF complaint creates a complained event plus a complained suppression.
+- Exact report replays are idempotent. Future single, batch, broadcast, HTTP, and MCP sends re-check suppressions and return recipient_suppressed without queueing mail.
+- The Postfix pipe uses pnpm feedback:ingest with a protected API key file. It reads raw RFC 822 bytes from stdin and never sends mail to test an address.
+- Cloudflare Email Sending owns its cf-bounce return path and provider suppression pipeline. Do not replace it. PaperBoy feedback ingestion remains available for reports routed to PaperBoy, while Cloudflare SMTP delivery continues through the same provider-neutral message-event and webhook path.
+- Ingestion and MCP timestamps are RFC 3339 UTC. Convert only presentation with an explicit IANA timezone.
 `;
 
 function authorizationError() {
@@ -378,6 +405,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[4], broadcastDocument],
     [resourceDefinitions[5], workerDocument],
     [resourceDefinitions[6], webhookDocument],
+    [resourceDefinitions[7], feedbackDocument],
   ] as const) {
     server.registerResource(
       resource.uri,
@@ -418,6 +446,12 @@ export function createPaperBoyMcpServer(
     now,
     server,
     services: dependencies.deliveries,
+  });
+
+  registerPaperBoyFeedbackTools({
+    authorize: dependencies.authorize,
+    server,
+    services: dependencies.feedback,
   });
 
   registerPaperBoyWebhookTools({

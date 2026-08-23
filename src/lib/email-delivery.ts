@@ -27,6 +27,7 @@ export class DeliveryProviderError extends Error {
 export async function buildSmtpMimeMessage(
   message: DeliveryMessage & {
     date?: Date;
+    headers?: Record<string, string>;
     messageId?: string;
   },
 ): Promise<Buffer> {
@@ -41,6 +42,7 @@ export async function buildSmtpMimeMessage(
     disableFileAccess: true,
     disableUrlAccess: true,
     from: message.from,
+    headers: message.headers,
     html: message.html ?? undefined,
     messageId: message.messageId,
     subject: message.subject,

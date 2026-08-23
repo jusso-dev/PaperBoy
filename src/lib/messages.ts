@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { messageAttachments, messages } from "@/db/schema";
+import {
+  emailSuppressions,
+  messageAttachments,
+  messages,
+  orgs,
+} from "@/db/schema";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import {
   attachmentStorageKey,
@@ -13,6 +18,7 @@ import {
   MESSAGE_DELIVERY_MODES,
   MESSAGE_STATUSES,
   emailRequestHash,
+  normalizeEmailAddress,
   normalizeIdempotencyKey,
   parseSendEmailInput,
   type MessageDeliveryMode,
@@ -69,6 +75,40 @@ function deliveryMode(value: string): MessageDeliveryMode {
   return MESSAGE_DELIVERY_MODES.includes(value as MessageDeliveryMode)
     ? (value as MessageDeliveryMode)
     : "test-sink";
+}
+
+type RecipientSuppression = {
+  email: string;
+  reason: "manual" | "bounced" | "complained";
+};
+
+function requireRecipientsNotSuppressed(
+  recipients: string[],
+  suppressions: RecipientSuppression[],
+): void {
+  if (suppressions.length === 0) return;
+  const reasons = new Map(
+    suppressions.map((suppression) => [suppression.email, suppression.reason]),
+  );
+  throw new EmailError(
+    "RECIPIENT_SUPPRESSED",
+    recipients.flatMap((recipient, index) => {
+      const reason = reasons.get(normalizeEmailAddress(recipient) ?? "");
+
+      if (!reason) return [];
+      return [
+        {
+          field: `to.${index}`,
+          message:
+            reason === "bounced"
+              ? "Recipient is suppressed after a permanent bounce."
+              : reason === "complained"
+                ? "Recipient is suppressed after a complaint."
+                : "Recipient is on the organization suppression list.",
+        },
+      ];
+    }),
+  );
 }
 
 async function findIdempotentMessage(apiKeyId: string, key: string) {
@@ -129,6 +169,9 @@ export async function queueEmail(input: {
   });
   const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
   const requestHash = emailRequestHash(email);
+  const normalizedRecipients = email.to.flatMap(
+    (recipient) => normalizeEmailAddress(recipient) ?? [],
+  );
 
   if (idempotencyKey) {
     const existing = await findIdempotentMessage(
@@ -137,7 +180,21 @@ export async function queueEmail(input: {
     );
 
     if (existing) {
-      return replayMessage(existing, requestHash);
+      const replay = replayMessage(existing, requestHash);
+      const suppressions = await db
+        .select({
+          email: emailSuppressions.email,
+          reason: emailSuppressions.reason,
+        })
+        .from(emailSuppressions)
+        .where(
+          and(
+            eq(emailSuppressions.orgId, input.principal.orgId),
+            inArray(emailSuppressions.email, normalizedRecipients),
+          ),
+        );
+      requireRecipientsNotSuppressed(email.to, suppressions);
+      return replay;
     }
   }
 
@@ -152,6 +209,26 @@ export async function queueEmail(input: {
 
   try {
     const created = await db.transaction(async (tx) => {
+      await tx
+        .select({ id: orgs.id })
+        .from(orgs)
+        .where(eq(orgs.id, input.principal.orgId))
+        .for("share");
+      const suppressions = await tx
+        .select({
+          email: emailSuppressions.email,
+          reason: emailSuppressions.reason,
+        })
+        .from(emailSuppressions)
+        .where(
+          and(
+            eq(emailSuppressions.orgId, input.principal.orgId),
+            inArray(emailSuppressions.email, normalizedRecipients),
+          ),
+        );
+
+      requireRecipientsNotSuppressed(email.to, suppressions);
+
       const [inserted] = await tx
         .insert(messages)
         .values({

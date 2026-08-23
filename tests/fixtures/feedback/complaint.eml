@@ -1,0 +1,37 @@
+From: Feedback Loop <feedback@provider.example>
+To: paperboy-bounce@example.com
+Subject: Abuse report
+Date: Mon, 24 Aug 2026 02:10:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/report; report-type=feedback-report; boundary="arf-boundary"
+
+--arf-boundary
+Content-Type: text/plain; charset=utf-8
+
+This is an abuse report.
+
+--arf-boundary
+Content-Type: message/feedback-report
+
+Feedback-Type: abuse
+User-Agent: ExampleFBL/1.0
+Version: 1
+Original-Envelope-Id: 33333333-3333-4333-8333-333333333333
+Original-Mail-From: <paperboy-bounce@example.com>
+Original-Rcpt-To: rfc822; complaint@example.net
+Arrival-Date: Mon, 24 Aug 2026 02:09:00 +0000
+Reporting-MTA: dns; provider.example
+Source-IP: 192.0.2.10
+
+--arf-boundary
+Content-Type: message/rfc822
+
+From: sender@example.com
+To: complaint@example.net
+Message-ID: <33333333-3333-4333-8333-333333333333@example.com>
+X-PaperBoy-Message-ID: 33333333-3333-4333-8333-333333333333
+Subject: Example
+
+Example body.
+
+--arf-boundary--

@@ -65,6 +65,20 @@ export function describeEmailFailure(error: unknown) {
   }
 
   if (error instanceof EmailError) {
+    if (error.code === "RECIPIENT_SUPPRESSED") {
+      return {
+        body: {
+          error: {
+            code: "recipient_suppressed",
+            fields: error.issues,
+            message:
+              "One or more recipients are suppressed after a bounce, complaint, or operator action.",
+          },
+        },
+        status: 422,
+      };
+    }
+
     if (error.code === "ATTACHMENTS_TOO_LARGE") {
       return {
         body: {

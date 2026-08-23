@@ -22,6 +22,7 @@ const matrix = {
     "domains.manageDkim",
     "domains.read",
     "domains.verify",
+    "feedback.ingest",
     "members.invite",
     "members.read",
     "messages.read",
@@ -58,6 +59,7 @@ test("members cannot mint API keys or delete domains", () => {
   assert.equal(can("member", "messages.read"), true);
   assert.equal(can("member", "broadcasts.control"), false);
   assert.equal(can("member", "webhooks.manage"), false);
+  assert.equal(can("member", "feedback.ingest"), false);
   assert.throws(
     () => requirePermission("member", "apiKeys.create"),
     AuthorizationError,
