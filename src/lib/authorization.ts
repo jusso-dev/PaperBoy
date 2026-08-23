@@ -17,6 +17,7 @@ export const ORG_PERMISSIONS = [
   "members.invite",
   "members.remove",
   "members.read",
+  "messages.read",
   "templates.create",
   "templates.delete",
   "templates.read",
@@ -41,6 +42,7 @@ const rolePermissions: Record<OrgRole, ReadonlySet<OrgPermission>> = {
     "domains.verify",
     "members.invite",
     "members.read",
+    "messages.read",
     "templates.create",
     "templates.delete",
     "templates.read",
@@ -50,6 +52,7 @@ const rolePermissions: Record<OrgRole, ReadonlySet<OrgPermission>> = {
     "broadcasts.read",
     "domains.read",
     "members.read",
+    "messages.read",
     "templates.read",
   ]),
 };

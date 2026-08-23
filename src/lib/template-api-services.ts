@@ -1,5 +1,3 @@
-import "server-only";
-
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import { TemplateError } from "@/lib/template-core";
 import type { TemplateHttpServices } from "@/lib/template-http";

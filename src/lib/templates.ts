@@ -1,5 +1,3 @@
-import "server-only";
-
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { emailTemplates, orgMembers } from "@/db/schema";

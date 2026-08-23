@@ -24,6 +24,7 @@ const matrix = {
     "domains.verify",
     "members.invite",
     "members.read",
+    "messages.read",
     "templates.create",
     "templates.delete",
     "templates.read",
@@ -33,6 +34,7 @@ const matrix = {
     "broadcasts.read",
     "domains.read",
     "members.read",
+    "messages.read",
     "templates.read",
   ]),
 };
@@ -51,6 +53,7 @@ test("members cannot mint API keys or delete domains", () => {
   assert.equal(can("member", "templates.read"), true);
   assert.equal(can("member", "templates.update"), false);
   assert.equal(can("member", "broadcasts.read"), true);
+  assert.equal(can("member", "messages.read"), true);
   assert.equal(can("member", "broadcasts.control"), false);
   assert.throws(
     () => requirePermission("member", "apiKeys.create"),

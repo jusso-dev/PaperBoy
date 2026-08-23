@@ -68,6 +68,22 @@ const firstMessage = {
   replayed: false,
   status: "queued",
 };
+const firstDelivery = {
+  attemptCount: 2,
+  createdAt: fixedNow,
+  deliveryMode: "test-sink",
+  environment: "test",
+  failedAt: null,
+  failureReason: "Outbound HTTP provider returned 503.",
+  id: firstMessage.id,
+  lastAttemptAt: fixedNow,
+  lastErrorCode: "http_503",
+  leaseExpiresAt: null,
+  nextAttemptAt: fixedNow,
+  sentAt: null,
+  status: "queued",
+  updatedAt: fixedNow,
+};
 const firstTemplate = {
   createdAt: fixedNow,
   html: "<p>Hello {{reader.name}}</p>",
@@ -128,6 +144,14 @@ function domainServices(overrides = {}) {
   };
 }
 
+function deliveryServices(overrides = {}) {
+  return {
+    get: async () => firstDelivery,
+    list: async () => [firstDelivery],
+    ...overrides,
+  };
+}
+
 function emailServices(overrides = {}) {
   return {
     queue: async () => firstMessage,
@@ -178,6 +202,7 @@ function dependencies(overrides = {}) {
   return {
     authorize: async () => firstPrincipal,
     broadcasts: broadcastServices(),
+    deliveries: deliveryServices(),
     domains: domainServices(),
     emails: emailServices(),
     findOrganization: async (orgId) =>
@@ -248,6 +273,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
       ],
+      paperboy_get_delivery_status: [
+        "delivery",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
       paperboy_get_template: [
         "observedAt",
         "protocolTimeZone",
@@ -270,6 +301,12 @@ test("initializes and publishes versioned tool schemas", async () => {
       ],
       paperboy_list_domains: [
         "domains",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
+      paperboy_list_delivery_statuses: [
+        "deliveries",
         "observedAt",
         "protocolTimeZone",
         "schemaVersion",
@@ -358,10 +395,12 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_finalize_domain_dkim_rotation: ["confirm", "domainId"],
       paperboy_get_account_context: [],
       paperboy_get_broadcast: ["broadcastId"],
+      paperboy_get_delivery_status: ["messageId"],
       paperboy_get_template: ["templateId"],
       paperboy_list_capabilities: [],
       paperboy_list_broadcasts: [],
       paperboy_list_domains: [],
+      paperboy_list_delivery_statuses: ["limit"],
       paperboy_list_templates: [],
       paperboy_preview_template: ["data", "templateId"],
       paperboy_pause_broadcast: ["broadcastId"],
@@ -394,6 +433,7 @@ test("initializes and publishes versioned tool schemas", async () => {
     const requiredInputSchemaSnapshots = {
       paperboy_create_broadcast: ["audience", "from", "name", "templateId"],
       paperboy_create_template: ["name", "subject"],
+      paperboy_list_delivery_statuses: [],
       paperboy_send_email: ["from", "to"],
       paperboy_update_template: ["templateId"],
     };
@@ -410,10 +450,12 @@ test("initializes and publishes versioned tool schemas", async () => {
       },
       paperboy_get_account_context: { destructive: false, readOnly: true },
       paperboy_get_broadcast: { destructive: false, readOnly: true },
+      paperboy_get_delivery_status: { destructive: false, readOnly: true },
       paperboy_get_template: { destructive: false, readOnly: true },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
       paperboy_list_broadcasts: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
+      paperboy_list_delivery_statuses: { destructive: false, readOnly: true },
       paperboy_list_templates: { destructive: false, readOnly: true },
       paperboy_preview_template: { destructive: false, readOnly: true },
       paperboy_pause_broadcast: { destructive: false, readOnly: false },
@@ -551,6 +593,12 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     });
     assert.match(broadcastGuide.contents[0].text, /suppression/);
     assert.match(broadcastGuide.contents[0].text, /open-tracking pixel/);
+
+    const workerGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[5],
+    });
+    assert.match(workerGuide.contents[0].text, /five-minute lease/);
+    assert.match(workerGuide.contents[0].text, /Cloudflare Email Sending/);
   });
 });
 
@@ -676,6 +724,61 @@ test("broadcasts are first-class tenant-bound MCP operations with UTC progress",
         ["list", firstPrincipal],
         ["create", firstPrincipal, payload],
         ["cancel", firstPrincipal, firstBroadcast.id],
+      ]);
+    },
+  );
+});
+
+test("delivery status is first-class, tenant-bound, UTC, and content-free", async () => {
+  const calls = [];
+
+  await withClient(
+    dependencies({
+      deliveries: deliveryServices({
+        get: async (principal, messageId) => {
+          calls.push(["get", principal, messageId]);
+          return firstDelivery;
+        },
+        list: async (principal, limit) => {
+          calls.push(["list", principal, limit]);
+          return [firstDelivery];
+        },
+      }),
+    }),
+    async (client) => {
+      const listed = await client.callTool({
+        arguments: { limit: 7 },
+        name: "paperboy_list_delivery_statuses",
+      });
+      const fetched = await client.callTool({
+        arguments: { messageId: firstDelivery.id },
+        name: "paperboy_get_delivery_status",
+      });
+
+      assert.deepEqual(listed.structuredContent, {
+        deliveries: [
+          {
+            ...firstDelivery,
+            createdAt: fixedNow.toISOString(),
+            failedAt: null,
+            lastAttemptAt: fixedNow.toISOString(),
+            leaseExpiresAt: null,
+            nextAttemptAt: fixedNow.toISOString(),
+            sentAt: null,
+            updatedAt: fixedNow.toISOString(),
+          },
+        ],
+        observedAt: fixedNow.toISOString(),
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+      });
+      assert.equal(fetched.structuredContent.delivery.id, firstDelivery.id);
+      assert.equal(fetched.structuredContent.protocolTimeZone, "UTC");
+      assert.equal(JSON.stringify(listed).includes("reader@example.net"), false);
+      assert.equal(JSON.stringify(listed).includes("Hello"), false);
+      assert.deepEqual(calls, [
+        ["list", firstPrincipal, 7],
+        ["get", firstPrincipal, firstDelivery.id],
       ]);
     },
   );

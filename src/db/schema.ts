@@ -531,6 +531,17 @@ export const messages = pgTable(
     idempotencyKey: text("idempotency_key"),
     requestHash: text("request_hash"),
     status: text("status").$type<MessageStatus>().default("queued").notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    workerId: text("worker_id"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+    failureReason: text("failure_reason"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -547,6 +558,11 @@ export const messages = pgTable(
     index("messages_domain_id_idx").on(table.domainId),
     index("messages_created_at_idx").on(table.createdAt),
     index("messages_status_created_at_idx").on(table.status, table.createdAt),
+    index("messages_status_next_attempt_at_created_at_idx").on(
+      table.status,
+      table.nextAttemptAt,
+      table.createdAt,
+    ),
     check(
       "messages_status_check",
       sql`${table.status} in ('queued', 'sending', 'sent', 'failed')`,
@@ -578,6 +594,34 @@ export const messages = pgTable(
     check(
       "messages_idempotency_key_length_check",
       sql`${table.idempotencyKey} is null or char_length(${table.idempotencyKey}) between 1 and 256`,
+    ),
+    check(
+      "messages_attempt_count_check",
+      sql`${table.attemptCount} >= 0`,
+    ),
+    check(
+      "messages_worker_id_check",
+      sql`${table.workerId} is null or (char_length(${table.workerId}) between 1 and 128 and ${table.workerId} !~ '[[:cntrl:]]')`,
+    ),
+    check(
+      "messages_last_error_code_check",
+      sql`${table.lastErrorCode} is null or ${table.lastErrorCode} ~ '^[a-z0-9][a-z0-9_:-]{0,127}$'`,
+    ),
+    check(
+      "messages_failure_reason_check",
+      sql`${table.failureReason} is null or char_length(${table.failureReason}) between 1 and 1000`,
+    ),
+    check(
+      "messages_worker_lease_state_check",
+      sql`(${table.status} = 'sending' and ${table.attemptCount} > 0 and ${table.lastAttemptAt} is not null and ${table.workerId} is not null and ${table.leaseExpiresAt} is not null) or (${table.status} <> 'sending' and ${table.workerId} is null and ${table.leaseExpiresAt} is null)`,
+    ),
+    check(
+      "messages_sent_state_check",
+      sql`(${table.status} = 'sent' and ${table.sentAt} is not null) or (${table.status} <> 'sent' and ${table.sentAt} is null)`,
+    ),
+    check(
+      "messages_failed_state_check",
+      sql`(${table.status} = 'failed' and ${table.failedAt} is not null and ${table.failureReason} is not null) or (${table.status} <> 'failed' and ${table.failedAt} is null)`,
     ),
   ],
 );

@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "eslint .",
     "mcp:stdio": "tsx src/mcp/stdio.ts",
+    "worker": "tsx src/worker.ts",
     "test": "tsx --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",

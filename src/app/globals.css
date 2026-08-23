@@ -818,6 +818,71 @@ select:focus-visible {
   margin-top: 16px;
 }
 
+/* ---- Delivery worker ------------------------------------------------- */
+
+.delivery-counts {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 22px;
+}
+
+.delivery-count {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--rule-heavy);
+  padding: 12px 14px;
+}
+
+.delivery-count dt {
+  color: var(--ink-soft);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.delivery-count dd {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.delivery-count-sending,
+.delivery-status-sending {
+  border-color: var(--accent-ink);
+}
+
+.delivery-count-sent,
+.delivery-status-sent {
+  border-color: #557a5f;
+}
+
+.delivery-count-failed,
+.delivery-status-failed {
+  border-color: #a14b3d;
+}
+
+.delivery-table {
+  min-width: 980px;
+}
+
+.delivery-table code {
+  overflow-wrap: anywhere;
+}
+
+.delivery-meta,
+.delivery-failure {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.delivery-failure {
+  color: var(--ink);
+  max-width: 260px;
+}
+
 .template-delete summary {
   cursor: pointer;
   font-size: 13px;
@@ -954,6 +1019,10 @@ select:focus-visible {
 
   .api-key-form {
     grid-template-columns: 1fr;
+  }
+
+  .delivery-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .domain-form {

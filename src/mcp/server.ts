@@ -21,6 +21,12 @@ import {
   type PaperBoyMcpDomainServices,
 } from "@/mcp/domain-tools";
 import {
+  PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_DELIVERY_MCP_TOOL_NAMES,
+  registerPaperBoyDeliveryTools,
+  type PaperBoyMcpDeliveryServices,
+} from "@/mcp/delivery-tools";
+import {
   PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
   PAPERBOY_EMAIL_MCP_TOOL_NAMES,
   registerPaperBoyEmailTools,
@@ -39,6 +45,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
   "paperboy_list_capabilities",
   "paperboy_get_account_context",
   ...PAPERBOY_EMAIL_MCP_TOOL_NAMES,
+  ...PAPERBOY_DELIVERY_MCP_TOOL_NAMES,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_NAMES,
   ...PAPERBOY_BROADCAST_MCP_TOOL_NAMES,
   ...PAPERBOY_DOMAIN_MCP_TOOL_NAMES,
@@ -50,11 +57,13 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/dns",
   "paperboy://docs/templates",
   "paperboy://docs/broadcasts",
+  "paperboy://docs/worker",
 ] as const;
 
 type PaperBoyMcpDependencies = {
   authorize: () => Promise<ApiKeyPrincipal | null>;
   broadcasts: PaperBoyMcpBroadcastServices;
+  deliveries: PaperBoyMcpDeliveryServices;
   domains: PaperBoyMcpDomainServices;
   emails: PaperBoyMcpEmailServices;
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
@@ -121,6 +130,7 @@ const toolDefinitions = [
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
   },
   ...PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
+  ...PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DOMAIN_MCP_TOOL_DEFINITIONS,
@@ -146,6 +156,10 @@ const resourceDefinitions = [
   {
     description: "Create, inspect, pause, resume, and cancel broadcasts.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[4],
+  },
+  {
+    description: "Operate and inspect the durable outbound worker.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[5],
   },
 ] as const;
 
@@ -201,6 +215,17 @@ const broadcastDocument = `# PaperBoy broadcasts
 - Pause stops before the next recipient. Resume processes remaining recipients. Cancel marks every pending recipient cancelled and prevents further claims; an already-processing recipient may finish.
 - Queue records remain provider-neutral. SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text through the normal worker path.
 - Stored instants and MCP timestamps are UTC. Console presentation uses each user's IANA timezone.
+`;
+
+const workerDocument = `# PaperBoy outbound worker
+
+- Run 'pnpm worker' beside every web deployment. The PostgreSQL queue is the source of truth.
+- A worker atomically claims an eligible message, records 'sending', and holds a five-minute lease. If it exits mid-delivery, another worker can reclaim the same row after the lease expires.
+- Delivery is at least once. A process exit after a provider accepts a message but before PostgreSQL records 'sent' can cause a duplicate, so preserve send idempotency where the provider supports it.
+- Retry transient network failures, HTTP 5xx, and SMTP 4xx with bounded backoff. SMTP 550 and other permanent failures move directly to 'failed'. Five attempts exhaust the retry budget.
+- Failure codes and reasons are sanitized before storage. Message bodies, addresses, attachments, credentials, and provider responses never appear in MCP status output.
+- Use paperboy_list_delivery_statuses and paperboy_get_delivery_status to inspect queued, sending, sent, and failed records. MCP timestamps remain RFC 3339 UTC.
+- The worker hands the same rendered semantic message to every adapter. SMTP builds MIME at delivery time; Cloudflare Email Sending receives structured, unsigned fields and remains its own signing authority.
 `;
 
 function authorizationError() {
@@ -319,6 +344,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[2], DNS_OPERATOR_GUIDE],
     [resourceDefinitions[3], templateDocument],
     [resourceDefinitions[4], broadcastDocument],
+    [resourceDefinitions[5], workerDocument],
   ] as const) {
     server.registerResource(
       resource.uri,
@@ -352,6 +378,13 @@ export function createPaperBoyMcpServer(
     authorize: dependencies.authorize,
     server,
     services: dependencies.emails,
+  });
+
+  registerPaperBoyDeliveryTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.deliveries,
   });
 
   registerPaperBoyTemplateTools({
