@@ -31,6 +31,9 @@ export const orgs = pgTable("orgs", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   liveRateLimitPerMinute: integer("live_rate_limit_per_minute"),
+  openTrackingEnabled: boolean("open_tracking_enabled")
+    .default(false)
+    .notNull(),
   testRateLimitPerMinute: integer("test_rate_limit_per_minute"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
@@ -912,6 +915,9 @@ export const events = pgTable(
       table.createdAt,
       table.sequence,
     ),
+    uniqueIndex("events_message_id_opened_unique")
+      .on(table.messageId)
+      .where(sql`${table.type} = 'opened'`),
     check(
       "events_type_check",
       sql`${table.type} in ('queued', 'delivered', 'bounced', 'complained', 'opened')`,

@@ -22,7 +22,7 @@ Security invariants:
 ### Protected assets
 
 - PaperBoy bearer API keys, Better Auth sessions and secret, and MCP process credentials.
-- DKIM private keys; webhook signing secrets; webhook/DKIM encryption keys; unsubscribe signing keys.
+- DKIM private keys; webhook signing secrets; webhook/DKIM encryption keys; unsubscribe and open-tracking signing keys.
 - SMTP usernames/passwords and Cloudflare Email Service API tokens embedded in `SMTP_URL`.
 - PostgreSQL tenant, membership, domain, recipient, template, message, event, suppression, queue, and idempotency data.
 - Private attachment bytes and their integrity metadata.
@@ -34,7 +34,7 @@ Security invariants:
 
 | Boundary | Trust granted | Data crossing it |
 | --- | --- | --- |
-| Public browser to Next.js | Untrusted until Better Auth validates a server session | Auth input, unsubscribe tokens, console requests |
+| Public browser or mail client to Next.js | Untrusted until Better Auth validates a server session; signed pixels remain public untrusted input | Auth input, unsubscribe tokens, signed pixel paths, console requests |
 | REST or HTTP MCP client to PaperBoy | Untrusted until a bearer key is parsed, hashed, matched, and checked for revocation | JSON/MCP arguments, API key, idempotency key |
 | Local MCP stdio client to PaperBoy | The launching operator controls its environment and process boundary | Database URL, PaperBoy API key, feature secrets, MCP messages |
 | PaperBoy services to PostgreSQL | Database and its administrators are trusted infrastructure | Tenant data, encrypted secret envelopes, queue state, timestamps |
@@ -91,6 +91,12 @@ Template authors control email HTML. PaperBoy supports only bounded dotted varia
 Attachment filenames never become paths. Bytes are written under generated root-confined keys with restrictive permissions and exclusive creation, then size and SHA-256 integrity are checked before delivery. Public status surfaces expose metadata only. Host administrators, compromised application processes, unsafe mounts, snapshots, and backups can still read attachment bytes. The web and worker must share a private, correctly permissioned volume and avoid serving it as static content.
 
 Suppressions, per-organization limits, domain verification, API-key environment separation, and transactional queue insertion constrain abuse. They do not make outbound content trustworthy, stop every enumeration attempt, or replace provider/MTA abuse controls. A worker crash after a provider accepts a message but before `sent` commits can produce a duplicate because delivery is at least once.
+
+### Open tracking and recipient privacy
+
+Open tracking is off by default and requires an owner or admin to enable the persisted organization flag through the same console, REST, and MCP authorization rules. Queue creation snapshots the flag and adds a message-bound HMAC-SHA256 first-party URL only to HTML. The public route compares canonical signatures in constant time, returns the same transparent GIF for valid and invalid input, stores no recipient, IP address, user agent, or provider payload, and deduplicates to one `opened` event per message with a database uniqueness constraint.
+
+The honest limit is that an open event proves only that the URL was fetched. Mail gateways, security scanners, image proxies, and prefetchers can create false positives; blocked images create false negatives. Product copy and MCP documentation state this explicitly. The dedicated `PAPERBOY_OPEN_TRACKING_SIGNING_KEY` stays outside PostgreSQL and must not be reused for unsubscribe, webhooks, or DKIM. Rotation invalidates outstanding pixels. SMTP and Cloudflare Email Service receive the same already-instrumented HTML, and neither provider gets a separate tracking bypass.
 
 ### Time and timezone integrity
 

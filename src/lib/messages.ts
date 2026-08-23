@@ -5,6 +5,7 @@ import {
   emailSuppressions,
   messageAttachments,
   messages,
+  orgs,
 } from "@/db/schema";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import {
@@ -25,6 +26,10 @@ import {
 } from "@/lib/email-core";
 import { authorizeSendingDomain } from "@/lib/domains";
 import { insertMessageEvent } from "@/lib/message-events";
+import {
+  appendOpenTrackingPixel,
+  createOpenTrackingUrl,
+} from "@/lib/open-tracking-core";
 import { consumeSendRateLimit } from "@/lib/rate-limits";
 import { materializeTemplateSendPayload } from "@/lib/templates";
 
@@ -269,6 +274,25 @@ export async function queueEmail(input: {
 
       requireRecipientsNotSuppressed(email.to, suppressions);
 
+      const [organization] = await tx
+        .select({ openTrackingEnabled: orgs.openTrackingEnabled })
+        .from(orgs)
+        .where(eq(orgs.id, input.principal.orgId))
+        .for("share");
+      if (!organization) {
+        throw new Error("Message organization is unavailable.");
+      }
+      const messageId = randomUUID();
+      let html = email.html;
+      let openTrackingEnabled = false;
+      if (organization.openTrackingEnabled && html !== null) {
+        html = appendOpenTrackingPixel({
+          html,
+          url: createOpenTrackingUrl({ messageId }),
+        });
+        openTrackingEnabled = true;
+      }
+
       const [inserted] = await tx
         .insert(messages)
         .values({
@@ -277,8 +301,10 @@ export async function queueEmail(input: {
           domainId: domain.domainId,
           environment: input.principal.environment,
           from: email.from,
-          html: email.html,
+          html,
+          id: messageId,
           idempotencyKey,
+          openTrackingEnabled,
           orgId: input.principal.orgId,
           requestHash: idempotencyKey ? requestHash : null,
           subject: email.subject,

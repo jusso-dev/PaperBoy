@@ -7,6 +7,7 @@ import {
   DNS_OPERATOR_GUIDE,
 } from "../src/lib/dns-operator-guide.ts";
 import { EmailError } from "../src/lib/email-core.ts";
+import { OpenTrackingConfigurationError } from "../src/lib/open-tracking-core.ts";
 import { RateLimitError } from "../src/lib/rate-limit-core.ts";
 import { TemplateError } from "../src/lib/template-core.ts";
 import {
@@ -176,6 +177,10 @@ const firstRateLimits = {
   testOverridePerMinute: 900,
   updatedAt: fixedNow,
 };
+const firstOpenTracking = {
+  enabled: false,
+  updatedAt: fixedNow,
+};
 
 function audienceServices(overrides = {}) {
   return {
@@ -259,6 +264,14 @@ function rateLimitServices(overrides = {}) {
   };
 }
 
+function openTrackingServices(overrides = {}) {
+  return {
+    get: async () => firstOpenTracking,
+    update: async () => firstOpenTracking,
+    ...overrides,
+  };
+}
+
 function suppressionServices(overrides = {}) {
   return {
     create: async () => firstSuppression,
@@ -338,6 +351,7 @@ function dependencies(overrides = {}) {
     feedback: feedbackServices(),
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
+    openTracking: openTrackingServices(),
     rateLimits: rateLimitServices(),
     templates: templateServices(),
     suppressions: suppressionServices(),
@@ -456,6 +470,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "webhook",
       ],
       paperboy_get_rate_limits: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "settings",
+      ],
+      paperboy_get_open_tracking: [
         "observedAt",
         "protocolTimeZone",
         "schemaVersion",
@@ -594,6 +614,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "settings",
       ],
+      paperboy_update_open_tracking: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "settings",
+      ],
       paperboy_verify_domain: [
         "domain",
         "observedAt",
@@ -635,6 +661,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_suppression: ["suppressionId"],
       paperboy_get_webhook: [],
       paperboy_get_rate_limits: [],
+      paperboy_get_open_tracking: [],
       paperboy_ingest_feedback: ["rawReportBase64"],
       paperboy_import_suppressions: ["csv"],
       paperboy_list_capabilities: [],
@@ -682,6 +709,7 @@ test("initializes and publishes versioned tool schemas", async () => {
         "liveLimitPerMinute",
         "testLimitPerMinute",
       ],
+      paperboy_update_open_tracking: ["enabled"],
       paperboy_verify_domain: ["domainId"],
     };
     const requiredInputSchemaSnapshots = {
@@ -698,6 +726,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_suppression: ["suppressionId"],
       paperboy_update_contact: ["audienceId", "contactId"],
       paperboy_update_rate_limits: [],
+      paperboy_update_open_tracking: ["enabled"],
     };
     const annotationSnapshots = {
       paperboy_create_audience: { destructive: false, readOnly: false },
@@ -730,6 +759,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_suppression: { destructive: false, readOnly: true },
       paperboy_get_webhook: { destructive: false, readOnly: true },
       paperboy_get_rate_limits: { destructive: false, readOnly: true },
+      paperboy_get_open_tracking: { destructive: false, readOnly: true },
       paperboy_ingest_feedback: { destructive: false, readOnly: false },
       paperboy_import_suppressions: { destructive: false, readOnly: false },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
@@ -750,6 +780,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_template: { destructive: false, readOnly: false },
       paperboy_update_suppression: { destructive: false, readOnly: false },
       paperboy_update_rate_limits: { destructive: false, readOnly: false },
+      paperboy_update_open_tracking: { destructive: false, readOnly: false },
       paperboy_verify_domain: { destructive: false, readOnly: false },
     };
 
@@ -924,6 +955,13 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     assert.match(rateLimitGuide.contents[0].text, /fixed UTC minutes/);
     assert.match(rateLimitGuide.contents[0].text, /Retry-After/);
     assert.match(rateLimitGuide.contents[0].text, /Cloudflare Email Sending/);
+
+    const openTrackingGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[11],
+    });
+    assert.match(openTrackingGuide.contents[0].text, /off by default/);
+    assert.match(openTrackingGuide.contents[0].text, /at most one opened event/);
+    assert.match(openTrackingGuide.contents[0].text, /Cloudflare Email Service/);
   });
 });
 
@@ -1090,6 +1128,47 @@ test("rate limits are first-class tenant-bound MCP settings with UTC metadata", 
         ],
       ]);
       assert.equal(JSON.stringify(calls).includes("orgId"), true);
+      assert.equal(JSON.stringify(calls).includes("organizationId"), false);
+    },
+  );
+});
+
+test("open tracking is a first-class tenant-bound MCP setting with UTC metadata", async () => {
+  const calls = [];
+  await withClient(
+    dependencies({
+      openTracking: openTrackingServices({
+        get: async (principal) => {
+          calls.push(["get", principal]);
+          return firstOpenTracking;
+        },
+        update: async (principal, payload) => {
+          calls.push(["update", principal, payload]);
+          return { ...firstOpenTracking, enabled: true };
+        },
+      }),
+    }),
+    async (client) => {
+      const read = await client.callTool({
+        arguments: {},
+        name: "paperboy_get_open_tracking",
+      });
+      const updated = await client.callTool({
+        arguments: { enabled: true },
+        name: "paperboy_update_open_tracking",
+      });
+
+      assert.equal(read.structuredContent.settings.enabled, false);
+      assert.equal(read.structuredContent.protocolTimeZone, "UTC");
+      assert.equal(updated.structuredContent.settings.enabled, true);
+      assert.equal(
+        updated.structuredContent.settings.updatedAt,
+        fixedNow.toISOString(),
+      );
+      assert.deepEqual(calls, [
+        ["get", firstPrincipal],
+        ["update", firstPrincipal, { enabled: true }],
+      ]);
       assert.equal(JSON.stringify(calls).includes("organizationId"), false);
     },
   );
@@ -1683,6 +1762,32 @@ test("MCP sending reports the shared cap and retry delay", async () => {
       assert.equal(result.isError, true);
       assert.match(result.content[0].text, /live send limit/);
       assert.match(result.content[0].text, /23 seconds/);
+    },
+  );
+});
+
+test("MCP sending reports missing open-tracking operator configuration", async () => {
+  await withClient(
+    dependencies({
+      emails: emailServices({
+        queue: async () => {
+          throw new OpenTrackingConfigurationError();
+        },
+      }),
+    }),
+    async (client) => {
+      const result = await client.callTool({
+        arguments: {
+          from: "news@example.com",
+          html: "<p>Edition</p>",
+          subject: "Edition",
+          to: ["reader@example.net"],
+        },
+        name: "paperboy_send_email",
+      });
+
+      assert.equal(result.isError, true);
+      assert.match(result.content[0].text, /dedicated open-tracking signing key/);
     },
   );
 });

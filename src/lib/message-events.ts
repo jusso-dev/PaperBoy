@@ -217,6 +217,20 @@ export async function recordMessageEvent(input: {
       type: input.type,
     });
 
+    if (input.type === "opened") {
+      const [existing] = await tx
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.messageId, input.messageId),
+            eq(events.type, "opened"),
+          ),
+        )
+        .limit(1);
+      if (existing) return eventFromRow(existing);
+    }
+
     return insertMessageEvent(tx, input);
   });
 }

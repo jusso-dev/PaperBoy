@@ -51,6 +51,12 @@ import {
   type PaperBoyMcpRateLimitServices,
 } from "@/mcp/rate-limit-tools";
 import {
+  PAPERBOY_OPEN_TRACKING_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_OPEN_TRACKING_MCP_TOOL_NAMES,
+  registerPaperBoyOpenTrackingTools,
+  type PaperBoyMcpOpenTrackingServices,
+} from "@/mcp/open-tracking-tools";
+import {
   PAPERBOY_SUPPRESSION_MCP_TOOL_DEFINITIONS,
   PAPERBOY_SUPPRESSION_MCP_TOOL_NAMES,
   registerPaperBoySuppressionTools,
@@ -76,6 +82,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
   "paperboy_get_account_context",
   ...PAPERBOY_AUDIENCE_MCP_TOOL_NAMES,
   ...PAPERBOY_EMAIL_MCP_TOOL_NAMES,
+  ...PAPERBOY_OPEN_TRACKING_MCP_TOOL_NAMES,
   ...PAPERBOY_RATE_LIMIT_MCP_TOOL_NAMES,
   ...PAPERBOY_DELIVERY_MCP_TOOL_NAMES,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_NAMES,
@@ -98,6 +105,7 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/suppressions",
   "paperboy://docs/audiences",
   "paperboy://docs/rate-limits",
+  "paperboy://docs/open-tracking",
 ] as const;
 
 type PaperBoyMcpDependencies = {
@@ -110,6 +118,7 @@ type PaperBoyMcpDependencies = {
   feedback: PaperBoyMcpFeedbackServices;
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
   now?: () => Date;
+  openTracking: PaperBoyMcpOpenTrackingServices;
   rateLimits: PaperBoyMcpRateLimitServices;
   suppressions: PaperBoyMcpSuppressionServices;
   templates: PaperBoyMcpTemplateServices;
@@ -176,6 +185,7 @@ const toolDefinitions = [
   },
   ...PAPERBOY_AUDIENCE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
+  ...PAPERBOY_OPEN_TRACKING_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_RATE_LIMIT_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_DEFINITIONS,
@@ -231,12 +241,16 @@ const resourceDefinitions = [
     description: "Inspect and manage shared organization send-rate limits.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[10],
   },
+  {
+    description: "Configure privacy-first signed open tracking.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[11],
+  },
 ] as const;
 
 const configurationDocument = `# PaperBoy MCP configuration
 
 - Remote agents use Streamable HTTP at \`/api/mcp\` with \`Authorization: Bearer <PaperBoy API key>\`.
-- Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\`, \`PAPERBOY_API_KEY\`, \`PAPERBOY_PUBLIC_URL\`, \`PAPERBOY_UNSUBSCRIBE_SIGNING_KEY\`, and other feature secrets injected through the process environment.
+- Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\`, \`PAPERBOY_API_KEY\`, \`PAPERBOY_PUBLIC_URL\`, \`PAPERBOY_UNSUBSCRIBE_SIGNING_KEY\`, \`PAPERBOY_OPEN_TRACKING_SIGNING_KEY\`, and other feature secrets injected through the process environment.
 - Never put an API key in a tool argument, URL, command-line argument, source file, or diagnostic log.
 - A key is bound to one organization and one environment (\`live\` or \`test\`).
 - Audience and contact tools derive organization context from that key and never accept an organization ID.
@@ -289,7 +303,7 @@ const broadcastDocument = `# PaperBoy broadcasts
 
 - Broadcasts belong to the organization bound to the API key. Never pass an organization ID.
 - Create accepts one stored template and one tenant-owned audience ID containing 1-100 active contacts.
-- PaperBoy snapshots the template and active contacts, appends a signed unsubscribe link when missing, checks the per-organization suppression table before each enqueue, and never injects an open-tracking pixel.
+- PaperBoy snapshots the template and active contacts, appends a signed unsubscribe link when missing, checks the per-organization suppression table before each enqueue, and uses the same opt-in organization setting to inject one signed open-tracking pixel into future HTML as every other send path.
 - Template data contains name, email, contact.name, contact.email, and unsubscribe_url. Opening the link is read-only; the recipient confirms before PaperBoy records the opt-out.
 - Progress separates pending, processing, queued, suppressed, failed, and cancelled recipients. Tool output never returns audience addresses or rendered message content.
 - Pause stops before the next recipient. Resume processes remaining recipients. Cancel marks every pending recipient cancelled and prevents further claims; an already-processing recipient may finish.
@@ -369,6 +383,17 @@ const rateLimitDocument = `# PaperBoy organization send-rate limits
 - Validation failures, suppressions, attachment-storage rollbacks, and idempotent replays do not consume a slot. Parallel inserts serialize on one organization-and-environment counter row.
 - A broadcast pauses with its unprocessed recipient still pending when the cap is reached. Resume it after the reported window has reset.
 - Rate limiting happens before the provider queue, so SMTP and Cloudflare Email Sending have identical behavior.
+`;
+
+const openTrackingDocument = `# PaperBoy open tracking
+
+- Open tracking is an organization setting and is off by default. Current members can read it; owners and admins can change it without passing an organization ID.
+- When enabled, PaperBoy adds one signed first-party pixel to each future HTML message. Plain-text messages are never tracked, and queued messages retain the setting captured at creation.
+- Two or more valid pixel requests create at most one opened event per message. The event contains no recipient, IP address, user agent, or provider payload.
+- An opened event means the pixel was fetched. Security scanners, privacy proxies, and prefetchers can trigger it, so it does not prove a person read the message.
+- PAPERBOY_OPEN_TRACKING_SIGNING_KEY is a dedicated Base64-encoded 32-byte key. Rotation invalidates outstanding pixels. PAPERBOY_PUBLIC_URL supplies their public origin.
+- Pixel URLs and stored HTML are provider-neutral. SMTP and Cloudflare Email Service receive the same body; Cloudflare remains its own DKIM and ARC authority.
+- Event instants and MCP timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
 `;
 
 function authorizationError() {
@@ -493,6 +518,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[8], suppressionDocument],
     [resourceDefinitions[9], audienceDocument],
     [resourceDefinitions[10], rateLimitDocument],
+    [resourceDefinitions[11], openTrackingDocument],
   ] as const) {
     server.registerResource(
       resource.uri,
@@ -533,6 +559,13 @@ export function createPaperBoyMcpServer(
     authorize: dependencies.authorize,
     server,
     services: dependencies.emails,
+  });
+
+  registerPaperBoyOpenTrackingTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.openTracking,
   });
 
   registerPaperBoyRateLimitTools({

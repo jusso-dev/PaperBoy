@@ -21,6 +21,8 @@ tags:
     description: Queue one message and inspect its environment-scoped state.
   - name: Events
     description: Read one message's ordered delivery lifecycle.
+  - name: Open tracking
+    description: Manage opt-in first-party open tracking and serve its signed pixel.
   - name: Webhooks
     description: Configure the organization's signed event destination.
 x-paperboy-mcp:
@@ -31,6 +33,8 @@ x-paperboy-mcp:
     sendEmail: paperboy_send_email
     getEmail: paperboy_get_delivery_status
     listEmailEvents: paperboy_list_message_events
+    getOpenTracking: paperboy_get_open_tracking
+    updateOpenTracking: paperboy_update_open_tracking
     getWebhook: paperboy_get_webhook
     configureWebhook: paperboy_configure_webhook
 paths:
@@ -171,6 +175,112 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/open-tracking:
+    get:
+      operationId: getOpenTracking
+      tags: [Open tracking]
+      summary: Read organization open tracking
+      description: >-
+        Returns the privacy-first organization flag. It is false by default;
+        current members can read it and tenant context comes from the key.
+      responses:
+        '200':
+          description: Current organization setting with a UTC update instant.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenTrackingSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateOpenTracking
+      tags: [Open tracking]
+      summary: Update organization open tracking
+      description: >-
+        Owners and admins can opt future HTML messages in or out. Enabling
+        requires a public PaperBoy URL and a dedicated signing key. Plain-text
+        and existing queued messages are unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenTrackingUpdateInput'
+      responses:
+        '200':
+          description: Saved organization setting with a UTC update instant.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenTrackingSettings'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /o/{messageId}/{signature}.gif:
+    get:
+      operationId: recordOpen
+      tags: [Open tracking]
+      summary: Fetch the signed first-party open pixel
+      security: []
+      description: >-
+        Always returns the same uncacheable transparent GIF. A valid signed URL
+        for an opted-in message records at most one opened event; invalid URLs
+        reveal no message state. Fetches may originate from scanners or proxies.
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: signature
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '200':
+          description: One transparent GIF regardless of token validity.
+          headers:
+            Cache-Control:
+              description: Pixel responses are not cacheable.
+              schema:
+                type: string
+            Cross-Origin-Resource-Policy:
+              description: Allows the first-party image to render in email clients.
+              schema:
+                type: string
+                const: cross-origin
+          content:
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        4XX:
+          description: >-
+            A deployment edge rejected malformed HTTP before the request
+            reached PaperBoy. The application handler itself masks token and
+            message validity behind the 200 GIF response.
   /api/v1/webhooks:
     get:
       operationId: getWebhook
@@ -378,6 +488,25 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    OpenTrackingSettings:
+      type: object
+      additionalProperties: false
+      required: [enabled, protocol_time_zone, updated_at]
+      properties:
+        enabled:
+          type: boolean
+        protocol_time_zone:
+          type: string
+          const: UTC
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    OpenTrackingUpdateInput:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
     SendEmailInput:
       oneOf:
         - $ref: '#/components/schemas/InlineEmailInput'

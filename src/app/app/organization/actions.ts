@@ -3,6 +3,11 @@
 import { redirect } from "next/navigation";
 import { AuthorizationError } from "@/lib/authorization";
 import {
+  OpenTrackingConfigurationError,
+  OpenTrackingSettingsError,
+} from "@/lib/open-tracking-core";
+import { updateOpenTrackingSettings } from "@/lib/open-tracking";
+import {
   RateLimitConfigurationError,
   RateLimitSettingsError,
 } from "@/lib/rate-limit-core";
@@ -33,6 +38,16 @@ function errorLocation(error: unknown): string {
 
   if (error instanceof RateLimitConfigurationError) {
     return "/app/organization?error=rate_limit_configuration";
+  }
+
+  if (error instanceof OpenTrackingSettingsError) {
+    return error.code === "MEMBERSHIP_REQUIRED"
+      ? "/app/organization?error=membership_required"
+      : "/app/organization?error=invalid_open_tracking";
+  }
+
+  if (error instanceof OpenTrackingConfigurationError) {
+    return "/app/organization?error=open_tracking_configuration";
   }
 
   throw error;
@@ -128,4 +143,20 @@ export async function updateRateLimitsAction(formData: FormData) {
   }
 
   redirect("/app/organization?saved=rate-limits");
+}
+
+export async function updateOpenTrackingAction(formData: FormData) {
+  const { organization, session } = await requireOrganization();
+
+  try {
+    await updateOpenTrackingSettings({
+      actorUserId: session.user.id,
+      orgId: organization.id,
+      payload: { enabled: formData.get("enabled") === "on" },
+    });
+  } catch (error) {
+    redirect(errorLocation(error));
+  }
+
+  redirect("/app/organization?saved=open-tracking");
 }

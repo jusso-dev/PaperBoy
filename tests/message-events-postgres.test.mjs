@@ -167,11 +167,17 @@ test(
         .update(messages)
         .set({ openTrackingEnabled: true })
         .where(eq(messages.id, queued.id));
-      await recordMessageEvent({
+      const firstOpen = await recordMessageEvent({
         createdAt: eventAt,
         messageId: queued.id,
         type: "opened",
       });
+      const duplicateOpen = await recordMessageEvent({
+        createdAt: new Date(eventAt.getTime() + 1_000),
+        messageId: queued.id,
+        type: "opened",
+      });
+      assert.equal(duplicateOpen.id, firstOpen.id);
 
       timeline = await listMessageEvents({
         actorUserId: userId,

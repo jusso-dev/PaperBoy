@@ -11,6 +11,7 @@ import type {
   QueuedMessageBatchItem,
   QueuedMessageRecord,
 } from "@/lib/messages";
+import { OpenTrackingConfigurationError } from "@/lib/open-tracking-core";
 import {
   RateLimitConfigurationError,
   RateLimitError,
@@ -246,6 +247,12 @@ function errorDetails(error: unknown) {
       code: "rate_limit_unavailable",
       message:
         "The operator must correct PaperBoy's live and test rate-limit configuration.",
+    };
+  } else if (error instanceof OpenTrackingConfigurationError) {
+    details = {
+      code: "open_tracking_unavailable",
+      message:
+        "The operator must configure PaperBoy's public URL and dedicated open-tracking signing key.",
     };
   } else if (error instanceof EmailError) {
     details =

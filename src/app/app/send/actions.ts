@@ -6,6 +6,7 @@ import { AuthorizationError } from "@/lib/authorization";
 import { queueConsoleTestEmail } from "@/lib/console-send";
 import { DomainError } from "@/lib/domains";
 import { EmailError } from "@/lib/email-core";
+import { OpenTrackingConfigurationError } from "@/lib/open-tracking-core";
 import {
   RateLimitConfigurationError,
   RateLimitError,
@@ -45,6 +46,10 @@ function sendErrorMessage(error: unknown): string {
 
   if (error instanceof RateLimitConfigurationError) {
     return "The operator must correct the live and test rate-limit configuration.";
+  }
+
+  if (error instanceof OpenTrackingConfigurationError) {
+    return "The operator must configure the public URL and open-tracking signing key.";
   }
 
   throw error;

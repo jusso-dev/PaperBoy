@@ -25,12 +25,13 @@ keywords = ["whsec_"]
 [[rules]]
 id = "paperboy-base64-service-secret"
 description = "PaperBoy encryption or signing key assignment"
-regex = '''(PAPERBOY_DKIM_ENCRYPTION_KEY|PAPERBOY_WEBHOOK_ENCRYPTION_KEY|PAPERBOY_UNSUBSCRIBE_SIGNING_KEY)[[:space:]]*[:=][[:space:]]*["']?([A-Za-z0-9+/]{43}=)'''
+regex = '''(PAPERBOY_DKIM_ENCRYPTION_KEY|PAPERBOY_WEBHOOK_ENCRYPTION_KEY|PAPERBOY_UNSUBSCRIBE_SIGNING_KEY|PAPERBOY_OPEN_TRACKING_SIGNING_KEY)[[:space:]]*[:=][[:space:]]*["']?([A-Za-z0-9+/]{43}=)'''
 secretGroup = 2
 keywords = [
   "PAPERBOY_DKIM_ENCRYPTION_KEY",
   "PAPERBOY_WEBHOOK_ENCRYPTION_KEY",
   "PAPERBOY_UNSUBSCRIBE_SIGNING_KEY",
+  "PAPERBOY_OPEN_TRACKING_SIGNING_KEY",
 ]
 
 [[rules]]

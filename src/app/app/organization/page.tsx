@@ -3,6 +3,7 @@ import {
   inviteMemberAction,
   removeMemberAction,
   switchOrganizationAction,
+  updateOpenTrackingAction,
   updateRateLimitsAction,
 } from "./actions";
 import { can, isOrgRole } from "@/lib/authorization";
@@ -13,6 +14,7 @@ import {
   listUserOrganizations,
 } from "@/lib/organizations";
 import { requireOrganization } from "@/lib/session";
+import { getOpenTrackingSettings } from "@/lib/open-tracking";
 import { getRateLimitSettings } from "@/lib/rate-limits";
 import { formatDateTime } from "@/lib/time";
 
@@ -32,8 +34,11 @@ const errorMessages: Record<string, string> = {
   invalid_role: "Choose the admin or member role.",
   invalid_rate_limits:
     "Use whole-number limits, with the test limit higher than the live limit.",
+  invalid_open_tracking: "Choose whether open tracking is enabled.",
   invitation_not_found: "That invitation is no longer available.",
   membership_required: "That organization membership is no longer available.",
+  open_tracking_configuration:
+    "The operator must configure the public URL and dedicated open-tracking signing key before tracking can be enabled.",
   rate_limit_configuration:
     "The operator must correct the configured live and test rate-limit defaults.",
 };
@@ -43,6 +48,7 @@ const successMessages: Record<string, string> = {
   invitation: "Invitation saved. The recipient can accept it in PaperBoy.",
   removed: "Member removed.",
   "rate-limits": "Organization rate limits saved.",
+  "open-tracking": "Organization open-tracking setting saved.",
 };
 
 export default async function OrganizationPage({
@@ -52,8 +58,14 @@ export default async function OrganizationPage({
     requireOrganization(),
     searchParams,
   ]);
-  const [organizations, members, invitations, pendingInvitations, rateLimits] =
-    await Promise.all([
+  const [
+    organizations,
+    members,
+    invitations,
+    pendingInvitations,
+    rateLimits,
+    openTracking,
+  ] = await Promise.all([
       listUserOrganizations(session.user.id),
       listOrganizationMembers(organization.id),
       listOrganizationInvitations(organization.id),
@@ -62,10 +74,18 @@ export default async function OrganizationPage({
         actorUserId: session.user.id,
         orgId: organization.id,
       }),
+      getOpenTrackingSettings({
+        actorUserId: session.user.id,
+        orgId: organization.id,
+      }),
     ]);
   const canInvite = can(organization.role, "members.invite");
   const canRemove = can(organization.role, "members.remove");
   const canManageRateLimits = can(organization.role, "rateLimits.manage");
+  const canManageOpenTracking = can(
+    organization.role,
+    "openTracking.manage",
+  );
   const errorMessage = status.error
     ? (errorMessages[status.error] ??
       "We could not complete that organization action. Try again.")
@@ -197,6 +217,44 @@ export default async function OrganizationPage({
           </form>
         ) : (
           <p>Owners and admins manage rate limits.</p>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Open tracking</h2>
+        <p>
+          Privacy-first and off by default. When enabled, PaperBoy adds one
+          signed first-party pixel to HTML messages and records at most one
+          opened event. Security scanners and mail proxies can trigger it, so
+          an event does not prove a person read the message. Updated {formatDateTime(
+            openTracking.updatedAt,
+            session.user.timezone,
+          )}.
+        </p>
+        <p>
+          Current setting: <strong>{openTracking.enabled ? "On" : "Off"}</strong>
+        </p>
+        {canManageOpenTracking ? (
+          <form action={updateOpenTrackingAction} className="rate-limit-form">
+            <label htmlFor="openTrackingEnabled">
+              <input
+                defaultChecked={openTracking.enabled}
+                id="openTrackingEnabled"
+                name="enabled"
+                type="checkbox"
+              />{" "}
+              Add the PaperBoy open pixel to future HTML messages
+            </label>
+            <p className="field-help">
+              Plain-text messages are never tracked. Existing queued messages
+              keep the setting captured when they were created.
+            </p>
+            <button className="btn btn-primary" type="submit">
+              Save open tracking
+            </button>
+          </form>
+        ) : (
+          <p>Owners and admins manage open tracking.</p>
         )}
       </div>
 

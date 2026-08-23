@@ -10,6 +10,7 @@ import {
   parseSendEmailInput,
 } from "../src/lib/email-core.ts";
 import { handleSendEmailRequest } from "../src/lib/email-http.ts";
+import { OpenTrackingConfigurationError } from "../src/lib/open-tracking-core.ts";
 import { RateLimitError } from "../src/lib/rate-limit-core.ts";
 import { TemplateError } from "../src/lib/template-core.ts";
 
@@ -251,6 +252,19 @@ test("private attachment storage failures return an actionable 503", async () =>
   assert.equal(response.status, 503);
   assert.equal(body.error.code, "attachment_storage_unavailable");
   assert.equal(JSON.stringify(body).includes("WRITE_FAILED"), false);
+});
+
+test("enabled tracking without operator secrets fails before queueing", async () => {
+  const { dependencies } = testDependencies();
+  dependencies.queue = async () => {
+    throw new OpenTrackingConfigurationError();
+  };
+  const response = await handleSendEmailRequest(request(validBody), dependencies);
+  const body = await response.json();
+
+  assert.equal(response.status, 503);
+  assert.equal(body.error.code, "open_tracking_unavailable");
+  assert.match(body.error.message, /dedicated open-tracking signing key/);
 });
 
 test("a capped organization receives 429 with an exact Retry-After", async () => {

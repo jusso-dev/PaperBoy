@@ -116,6 +116,26 @@ test("a fake MTA receives the same semantic message as Cloudflare", async () => 
   );
 });
 
+test("SMTP and Cloudflare preserve the same signed tracking pixel", async () => {
+  const pixelUrl =
+    "https://paperboy.example/o/11111111-1111-4111-8111-111111111111/signed.gif";
+  const tracked = message({
+    html: `<p>Private edition</p><img src="${pixelUrl}" alt="" />`,
+  });
+  const smtpMime = await buildSmtpMimeMessage({
+    ...tracked,
+    attachments: [],
+  });
+  const cloudflare = prepareCloudflareEmailMessage({
+    ...tracked,
+    attachments: [],
+  });
+
+  assert.match(smtpMime.toString(), /signed\.gif/);
+  assert.equal(cloudflare.html, tracked.html);
+  assert.equal("dkim" in cloudflare, false);
+});
+
 test("HTTP 5xx is stored for retry with bounded backoff", async () => {
   const { calls, store } = fakeStore(message({ attemptCount: 1 }));
   const result = await processNextMessage({
