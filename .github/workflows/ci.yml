@@ -48,7 +48,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Scan repository for secrets
+        run: ./scripts/run-gitleaks.sh git --redact --verbose .
 
       - uses: pnpm/action-setup@v4
 

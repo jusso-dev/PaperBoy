@@ -1,0 +1,59 @@
+title = "PaperBoy secret detection"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Published Svix HMAC test-vector secret"
+regexTarget = "secret"
+regexes = ['''^whsec_plJ3nmyCDGBKInavdOK15jsl$''']
+
+[[rules]]
+id = "paperboy-api-key"
+description = "PaperBoy bearer API key"
+regex = '''pb_(live|test)_[A-Za-z0-9_-]{16}_([A-Za-z0-9_-]{43})'''
+secretGroup = 2
+keywords = ["pb_live_", "pb_test_"]
+
+[[rules]]
+id = "paperboy-webhook-signing-secret"
+description = "PaperBoy webhook signing secret"
+regex = '''whsec_([A-Za-z0-9+/]{43}=)'''
+secretGroup = 1
+keywords = ["whsec_"]
+
+[[rules]]
+id = "paperboy-base64-service-secret"
+description = "PaperBoy encryption or signing key assignment"
+regex = '''(PAPERBOY_DKIM_ENCRYPTION_KEY|PAPERBOY_WEBHOOK_ENCRYPTION_KEY|PAPERBOY_UNSUBSCRIBE_SIGNING_KEY)[[:space:]]*[:=][[:space:]]*["']?([A-Za-z0-9+/]{43}=)'''
+secretGroup = 2
+keywords = [
+  "PAPERBOY_DKIM_ENCRYPTION_KEY",
+  "PAPERBOY_WEBHOOK_ENCRYPTION_KEY",
+  "PAPERBOY_UNSUBSCRIBE_SIGNING_KEY",
+]
+
+[[rules]]
+id = "paperboy-smtp-url-credential"
+description = "Credential embedded in SMTP_URL"
+regex = '''smtps?://[^:@/\s]+:([^@/\s]+)@[A-Za-z0-9.-]+(:[0-9]{1,5})?'''
+secretGroup = 1
+keywords = ["smtp://", "smtps://"]
+
+[[rules.allowlists]]
+description = "Deliberately weak SMTP adapter test credentials"
+regexTarget = "secret"
+regexes = ['''^(p%40ss|secret|test-token)$''']
+
+[[rules]]
+id = "paperboy-aws-access-key-id"
+description = "AWS access key ID"
+regex = '''A3T[A-Z0-9]{17}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|AGPA[A-Z0-9]{16}|AIDA[A-Z0-9]{16}|AROA[A-Z0-9]{16}|AIPA[A-Z0-9]{16}|ANPA[A-Z0-9]{16}|ANVA[A-Z0-9]{16}|ASCA[A-Z0-9]{16}'''
+keywords = ["A3T", "AKIA", "ASIA", "AGPA", "AIDA", "AROA", "AIPA", "ANPA", "ANVA", "ASCA"]
+
+[[rules]]
+id = "cloudflare-email-smtp-api-token"
+description = "Cloudflare Email Service API token in SMTP_URL"
+regex = '''smtps://api_token:([A-Za-z0-9_%+.-]{20,})@smtp[.]mx[.]cloudflare[.]net:465'''
+secretGroup = 1
+keywords = ["smtps://api_token:"]

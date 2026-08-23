@@ -13,6 +13,12 @@ Self-hosted transactional email. A cheaper Resend you run on your own box.
 - First-class MCP server over the same domain services as HTTP and the console
 - CI on Linux self-hosted runners with isolated PostgreSQL and Mailpit service containers, UTC process time, read-only repository permissions, and no GitHub-hosted labels. Fork pull requests are skipped so untrusted code never reaches the runner; same-repository pull requests and `main` pushes run the full gate.
 
+## Security
+
+PaperBoy's repository-scoped [threat model](docs/threat-model.md) covers REST and first-class MCP authentication, tenant boundaries, UTC/IANA timezone handling, DKIM and webhook key storage, self-hosted SMTP, Cloudflare Email Service, attachments, and self-hosted CI. Its limits are explicit: a leaked bearer key remains usable until revoked, an incorrectly configured MTA can become an open relay, and Cloudflare/provider acceptance is not proof of final delivery.
+
+Run `pnpm security:secrets` before pushing. CI scans full Git history with pinned, checksum-verified Gitleaks default rules plus explicit AWS-key, PaperBoy API-key, webhook-secret, service-key, SMTP-credential, and Cloudflare Email token patterns. Scanning runs locally; the repository is not uploaded to a security SaaS. A clean scan cannot find every runtime or novel secret, so rotate any exposed credential before cleaning source history.
+
 ## Theme
 
 Paper watermark (newsprint, cream stock). Light blue accent `#7EB8DA`. Ink `#1A1A1A`. No neon, no dark SaaS chrome.

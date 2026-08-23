@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "mcp:stdio": "tsx src/mcp/stdio.ts",
     "openapi:lint": "redocly lint openapi.yaml",
+    "security:secrets": "./scripts/run-gitleaks.sh git --redact --verbose .",
     "sdk:build": "tsc -p packages/sdk/tsconfig.json",
     "worker": "tsx src/worker.ts",
     "test": "tsx --test tests/*.test.mjs",
