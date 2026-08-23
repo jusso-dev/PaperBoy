@@ -5,6 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/server";
 import {
   DNS_OPERATOR_GUIDE,
 } from "../src/lib/dns-operator-guide.ts";
+import { EmailError } from "../src/lib/email-core.ts";
 import {
   PAPERBOY_MCP_RESOURCE_URIS,
   PAPERBOY_MCP_SCHEMA_VERSION,
@@ -84,6 +85,7 @@ function domainServices(overrides = {}) {
 function emailServices(overrides = {}) {
   return {
     queue: async () => firstMessage,
+    queueBatch: async () => [{ message: firstMessage, ok: true }],
     ...overrides,
   };
 }
@@ -174,6 +176,11 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "status",
       ],
+      paperboy_send_email_batch: [
+        "data",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
       paperboy_rotate_domain_dkim: [
         "domain",
         "observedAt",
@@ -210,6 +217,7 @@ test("initializes and publishes versioned tool schemas", async () => {
         "text",
         "to",
       ],
+      paperboy_send_email_batch: ["emails"],
       paperboy_setup_domain_dkim: ["domainId"],
       paperboy_verify_domain: ["domainId"],
     };
@@ -228,6 +236,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_domains: { destructive: false, readOnly: true },
       paperboy_rotate_domain_dkim: { destructive: false, readOnly: false },
       paperboy_send_email: { destructive: false, readOnly: false },
+      paperboy_send_email_batch: { destructive: false, readOnly: false },
       paperboy_setup_domain_dkim: { destructive: false, readOnly: false },
       paperboy_verify_domain: { destructive: false, readOnly: false },
     };
@@ -451,6 +460,81 @@ test("sending is a first-class tenant-bound MCP operation with UTC metadata", as
         status: "queued",
       });
       assert.equal(JSON.stringify(result).includes("Body"), false);
+    },
+  );
+});
+
+test("batch sending preserves order and reports per-item MCP failures", async () => {
+  let received = null;
+  const secondMessage = {
+    ...firstMessage,
+    id: "77777777-7777-4777-8777-777777777777",
+  };
+  const emails = [
+    {
+      from: "sender@example.com",
+      subject: "First",
+      text: "First body",
+      to: ["first@example.net"],
+    },
+    {
+      from: "sender@example.com",
+      subject: "Second",
+      text: "Second body",
+      to: ["second@example.net"],
+    },
+  ];
+
+  await withClient(
+    dependencies({
+      emails: emailServices({
+        queueBatch: async (principal, payloads) => {
+          received = { payloads, principal };
+          return [
+            { message: secondMessage, ok: true },
+            {
+              error: new EmailError("VALIDATION_ERROR", [
+                { field: "to", message: "Recipient denied." },
+              ]),
+              ok: false,
+            },
+          ];
+        },
+      }),
+    }),
+    async (client) => {
+      const result = await client.callTool({
+        arguments: { emails },
+        name: "paperboy_send_email_batch",
+      });
+
+      assert.equal(result.isError, undefined);
+      assert.deepEqual(received, { payloads: emails, principal: firstPrincipal });
+      assert.deepEqual(result.structuredContent, {
+        data: [
+          {
+            deliveryMode: "test-sink",
+            environment: "test",
+            id: secondMessage.id,
+            index: 0,
+            queuedAt: fixedNow.toISOString(),
+            replayed: false,
+            status: "queued",
+          },
+          {
+            error: {
+              code: "validation_error",
+              fields: [{ field: "to", message: "Recipient denied." }],
+              message: "Correct the invalid email fields and try again.",
+            },
+            index: 1,
+          },
+        ],
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+      });
+      assert.equal(JSON.stringify(result).includes("First body"), false);
+      assert.equal(JSON.stringify(result).includes("Second body"), false);
     },
   );
 });

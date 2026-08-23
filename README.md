@@ -62,6 +62,24 @@ curl https://paperboy.example/api/v1/emails \
 
 A live key can queue only from a verified domain in its organization with an active PaperBoy DKIM key. A test key always queues to the isolated `test-sink` mode and cannot become live delivery. `Idempotency-Key` is optional, scoped to the API key, and limited to 256 visible ASCII characters. Repeating the same normalized request returns the original ID; changing the request under the same key returns 409.
 
+`POST /api/v1/emails/batch` accepts a bare JSON array of 1 to 100 messages. A fully valid batch returns IDs in input order using the familiar `data` envelope:
+
+```sh
+curl https://paperboy.example/api/v1/emails/batch \
+  -H 'Authorization: Bearer <PaperBoy API key>' \
+  -H 'Content-Type: application/json' \
+  --data '[
+    {"from":"news@mail.example.com","to":"first@example.net","subject":"First","text":"Hello"},
+    {"from":"news@mail.example.com","to":"second@example.net","subject":"Second","text":"Hello"}
+  ]'
+```
+
+```json
+{"data":[{"id":"00000000-0000-4000-8000-000000000001"},{"id":"00000000-0000-4000-8000-000000000002"}]}
+```
+
+Each item is validated and queued independently under the same API-key and domain rules. Mixed success returns HTTP 207 with each array position containing either `{id}` or a structured `{error}`; valid neighbors are not dropped. Invalid envelopes return 422. Batch idempotency is not available yet, so an `Idempotency-Key` fails explicitly instead of being ignored.
+
 The queue stores semantic `from`, `to`, subject, HTML/text, and tags rather than prebuilt MIME. This leaves Date and DKIM ownership to the selected outbound adapter: a self-hosted SMTP path can use PaperBoy signing, while Cloudflare Email Sending can construct and sign its provider-managed message without double-signing. This endpoint persists `queued` rows; the outbound worker is a separate deployment component.
 
 Message instants are PostgreSQL `timestamptz` values. MCP exposes them as RFC 3339 UTC; future console presentation uses the signed-in user's persisted IANA timezone.
@@ -111,7 +129,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 
 Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
 
-The contract exposes capability/account context plus first-class domain list/create/verify/delete and DKIM setup/rotate/finalise tools, with authenticated configuration, operator-safety, and DNS operator resources. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Domain and DKIM mutations re-read the key creator's current membership and role; destructive deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
+The contract exposes capability/account context plus first-class single/batch sending, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools, with authenticated configuration, operator-safety, and DNS operator resources. `paperboy_send_email_batch` preserves input order, reports per-item failures, and never returns message content. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Domain and DKIM mutations re-read the key creator's current membership and role; destructive deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
 
 HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
 

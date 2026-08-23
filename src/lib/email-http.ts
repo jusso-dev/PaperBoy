@@ -3,7 +3,7 @@ import { DomainError } from "@/lib/domain-core";
 import { EmailError } from "@/lib/email-core";
 import type { QueuedMessageRecord } from "@/lib/messages";
 
-type EmailHttpDependencies = {
+export type EmailHttpDependencies = {
   authenticate: (request: Request) => Promise<ApiKeyPrincipal | null>;
   queue: (input: {
     idempotencyKey?: unknown;
@@ -12,45 +12,49 @@ type EmailHttpDependencies = {
   }) => Promise<QueuedMessageRecord>;
 };
 
-function json(data: unknown, status: number, headers?: HeadersInit) {
+export function emailJson(
+  data: unknown,
+  status: number,
+  headers?: HeadersInit,
+) {
   return Response.json(data, {
     headers: { "Cache-Control": "no-store", ...headers },
     status,
   });
 }
 
-function errorResponse(error: unknown): Response {
+export function describeEmailFailure(error: unknown) {
   if (error instanceof EmailError) {
     if (error.code === "IDEMPOTENCY_CONFLICT") {
-      return json(
-        {
+      return {
+        body: {
           error: {
             code: "idempotency_conflict",
             message:
               "This Idempotency-Key was already used with a different request.",
           },
         },
-        409,
-      );
+        status: 409,
+      };
     }
 
-    return json(
-      {
+    return {
+      body: {
         error: {
           code: "validation_error",
           fields: error.issues,
           message: "Correct the invalid email fields and try again.",
         },
       },
-      422,
-    );
+      status: 422,
+    };
   }
 
   if (error instanceof DomainError) {
     const invalid = error.code === "INVALID_DOMAIN";
 
-    return json(
-      {
+    return {
+      body: {
         error: {
           code: invalid ? "invalid_from_domain" : "domain_not_verified",
           message: invalid
@@ -58,21 +62,27 @@ function errorResponse(error: unknown): Response {
             : "Verify the From domain before sending with a live API key.",
         },
       },
-      422,
-    );
+      status: 422,
+    };
   }
 
   console.error("PaperBoy failed to queue an email.");
 
-  return json(
-    {
+  return {
+    body: {
       error: {
         code: "internal_error",
         message: "The email could not be queued.",
       },
     },
-    500,
-  );
+    status: 500,
+  };
+}
+
+function errorResponse(error: unknown): Response {
+  const failure = describeEmailFailure(error);
+
+  return emailJson(failure.body, failure.status);
 }
 
 export async function handleSendEmailRequest(
@@ -82,7 +92,7 @@ export async function handleSendEmailRequest(
   const principal = await dependencies.authenticate(request);
 
   if (!principal) {
-    return json(
+    return emailJson(
       {
         error: {
           code: "unauthorized",
@@ -99,7 +109,7 @@ export async function handleSendEmailRequest(
   try {
     payload = await request.json();
   } catch {
-    return json(
+    return emailJson(
       {
         error: {
           code: "invalid_json",
@@ -117,7 +127,7 @@ export async function handleSendEmailRequest(
       principal,
     });
 
-    return json({ id: message.id }, 200);
+    return emailJson({ id: message.id }, 200);
   } catch (error) {
     return errorResponse(error);
   }

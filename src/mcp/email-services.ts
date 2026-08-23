@@ -1,5 +1,5 @@
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
-import { queueEmail } from "@/lib/messages";
+import { queueEmail, queueEmailBatch } from "@/lib/messages";
 import type { PaperBoyMcpEmailServices } from "@/mcp/email-tools";
 
 export const paperBoyMcpEmailServices: PaperBoyMcpEmailServices = {
@@ -8,4 +8,6 @@ export const paperBoyMcpEmailServices: PaperBoyMcpEmailServices = {
     payload: unknown,
     idempotencyKey?: unknown,
   ) => queueEmail({ idempotencyKey, payload, principal }),
+  queueBatch: (principal: ApiKeyPrincipal, payloads: unknown[]) =>
+    queueEmailBatch({ payloads, principal }),
 };

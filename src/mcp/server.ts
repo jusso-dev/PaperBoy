@@ -129,7 +129,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - A key is bound to one organization and one environment (\`live\` or \`test\`).
 - Domain mutations re-check the key creator's current organization role.
 - DKIM tools return public DNS material only. PaperBoy private keys remain encrypted at rest and never enter tool output.
-- paperboy_send_email uses the same validation, domain authorization, idempotency, and queue service as POST /api/v1/emails. Test keys always select the test sink.
+- paperboy_send_email and paperboy_send_email_batch use the same validation, domain authorization, and queue services as their HTTP peers. Test keys always select the test sink; batch results preserve input order and report failures per item.
 - Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
 - Revocation denies the next authenticated HTTP request or stdio tool call. Reconnect with a newly issued key.

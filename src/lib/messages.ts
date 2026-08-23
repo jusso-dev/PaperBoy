@@ -24,6 +24,16 @@ export type QueuedMessageRecord = {
   status: MessageStatus;
 };
 
+export type QueuedMessageBatchItem =
+  | {
+      error: unknown;
+      ok: false;
+    }
+  | {
+      message: QueuedMessageRecord;
+      ok: true;
+    };
+
 function isUniqueViolation(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -170,4 +180,22 @@ export async function queueEmail(input: {
 
     throw error;
   }
+}
+
+export async function queueEmailBatch(input: {
+  payloads: unknown[];
+  principal: ApiKeyPrincipal;
+}): Promise<QueuedMessageBatchItem[]> {
+  return Promise.all(
+    input.payloads.map(async (payload) => {
+      try {
+        return {
+          message: await queueEmail({ payload, principal: input.principal }),
+          ok: true as const,
+        };
+      } catch (error) {
+        return { error, ok: false as const };
+      }
+    }),
+  );
 }
