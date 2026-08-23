@@ -7,6 +7,7 @@ export type MessageDeliveryStatusRecord = {
   attemptCount: number;
   createdAt: Date;
   deliveryMode: MessageDeliveryMode;
+  domainId: string | null;
   environment: "live" | "test";
   failedAt: Date | null;
   failureReason: string | null;
@@ -18,6 +19,13 @@ export type MessageDeliveryStatusRecord = {
   sentAt: Date | null;
   status: MessageStatus;
   updatedAt: Date;
+};
+
+export type MessageDeliveryStatusFilters = {
+  createdAtBefore?: Date;
+  createdAtFrom?: Date;
+  domainId?: string;
+  status?: MessageStatus;
 };
 
 export type MessageDeliveryCounts = Record<MessageStatus, number>;

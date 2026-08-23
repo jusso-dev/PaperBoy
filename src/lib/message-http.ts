@@ -113,6 +113,7 @@ export function serializeMessage(message: MessageDetailRecord) {
     attempt_count: message.attemptCount,
     created_at: message.createdAt.toISOString(),
     delivery_mode: message.deliveryMode,
+    domain_id: message.domainId,
     environment: message.environment,
     failed_at: timestamp(message.failedAt),
     failure_reason: message.failureReason,

@@ -49,6 +49,14 @@ The signed-in console at `/app/send` lets owners and admins compose one provider
 
 This is a real provider check rather than isolated test-sink traffic. A development worker configured for Mailpit captures it, while a production worker configured for Cloudflare Email Service submits it through the same live SMTP adapter. Use a safe recipient address.
 
+## Message logs
+
+The signed-in console at `/app/logs` lists the 50 most recent matching messages with status, sending-domain, and inclusive calendar-date filters. Calendar dates are interpreted in the signed-in user's persisted IANA timezone before indexed tenant-safe PostgreSQL queries receive UTC boundaries. Selecting a row opens its safe metadata and ordered event timeline in a drawer without a page reload; message HTML, plain text, attachment bytes, event data, and provider payloads are not rendered there.
+
+Only organization owners can click **Download MIME (.eml)**. The file is an unsigned reconstruction from the stored semantic message and verified private attachment bytes, not a captured provider transmission. PaperBoy never stores Cloudflare's provider-owned DKIM or ARC headers, so those signatures are intentionally absent; Cloudflare Email Service remains the signing authority when it submits the live message. Admins and members can inspect logs and events but cannot download reconstructed MIME.
+
+The first-class `paperboy_list_delivery_statuses` MCP tool accepts optional `status`, `domainId`, `createdAtFrom`, `createdAtBefore`, and `limit` filters. MCP date bounds are RFC 3339 instants and remain UTC; tenant and environment come only from the API key. `paperboy_get_delivery_status` and `paperboy_list_message_events` expose the same delivery state and safe timeline without recipients, bodies, event data, provider payloads, or MIME. REST message detail includes nullable `domain_id` and keeps all timestamps in UTC.
+
 ## Send API
 
 `POST /api/v1/emails` accepts a Resend-shaped JSON body and returns the queued message ID:

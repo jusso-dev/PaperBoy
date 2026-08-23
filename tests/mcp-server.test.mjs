@@ -74,6 +74,7 @@ const firstDelivery = {
   attemptCount: 2,
   createdAt: fixedNow,
   deliveryMode: "test-sink",
+  domainId: null,
   environment: "test",
   failedAt: null,
   failureReason: "Outbound HTTP provider returned 503.",
@@ -639,7 +640,13 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_capabilities: [],
       paperboy_list_broadcasts: [],
       paperboy_list_domains: [],
-      paperboy_list_delivery_statuses: ["limit"],
+      paperboy_list_delivery_statuses: [
+        "createdAtBefore",
+        "createdAtFrom",
+        "domainId",
+        "limit",
+        "status",
+      ],
       paperboy_list_message_events: ["messageId"],
       paperboy_list_templates: [],
       paperboy_list_suppressions: ["limit", "query", "reason"],
@@ -1155,7 +1162,7 @@ test("broadcasts are first-class tenant-bound MCP operations with UTC progress",
   );
 });
 
-test("delivery status is first-class, tenant-bound, UTC, and content-free", async () => {
+test("delivery status is first-class, filtered, tenant-bound, UTC, and content-free", async () => {
   const calls = [];
 
   await withClient(
@@ -1165,8 +1172,8 @@ test("delivery status is first-class, tenant-bound, UTC, and content-free", asyn
           calls.push(["get", principal, messageId]);
           return firstDelivery;
         },
-        list: async (principal, limit) => {
-          calls.push(["list", principal, limit]);
+        list: async (principal, filters) => {
+          calls.push(["list", principal, filters]);
           return [firstDelivery];
         },
         listEvents: async (principal, messageId) => {
@@ -1177,7 +1184,13 @@ test("delivery status is first-class, tenant-bound, UTC, and content-free", asyn
     }),
     async (client) => {
       const listed = await client.callTool({
-        arguments: { limit: 7 },
+        arguments: {
+          createdAtBefore: "2026-08-24T00:00:00.000Z",
+          createdAtFrom: "2026-08-23T00:00:00.000Z",
+          domainId: firstDomain.id,
+          limit: 7,
+          status: "queued",
+        },
         name: "paperboy_list_delivery_statuses",
       });
       const fetched = await client.callTool({
@@ -1227,7 +1240,17 @@ test("delivery status is first-class, tenant-bound, UTC, and content-free", asyn
       assert.equal(JSON.stringify(events).includes("private-provider"), false);
       assert.equal(JSON.stringify(events).includes("sequence"), false);
       assert.deepEqual(calls, [
-        ["list", firstPrincipal, 7],
+        [
+          "list",
+          firstPrincipal,
+          {
+            createdAtBefore: new Date("2026-08-24T00:00:00.000Z"),
+            createdAtFrom: new Date("2026-08-23T00:00:00.000Z"),
+            domainId: firstDomain.id,
+            limit: 7,
+            status: "queued",
+          },
+        ],
         ["get", firstPrincipal, firstDelivery.id],
         ["listEvents", firstPrincipal, firstDelivery.id],
       ]);

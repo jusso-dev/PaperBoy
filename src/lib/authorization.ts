@@ -20,6 +20,7 @@ export const ORG_PERMISSIONS = [
   "members.invite",
   "members.remove",
   "members.read",
+  "messages.downloadMime",
   "messages.read",
   "messages.send",
   "rateLimits.manage",

@@ -8,6 +8,7 @@ import {
 } from "@/lib/message-event-core";
 import {
   MessageStatusError,
+  type MessageDeliveryStatusFilters,
   type MessageDeliveryStatusRecord,
 } from "@/lib/message-status-core";
 import { protocolTimestamp } from "@/lib/time";
@@ -22,7 +23,7 @@ export const PAPERBOY_DELIVERY_MCP_TOOL_NAMES = [
 export const PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS = [
   {
     description:
-      "List recent queued, sending, sent, and failed message delivery states without exposing recipients or content.",
+      "List recent delivery states with optional status, domain, and UTC instant filters, without exposing recipients or content.",
     mutating: false,
     name: PAPERBOY_DELIVERY_MCP_TOOL_NAMES[0],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
@@ -50,7 +51,7 @@ export type PaperBoyMcpDeliveryServices = {
   ) => Promise<MessageDeliveryStatusRecord>;
   list: (
     principal: ApiKeyPrincipal,
-    limit?: number,
+    filters: MessageDeliveryStatusFilters & { limit?: number },
   ) => Promise<MessageDeliveryStatusRecord[]>;
   listEvents: (
     principal: ApiKeyPrincipal,
@@ -62,6 +63,7 @@ const deliveryStatusSchema = z.object({
   attemptCount: z.number().int().nonnegative(),
   createdAt: z.iso.datetime({ offset: true }),
   deliveryMode: z.enum(["live", "test-sink"]),
+  domainId: z.string().uuid().nullable(),
   environment: z.enum(["live", "test"]),
   failedAt: z.iso.datetime({ offset: true }).nullable(),
   failureReason: z.string().nullable(),
@@ -103,6 +105,27 @@ const messageEventsOutputSchema = z.object({
   ...metadataSchema,
 });
 
+const deliveryListInputSchema = z
+  .object({
+    createdAtBefore: z.iso.datetime({ offset: true }).optional(),
+    createdAtFrom: z.iso.datetime({ offset: true }).optional(),
+    domainId: z.string().uuid().optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+    status: z.enum(["queued", "sending", "sent", "failed"]).optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      !value.createdAtFrom ||
+      !value.createdAtBefore ||
+      new Date(value.createdAtFrom).getTime() <
+        new Date(value.createdAtBefore).getTime(),
+    {
+      message: "createdAtBefore must be later than createdAtFrom.",
+      path: ["createdAtBefore"],
+    },
+  );
+
 function serializeDelivery(record: MessageDeliveryStatusRecord) {
   const timestamp = (value: Date | null) =>
     value ? protocolTimestamp(value) : null;
@@ -111,6 +134,7 @@ function serializeDelivery(record: MessageDeliveryStatusRecord) {
     attemptCount: record.attemptCount,
     createdAt: protocolTimestamp(record.createdAt),
     deliveryMode: record.deliveryMode,
+    domainId: record.domainId,
     environment: record.environment,
     failedAt: timestamp(record.failedAt),
     failureReason: record.failureReason,
@@ -195,19 +219,25 @@ export function registerPaperBoyDeliveryTools(input: {
     {
       annotations,
       description: PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS[0].description,
-      inputSchema: z
-        .object({ limit: z.number().int().min(1).max(100).optional() })
-        .strict(),
+      inputSchema: deliveryListInputSchema,
       outputSchema: deliveriesOutputSchema,
       title: "List PaperBoy delivery statuses",
       _meta: { "paperboy/schemaVersion": PAPERBOY_MCP_SCHEMA_VERSION },
     },
-    async ({ limit }) => {
+    async ({ createdAtBefore, createdAtFrom, domainId, limit, status }) => {
       const principal = await input.authorize();
       if (!principal) return unauthorizedResult();
 
       try {
-        const records = await input.services.list(principal, limit);
+        const records = await input.services.list(principal, {
+          createdAtBefore: createdAtBefore
+            ? new Date(createdAtBefore)
+            : undefined,
+          createdAtFrom: createdAtFrom ? new Date(createdAtFrom) : undefined,
+          domainId,
+          limit,
+          status,
+        });
         return successResult({
           deliveries: records.map(serializeDelivery),
           ...metadata(),

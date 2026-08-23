@@ -682,6 +682,23 @@ export const messages = pgTable(
       .on(table.apiKeyId, table.idempotencyKey)
       .where(sql`${table.idempotencyKey} is not null`),
     index("messages_org_id_idx").on(table.orgId),
+    index("messages_org_id_created_at_id_idx").on(
+      table.orgId,
+      table.createdAt,
+      table.id,
+    ),
+    index("messages_org_id_status_created_at_id_idx").on(
+      table.orgId,
+      table.status,
+      table.createdAt,
+      table.id,
+    ),
+    index("messages_org_id_domain_id_created_at_id_idx").on(
+      table.orgId,
+      table.domainId,
+      table.createdAt,
+      table.id,
+    ),
     index("messages_domain_id_idx").on(table.domainId),
     index("messages_created_at_idx").on(table.createdAt),
     index("messages_status_created_at_idx").on(table.status, table.createdAt),

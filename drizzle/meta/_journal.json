@@ -127,6 +127,13 @@
       "when": 1787503108113,
       "tag": "0017_pink_natasha_romanoff",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787505254366,
+      "tag": "0018_pink_mikhail_rasputin",
+      "breakpoints": true
     }
   ]
 }

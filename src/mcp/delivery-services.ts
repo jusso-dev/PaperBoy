@@ -18,11 +18,11 @@ export const paperBoyMcpDeliveryServices: PaperBoyMcpDeliveryServices = {
       messageId,
       orgId: principal.orgId,
     }),
-  list: (principal, limit) =>
+  list: (principal, filters) =>
     listMessageDeliveryStatuses({
       actorUserId: actorUserId(principal),
       environment: principal.environment,
-      limit,
+      ...filters,
       orgId: principal.orgId,
     }),
   listEvents: (principal, messageId) =>

@@ -67,6 +67,8 @@ test("members cannot mint API keys or delete domains", () => {
   assert.equal(can("member", "templates.update"), false);
   assert.equal(can("member", "broadcasts.read"), true);
   assert.equal(can("member", "messages.read"), true);
+  assert.equal(can("admin", "messages.downloadMime"), false);
+  assert.equal(can("member", "messages.downloadMime"), false);
   assert.equal(can("member", "messages.send"), false);
   assert.equal(can("member", "broadcasts.control"), false);
   assert.equal(can("member", "webhooks.manage"), false);

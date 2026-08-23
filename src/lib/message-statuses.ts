@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, gte, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { messages, orgMembers } from "@/db/schema";
 import {
@@ -7,6 +7,7 @@ import {
 } from "@/lib/authorization";
 import {
   MessageStatusError,
+  type MessageDeliveryStatusFilters,
   type MessageDeliveryCounts,
   type MessageDeliveryStatusRecord,
 } from "@/lib/message-status-core";
@@ -23,6 +24,7 @@ const statusSelection = {
   attemptCount: messages.attemptCount,
   createdAt: messages.createdAt,
   deliveryMode: messages.deliveryMode,
+  domainId: messages.domainId,
   environment: messages.environment,
   failedAt: messages.failedAt,
   failureReason: messages.failureReason,
@@ -41,6 +43,7 @@ type StatusRow = Pick<
   | "attemptCount"
   | "createdAt"
   | "deliveryMode"
+  | "domainId"
   | "environment"
   | "failedAt"
   | "failureReason"
@@ -85,6 +88,7 @@ function recordFromRow(row: StatusRow): MessageDeliveryStatusRecord {
     attemptCount: row.attemptCount,
     createdAt: row.createdAt,
     deliveryMode: row.deliveryMode,
+    domainId: row.domainId,
     environment: row.environment === "live" ? "live" : "test",
     failedAt: row.failedAt,
     failureReason: row.failureReason,
@@ -109,14 +113,24 @@ async function listRows(
   orgId: string,
   limit?: number,
   environment?: "live" | "test",
+  filters: MessageDeliveryStatusFilters = {},
 ) {
   return db
     .select(statusSelection)
     .from(messages)
     .where(
-      environment
-        ? and(eq(messages.orgId, orgId), eq(messages.environment, environment))
-        : eq(messages.orgId, orgId),
+      and(
+        eq(messages.orgId, orgId),
+        environment ? eq(messages.environment, environment) : undefined,
+        filters.status ? eq(messages.status, filters.status) : undefined,
+        filters.domainId ? eq(messages.domainId, filters.domainId) : undefined,
+        filters.createdAtFrom
+          ? gte(messages.createdAt, filters.createdAtFrom)
+          : undefined,
+        filters.createdAtBefore
+          ? lt(messages.createdAt, filters.createdAtBefore)
+          : undefined,
+      ),
     )
     .orderBy(desc(messages.createdAt), desc(messages.id))
     .limit(boundedLimit(limit));
@@ -132,13 +146,17 @@ async function countRows(orgId: string) {
 
 export async function listMessageDeliveryStatuses(input: {
   actorUserId: string | null;
+  createdAtBefore?: Date;
+  createdAtFrom?: Date;
+  domainId?: string;
   environment?: "live" | "test";
   limit?: number;
   orgId: string;
+  status?: MessageDeliveryStatusRecord["status"];
 }): Promise<MessageDeliveryStatusRecord[]> {
   await requireMessageRead(input);
   return (
-    await listRows(input.orgId, input.limit, input.environment)
+    await listRows(input.orgId, input.limit, input.environment, input)
   ).map(recordFromRow);
 }
 
@@ -177,15 +195,19 @@ export async function getMessageDeliveryStatus(input: {
 
 export async function getMessageDeliveryOverview(input: {
   actorUserId: string | null;
+  createdAtBefore?: Date;
+  createdAtFrom?: Date;
+  domainId?: string;
   limit?: number;
   orgId: string;
+  status?: MessageDeliveryStatusRecord["status"];
 }): Promise<{
   counts: MessageDeliveryCounts;
   messages: MessageDeliveryStatusRecord[];
 }> {
   await requireMessageRead(input);
   const [rows, groupedCounts] = await Promise.all([
-    listRows(input.orgId, input.limit),
+    listRows(input.orgId, input.limit, undefined, input),
     countRows(input.orgId),
   ]);
   const counts: MessageDeliveryCounts = {

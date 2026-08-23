@@ -34,6 +34,7 @@ function detail() {
     attemptCount: 1,
     createdAt: new Date("2026-08-23T10:00:00.000Z"),
     deliveryMode: "test-sink",
+    domainId: "66666666-6666-4666-8666-666666666666",
     environment: "test",
     failedAt: null,
     failureReason: null,
@@ -101,6 +102,7 @@ test("GET email returns tenant service data with explicit UTC timestamps", async
   assert.equal(body.id, messageId);
   assert.equal(body.object, "email");
   assert.equal(body.status, "sent");
+  assert.equal(body.domain_id, "66666666-6666-4666-8666-666666666666");
   assert.equal(body.created_at, "2026-08-23T10:00:00.000Z");
   assert.equal(body.sent_at, "2026-08-23T10:01:00.000Z");
   assert.equal(body.open_tracking_enabled, false);
