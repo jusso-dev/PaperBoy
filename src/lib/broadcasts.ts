@@ -1,0 +1,623 @@
+import "server-only";
+
+import { and, asc, count, desc, eq } from "drizzle-orm";
+import { db } from "@/db";
+import {
+  apiKeys,
+  broadcastRecipients,
+  broadcasts,
+  emailSuppressions,
+  orgMembers,
+} from "@/db/schema";
+import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
+import {
+  isOrgRole,
+  requirePermission,
+  type OrgPermission,
+} from "@/lib/authorization";
+import {
+  BroadcastError,
+  parseCreateBroadcastInput,
+  type BroadcastRecipientStatus,
+  type BroadcastStatus,
+} from "@/lib/broadcast-core";
+import { DomainError } from "@/lib/domain-core";
+import { EmailError } from "@/lib/email-core";
+import { queueEmail, type QueuedMessageRecord } from "@/lib/messages";
+import { TemplateError, renderTemplateForSend } from "@/lib/template-core";
+import { getTemplate } from "@/lib/templates";
+
+export type BroadcastProgress = {
+  cancelled: number;
+  failed: number;
+  pending: number;
+  processing: number;
+  queued: number;
+  suppressed: number;
+  total: number;
+};
+
+export type BroadcastRecord = {
+  cancelledAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  environment: "live" | "test";
+  from: string;
+  id: string;
+  name: string;
+  pausedAt: Date | null;
+  progress: BroadcastProgress;
+  sourceTemplateId: string | null;
+  status: BroadcastStatus;
+  templateName: string;
+  updatedAt: Date;
+};
+
+export type BroadcastQueue = (input: {
+  allowAttachments?: boolean;
+  idempotencyKey?: unknown;
+  payload: unknown;
+  principal: ApiKeyPrincipal;
+}) => Promise<QueuedMessageRecord>;
+
+type ProcessBroadcastDependencies = {
+  now?: () => Date;
+  queue?: BroadcastQueue;
+};
+
+const broadcastSelection = {
+  apiKeyId: broadcasts.apiKeyId,
+  cancelledAt: broadcasts.cancelledAt,
+  completedAt: broadcasts.completedAt,
+  createdAt: broadcasts.createdAt,
+  createdByUserId: broadcasts.createdByUserId,
+  environment: broadcasts.environment,
+  from: broadcasts.from,
+  id: broadcasts.id,
+  name: broadcasts.name,
+  orgId: broadcasts.orgId,
+  pausedAt: broadcasts.pausedAt,
+  sourceTemplateId: broadcasts.sourceTemplateId,
+  status: broadcasts.status,
+  templateHtml: broadcasts.templateHtml,
+  templateName: broadcasts.templateName,
+  templateRequiredVariables: broadcasts.templateRequiredVariables,
+  templateSubject: broadcasts.templateSubject,
+  templateText: broadcasts.templateText,
+  updatedAt: broadcasts.updatedAt,
+};
+const BROADCAST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requireBroadcastId(broadcastId: string): void {
+  if (!BROADCAST_ID_PATTERN.test(broadcastId)) {
+    throw new BroadcastError("BROADCAST_NOT_FOUND");
+  }
+}
+
+function emptyProgress(): BroadcastProgress {
+  return {
+    cancelled: 0,
+    failed: 0,
+    pending: 0,
+    processing: 0,
+    queued: 0,
+    suppressed: 0,
+    total: 0,
+  };
+}
+
+async function requireOrganizationPermission(input: {
+  actorUserId: string | null;
+  orgId: string;
+  permission: OrgPermission;
+}): Promise<string> {
+  if (!input.actorUserId) {
+    throw new BroadcastError("MEMBERSHIP_REQUIRED");
+  }
+
+  const [membership] = await db
+    .select({ role: orgMembers.role })
+    .from(orgMembers)
+    .where(
+      and(
+        eq(orgMembers.orgId, input.orgId),
+        eq(orgMembers.userId, input.actorUserId),
+      ),
+    )
+    .limit(1);
+
+  if (!membership || !isOrgRole(membership.role)) {
+    throw new BroadcastError("MEMBERSHIP_REQUIRED");
+  }
+
+  requirePermission(membership.role, input.permission);
+  return input.actorUserId;
+}
+
+async function broadcastProgress(broadcastId: string): Promise<BroadcastProgress> {
+  const rows = await db
+    .select({ count: count(), status: broadcastRecipients.status })
+    .from(broadcastRecipients)
+    .where(eq(broadcastRecipients.broadcastId, broadcastId))
+    .groupBy(broadcastRecipients.status);
+  const progress = emptyProgress();
+
+  for (const row of rows) {
+    const value = Number(row.count);
+    progress[row.status] = value;
+    progress.total += value;
+  }
+
+  return progress;
+}
+
+async function recordFromRow(
+  row: typeof broadcasts.$inferSelect,
+): Promise<BroadcastRecord> {
+  return {
+    cancelledAt: row.cancelledAt,
+    completedAt: row.completedAt,
+    createdAt: row.createdAt,
+    environment: row.environment,
+    from: row.from,
+    id: row.id,
+    name: row.name,
+    pausedAt: row.pausedAt,
+    progress: await broadcastProgress(row.id),
+    sourceTemplateId: row.sourceTemplateId,
+    status: row.status,
+    templateName: row.templateName,
+    updatedAt: row.updatedAt,
+  };
+}
+
+async function readBroadcastRow(input: { orgId: string; broadcastId: string }) {
+  requireBroadcastId(input.broadcastId);
+  const [row] = await db
+    .select()
+    .from(broadcasts)
+    .where(
+      and(
+        eq(broadcasts.id, input.broadcastId),
+        eq(broadcasts.orgId, input.orgId),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    throw new BroadcastError("BROADCAST_NOT_FOUND");
+  }
+
+  return row;
+}
+
+function failureCode(error: unknown): string {
+  if (error instanceof TemplateError) {
+    return error.code === "MISSING_REQUIRED_VARIABLES"
+      ? "missing_template_variables"
+      : "template_validation_error";
+  }
+
+  if (error instanceof EmailError) {
+    return "email_validation_error";
+  }
+
+  if (error instanceof DomainError) {
+    return error.code === "INVALID_DOMAIN"
+      ? "invalid_from_domain"
+      : "domain_not_verified";
+  }
+
+  return "queue_error";
+}
+
+async function claimRecipient(input: {
+  broadcastId: string;
+  orgId: string;
+  now: Date;
+}) {
+  requireBroadcastId(input.broadcastId);
+  return db.transaction(async (tx) => {
+    const [broadcast] = await tx
+      .select(broadcastSelection)
+      .from(broadcasts)
+      .where(
+        and(
+          eq(broadcasts.id, input.broadcastId),
+          eq(broadcasts.orgId, input.orgId),
+        ),
+      )
+      .for("update");
+
+    if (!broadcast) {
+      throw new BroadcastError("BROADCAST_NOT_FOUND");
+    }
+
+    if (broadcast.status !== "running") {
+      return null;
+    }
+
+    const [credential] = await tx
+      .select({ revokedAt: apiKeys.revokedAt })
+      .from(apiKeys)
+      .where(
+        and(
+          eq(apiKeys.id, broadcast.apiKeyId),
+          eq(apiKeys.orgId, broadcast.orgId),
+        ),
+      )
+      .limit(1);
+
+    if (!credential || credential.revokedAt) {
+      await tx
+        .update(broadcasts)
+        .set({ pausedAt: input.now, status: "paused", updatedAt: input.now })
+        .where(eq(broadcasts.id, broadcast.id));
+      return null;
+    }
+
+    const [recipient] = await tx
+      .select({
+        data: broadcastRecipients.data,
+        email: broadcastRecipients.email,
+        id: broadcastRecipients.id,
+      })
+      .from(broadcastRecipients)
+      .where(
+        and(
+          eq(broadcastRecipients.broadcastId, broadcast.id),
+          eq(broadcastRecipients.status, "pending"),
+        ),
+      )
+      .orderBy(asc(broadcastRecipients.position))
+      .limit(1)
+      .for("update");
+
+    if (!recipient) {
+      const [processing] = await tx
+        .select({ count: count() })
+        .from(broadcastRecipients)
+        .where(
+          and(
+            eq(broadcastRecipients.broadcastId, broadcast.id),
+            eq(broadcastRecipients.status, "processing"),
+          ),
+        );
+
+      if (Number(processing?.count ?? 0) === 0) {
+        await tx
+          .update(broadcasts)
+          .set({
+            completedAt: input.now,
+            status: "completed",
+            updatedAt: input.now,
+          })
+          .where(
+            and(
+              eq(broadcasts.id, broadcast.id),
+              eq(broadcasts.status, "running"),
+            ),
+          );
+      }
+
+      return null;
+    }
+
+    await tx
+      .update(broadcastRecipients)
+      .set({ status: "processing", updatedAt: input.now })
+      .where(
+        and(
+          eq(broadcastRecipients.id, recipient.id),
+          eq(broadcastRecipients.status, "pending"),
+        ),
+      );
+
+    return { broadcast, recipient };
+  });
+}
+
+async function finishRecipient(input: {
+  broadcastId: string;
+  failureCode?: string;
+  messageId?: string;
+  now: Date;
+  recipientId: string;
+  status: Exclude<BroadcastRecipientStatus, "pending" | "processing">;
+}) {
+  await db
+    .update(broadcastRecipients)
+    .set({
+      failureCode: input.failureCode ?? null,
+      messageId: input.messageId ?? null,
+      processedAt: input.now,
+      status: input.status,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(broadcastRecipients.id, input.recipientId),
+        eq(broadcastRecipients.status, "processing"),
+      ),
+    );
+
+  await db
+    .update(broadcasts)
+    .set({ updatedAt: input.now })
+    .where(eq(broadcasts.id, input.broadcastId));
+}
+
+export async function processBroadcast(
+  input: { broadcastId: string; orgId: string },
+  dependencies: ProcessBroadcastDependencies = {},
+): Promise<void> {
+  const now = dependencies.now ?? (() => new Date());
+  const queue = dependencies.queue ?? queueEmail;
+
+  for (;;) {
+    const claimed = await claimRecipient({ ...input, now: now() });
+
+    if (!claimed) {
+      return;
+    }
+
+    const { broadcast, recipient } = claimed;
+    const [suppression] = await db
+      .select({ id: emailSuppressions.id })
+      .from(emailSuppressions)
+      .where(
+        and(
+          eq(emailSuppressions.orgId, broadcast.orgId),
+          eq(emailSuppressions.email, recipient.email),
+        ),
+      )
+      .limit(1);
+
+    if (suppression) {
+      await finishRecipient({
+        broadcastId: broadcast.id,
+        now: now(),
+        recipientId: recipient.id,
+        status: "suppressed",
+      });
+      continue;
+    }
+
+    try {
+      const rendered = renderTemplateForSend(
+        {
+          html: broadcast.templateHtml,
+          requiredVariables: broadcast.templateRequiredVariables,
+          subject: broadcast.templateSubject,
+          text: broadcast.templateText,
+        },
+        recipient.data,
+      );
+      const message = await queue({
+        allowAttachments: false,
+        idempotencyKey: `broadcast:${broadcast.id}:${recipient.id}`,
+        payload: {
+          from: broadcast.from,
+          html: rendered.html,
+          subject: rendered.subject,
+          tags: [{ name: "broadcast_id", value: broadcast.id }],
+          text: rendered.text,
+          to: [recipient.email],
+        },
+        principal: {
+          actorUserId: broadcast.createdByUserId,
+          apiKeyId: broadcast.apiKeyId,
+          environment: broadcast.environment,
+          orgId: broadcast.orgId,
+        },
+      });
+
+      await finishRecipient({
+        broadcastId: broadcast.id,
+        messageId: message.id,
+        now: now(),
+        recipientId: recipient.id,
+        status: "queued",
+      });
+    } catch (error) {
+      await finishRecipient({
+        broadcastId: broadcast.id,
+        failureCode: failureCode(error),
+        now: now(),
+        recipientId: recipient.id,
+        status: "failed",
+      });
+    }
+  }
+}
+
+export async function createBroadcast(
+  input: { payload: unknown; principal: ApiKeyPrincipal },
+  dependencies: ProcessBroadcastDependencies = {},
+): Promise<BroadcastRecord> {
+  const actorUserId = await requireOrganizationPermission({
+    actorUserId: input.principal.actorUserId,
+    orgId: input.principal.orgId,
+    permission: "broadcasts.create",
+  });
+  const definition = parseCreateBroadcastInput(input.payload);
+  const template = await getTemplate({
+    actorUserId,
+    orgId: input.principal.orgId,
+    templateId: definition.templateId,
+  });
+  const created = await db.transaction(async (tx) => {
+    const [broadcast] = await tx
+      .insert(broadcasts)
+      .values({
+        apiKeyId: input.principal.apiKeyId,
+        createdByUserId: actorUserId,
+        environment: input.principal.environment,
+        from: definition.from,
+        name: definition.name,
+        orgId: input.principal.orgId,
+        sourceTemplateId: template.id,
+        templateHtml: template.html,
+        templateName: template.name,
+        templateRequiredVariables: template.requiredVariables,
+        templateSubject: template.subject,
+        templateText: template.text,
+      })
+      .returning({ id: broadcasts.id });
+
+    if (!broadcast) {
+      throw new Error("Broadcast insert returned no row.");
+    }
+
+    await tx.insert(broadcastRecipients).values(
+      definition.audience.map((recipient) => ({
+        broadcastId: broadcast.id,
+        data: recipient.data,
+        email: recipient.email,
+        position: recipient.position,
+      })),
+    );
+
+    return broadcast;
+  });
+
+  await processBroadcast(
+    { broadcastId: created.id, orgId: input.principal.orgId },
+    dependencies,
+  );
+
+  return recordFromRow(
+    await readBroadcastRow({
+      broadcastId: created.id,
+      orgId: input.principal.orgId,
+    }),
+  );
+}
+
+export async function listBroadcasts(input: {
+  actorUserId: string | null;
+  orgId: string;
+}): Promise<BroadcastRecord[]> {
+  await requireOrganizationPermission({ ...input, permission: "broadcasts.read" });
+  const rows = await db
+    .select()
+    .from(broadcasts)
+    .where(eq(broadcasts.orgId, input.orgId))
+    .orderBy(desc(broadcasts.createdAt), desc(broadcasts.id))
+    .limit(50);
+
+  return Promise.all(rows.map(recordFromRow));
+}
+
+export async function getBroadcast(input: {
+  actorUserId: string | null;
+  broadcastId: string;
+  orgId: string;
+}): Promise<BroadcastRecord> {
+  await requireOrganizationPermission({ ...input, permission: "broadcasts.read" });
+  return recordFromRow(await readBroadcastRow(input));
+}
+
+async function setBroadcastStatus(input: {
+  actorUserId: string | null;
+  broadcastId: string;
+  orgId: string;
+  target: "paused" | "running" | "cancelled";
+  now?: () => Date;
+}): Promise<void> {
+  requireBroadcastId(input.broadcastId);
+  await requireOrganizationPermission({
+    ...input,
+    permission: "broadcasts.control",
+  });
+  const now = input.now?.() ?? new Date();
+
+  await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ status: broadcasts.status })
+      .from(broadcasts)
+      .where(
+        and(
+          eq(broadcasts.id, input.broadcastId),
+          eq(broadcasts.orgId, input.orgId),
+        ),
+      )
+      .for("update");
+
+    if (!current) {
+      throw new BroadcastError("BROADCAST_NOT_FOUND");
+    }
+
+    if (current.status === input.target) {
+      return;
+    }
+
+    if (input.target === "running" && current.status === "completed") {
+      return;
+    }
+
+    const allowed =
+      (input.target === "paused" && current.status === "running") ||
+      (input.target === "running" && current.status === "paused") ||
+      (input.target === "cancelled" &&
+        (current.status === "running" || current.status === "paused"));
+
+    if (!allowed) {
+      throw new BroadcastError("INVALID_TRANSITION");
+    }
+
+    await tx
+      .update(broadcasts)
+      .set({
+        cancelledAt: input.target === "cancelled" ? now : null,
+        pausedAt: input.target === "paused" ? now : null,
+        status: input.target,
+        updatedAt: now,
+      })
+      .where(eq(broadcasts.id, input.broadcastId));
+
+    if (input.target === "cancelled") {
+      await tx
+        .update(broadcastRecipients)
+        .set({ processedAt: now, status: "cancelled", updatedAt: now })
+        .where(
+          and(
+            eq(broadcastRecipients.broadcastId, input.broadcastId),
+            eq(broadcastRecipients.status, "pending"),
+          ),
+        );
+    }
+  });
+}
+
+export async function pauseBroadcast(input: {
+  actorUserId: string | null;
+  broadcastId: string;
+  orgId: string;
+}): Promise<BroadcastRecord> {
+  await setBroadcastStatus({ ...input, target: "paused" });
+  return getBroadcast(input);
+}
+
+export async function resumeBroadcast(
+  input: {
+    actorUserId: string | null;
+    broadcastId: string;
+    orgId: string;
+  },
+  dependencies: ProcessBroadcastDependencies = {},
+): Promise<BroadcastRecord> {
+  await setBroadcastStatus({ ...input, target: "running", now: dependencies.now });
+  await processBroadcast(input, dependencies);
+  return getBroadcast(input);
+}
+
+export async function cancelBroadcast(input: {
+  actorUserId: string | null;
+  broadcastId: string;
+  orgId: string;
+}): Promise<BroadcastRecord> {
+  await setBroadcastStatus({ ...input, target: "cancelled" });
+  return getBroadcast(input);
+}

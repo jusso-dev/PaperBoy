@@ -78,6 +78,41 @@ const firstTemplate = {
   text: "Hello {{reader.name}}",
   updatedAt: fixedNow,
 };
+const firstBroadcast = {
+  cancelledAt: null,
+  completedAt: fixedNow,
+  createdAt: fixedNow,
+  environment: "test",
+  from: "news@example.com",
+  id: "99999999-9999-4999-8999-999999999999",
+  name: "Morning edition",
+  pausedAt: null,
+  progress: {
+    cancelled: 0,
+    failed: 1,
+    pending: 0,
+    processing: 0,
+    queued: 17,
+    suppressed: 2,
+    total: 20,
+  },
+  sourceTemplateId: firstTemplate.id,
+  status: "completed",
+  templateName: firstTemplate.name,
+  updatedAt: fixedNow,
+};
+
+function broadcastServices(overrides = {}) {
+  return {
+    cancel: async () => firstBroadcast,
+    create: async () => firstBroadcast,
+    get: async () => firstBroadcast,
+    list: async () => [firstBroadcast],
+    pause: async () => firstBroadcast,
+    resume: async () => firstBroadcast,
+    ...overrides,
+  };
+}
 
 function domainServices(overrides = {}) {
   return {
@@ -142,6 +177,7 @@ async function withClient(dependencies, run) {
 function dependencies(overrides = {}) {
   return {
     authorize: async () => firstPrincipal,
+    broadcasts: broadcastServices(),
     domains: domainServices(),
     emails: emailServices(),
     findOrganization: async (orgId) =>
@@ -155,6 +191,18 @@ test("initializes and publishes versioned tool schemas", async () => {
   await withClient(dependencies(), async (client) => {
     const { tools } = await client.listTools();
     const outputSchemaSnapshots = {
+      paperboy_cancel_broadcast: [
+        "broadcast",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
+      paperboy_create_broadcast: [
+        "broadcast",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
       paperboy_create_domain: [
         "domain",
         "observedAt",
@@ -194,6 +242,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
       ],
+      paperboy_get_broadcast: [
+        "broadcast",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
       paperboy_get_template: [
         "observedAt",
         "protocolTimeZone",
@@ -207,6 +261,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "tools",
         "transports",
+      ],
+      paperboy_list_broadcasts: [
+        "broadcasts",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
       ],
       paperboy_list_domains: [
         "domains",
@@ -229,6 +289,18 @@ test("initializes and publishes versioned tool schemas", async () => {
         "subject",
         "templateId",
         "text",
+      ],
+      paperboy_pause_broadcast: [
+        "broadcast",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
+      paperboy_resume_broadcast: [
+        "broadcast",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
       ],
       paperboy_send_email: [
         "deliveryMode",
@@ -271,6 +343,8 @@ test("initializes and publishes versioned tool schemas", async () => {
       ],
     };
     const inputSchemaSnapshots = {
+      paperboy_cancel_broadcast: ["broadcastId", "confirm"],
+      paperboy_create_broadcast: ["audience", "from", "name", "templateId"],
       paperboy_create_domain: ["name"],
       paperboy_create_template: [
         "html",
@@ -283,11 +357,15 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_delete_template: ["confirm", "templateId"],
       paperboy_finalize_domain_dkim_rotation: ["confirm", "domainId"],
       paperboy_get_account_context: [],
+      paperboy_get_broadcast: ["broadcastId"],
       paperboy_get_template: ["templateId"],
       paperboy_list_capabilities: [],
+      paperboy_list_broadcasts: [],
       paperboy_list_domains: [],
       paperboy_list_templates: [],
       paperboy_preview_template: ["data", "templateId"],
+      paperboy_pause_broadcast: ["broadcastId"],
+      paperboy_resume_broadcast: ["broadcastId"],
       paperboy_rotate_domain_dkim: ["domainId"],
       paperboy_send_email: [
         "attachments",
@@ -314,11 +392,14 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_verify_domain: ["domainId"],
     };
     const requiredInputSchemaSnapshots = {
+      paperboy_create_broadcast: ["audience", "from", "name", "templateId"],
       paperboy_create_template: ["name", "subject"],
       paperboy_send_email: ["from", "to"],
       paperboy_update_template: ["templateId"],
     };
     const annotationSnapshots = {
+      paperboy_cancel_broadcast: { destructive: true, readOnly: false },
+      paperboy_create_broadcast: { destructive: false, readOnly: false },
       paperboy_create_domain: { destructive: false, readOnly: false },
       paperboy_create_template: { destructive: false, readOnly: false },
       paperboy_delete_domain: { destructive: true, readOnly: false },
@@ -328,11 +409,15 @@ test("initializes and publishes versioned tool schemas", async () => {
         readOnly: false,
       },
       paperboy_get_account_context: { destructive: false, readOnly: true },
+      paperboy_get_broadcast: { destructive: false, readOnly: true },
       paperboy_get_template: { destructive: false, readOnly: true },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
+      paperboy_list_broadcasts: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
       paperboy_list_templates: { destructive: false, readOnly: true },
       paperboy_preview_template: { destructive: false, readOnly: true },
+      paperboy_pause_broadcast: { destructive: false, readOnly: false },
+      paperboy_resume_broadcast: { destructive: false, readOnly: false },
       paperboy_rotate_domain_dkim: { destructive: false, readOnly: false },
       paperboy_send_email: { destructive: false, readOnly: false },
       paperboy_send_email_batch: { destructive: false, readOnly: false },
@@ -460,6 +545,12 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     });
     assert.match(templateGuide.contents[0].text, /{{reader\.name}}/);
     assert.match(templateGuide.contents[0].text, /Cloudflare|provider delivery/);
+
+    const broadcastGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[4],
+    });
+    assert.match(broadcastGuide.contents[0].text, /suppression/);
+    assert.match(broadcastGuide.contents[0].text, /open-tracking pixel/);
   });
 });
 
@@ -514,6 +605,78 @@ test("domain tools pass the authenticated tenant and actor to shared services", 
         name: "mail.example.com",
         principal: firstPrincipal,
       });
+    },
+  );
+});
+
+test("broadcasts are first-class tenant-bound MCP operations with UTC progress", async () => {
+  const calls = [];
+  const payload = {
+    audience: [
+      {
+        data: { reader: { name: "Ada" } },
+        email: "reader@example.net",
+      },
+    ],
+    from: "news@example.com",
+    name: "Morning edition",
+    templateId: firstTemplate.id,
+  };
+
+  await withClient(
+    dependencies({
+      broadcasts: broadcastServices({
+        cancel: async (principal, broadcastId) => {
+          calls.push(["cancel", principal, broadcastId]);
+          return firstBroadcast;
+        },
+        create: async (principal, received) => {
+          calls.push(["create", principal, received]);
+          return firstBroadcast;
+        },
+        list: async (principal) => {
+          calls.push(["list", principal]);
+          return [firstBroadcast];
+        },
+      }),
+    }),
+    async (client) => {
+      const listed = await client.callTool({
+        arguments: {},
+        name: "paperboy_list_broadcasts",
+      });
+      const created = await client.callTool({
+        arguments: payload,
+        name: "paperboy_create_broadcast",
+      });
+      const cancelled = await client.callTool({
+        arguments: { broadcastId: firstBroadcast.id, confirm: true },
+        name: "paperboy_cancel_broadcast",
+      });
+
+      assert.deepEqual(listed.structuredContent, {
+        broadcasts: [
+          {
+            ...firstBroadcast,
+            cancelledAt: null,
+            completedAt: fixedNow.toISOString(),
+            createdAt: fixedNow.toISOString(),
+            updatedAt: fixedNow.toISOString(),
+          },
+        ],
+        observedAt: fixedNow.toISOString(),
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+      });
+      assert.equal(created.structuredContent.broadcast.progress.total, 20);
+      assert.equal(created.structuredContent.protocolTimeZone, "UTC");
+      assert.equal(cancelled.structuredContent.broadcast.id, firstBroadcast.id);
+      assert.equal(JSON.stringify(created).includes("reader@example.net"), false);
+      assert.deepEqual(calls, [
+        ["list", firstPrincipal],
+        ["create", firstPrincipal, payload],
+        ["cancel", firstPrincipal, firstBroadcast.id],
+      ]);
     },
   );
 });

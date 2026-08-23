@@ -752,6 +752,72 @@ select:focus-visible {
   padding-top: 12px;
 }
 
+.broadcast-list {
+  display: grid;
+  gap: 18px;
+}
+
+.broadcast-heading {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.broadcast-heading h2,
+.broadcast-heading p {
+  margin: 0;
+}
+
+.broadcast-heading p {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.broadcast-progress {
+  background: var(--paper-deep);
+  border: 1px solid var(--rule-heavy);
+  height: 12px;
+  margin: 18px 0;
+  overflow: hidden;
+}
+
+.broadcast-progress > span {
+  background: var(--accent);
+  display: block;
+  height: 100%;
+}
+
+.broadcast-counts {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+}
+
+.broadcast-counts div {
+  border-left: 2px solid var(--rule-heavy);
+  padding-left: 8px;
+}
+
+.broadcast-counts dt {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.broadcast-counts dd {
+  font-family: var(--font-display);
+  font-size: 22px;
+  margin: 2px 0 0;
+}
+
+.broadcast-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .template-delete summary {
   cursor: pointer;
   font-size: 13px;
@@ -912,6 +978,16 @@ select:focus-visible {
 
   .template-heading-actions {
     justify-items: start;
+  }
+
+  .broadcast-heading,
+  .broadcast-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .broadcast-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .domain-delete {

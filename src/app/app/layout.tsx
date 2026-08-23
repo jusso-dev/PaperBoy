@@ -6,6 +6,7 @@ const navItems = [
   { href: "/app", label: "Overview" },
   { href: "/app/send", label: "Send" },
   { href: "/app/templates", label: "Templates" },
+  { href: "/app/broadcasts", label: "Broadcasts" },
   { href: "/app/logs", label: "Logs" },
   { href: "/app/domains", label: "Domains" },
   { href: "/app/api-keys", label: "API keys" },

@@ -1,2 +1,2 @@
-export const PAPERBOY_MCP_VERSION = "0.8.0";
-export const PAPERBOY_MCP_SCHEMA_VERSION = "8";
+export const PAPERBOY_MCP_VERSION = "0.9.0";
+export const PAPERBOY_MCP_SCHEMA_VERSION = "9";

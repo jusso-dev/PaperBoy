@@ -139,6 +139,10 @@ function parseAddress(value: unknown) {
   };
 }
 
+export function normalizeEmailAddress(value: unknown): string | null {
+  return parseAddress(value)?.address.toLowerCase() ?? null;
+}
+
 function bodyValue(
   value: unknown,
   field: "html" | "text",

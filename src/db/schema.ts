@@ -18,6 +18,11 @@ import type {
   MessageDeliveryMode,
   MessageStatus,
 } from "@/lib/email-core";
+import type {
+  BroadcastRecipientStatus,
+  BroadcastStatus,
+  SuppressionReason,
+} from "@/lib/broadcast-core";
 
 export const orgs = pgTable("orgs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -391,6 +396,111 @@ export const emailTemplates = pgTable(
   ],
 );
 
+export const emailSuppressions = pgTable(
+  "email_suppressions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    reason: text("reason")
+      .$type<SuppressionReason>()
+      .default("manual")
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("email_suppressions_org_id_email_unique").on(
+      table.orgId,
+      table.email,
+    ),
+    index("email_suppressions_org_id_idx").on(table.orgId),
+    check(
+      "email_suppressions_email_check",
+      sql`char_length(${table.email}) between 3 and 254 and lower(${table.email}) = ${table.email}`,
+    ),
+    check(
+      "email_suppressions_reason_check",
+      sql`${table.reason} in ('manual', 'bounced', 'complained')`,
+    ),
+  ],
+);
+
+export const broadcasts = pgTable(
+  "broadcasts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    apiKeyId: uuid("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "restrict" }),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    sourceTemplateId: uuid("source_template_id").references(
+      () => emailTemplates.id,
+      { onDelete: "set null" },
+    ),
+    name: text("name").notNull(),
+    from: text("from").notNull(),
+    templateName: text("template_name").notNull(),
+    templateRequiredVariables: jsonb("template_required_variables")
+      .$type<string[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    templateSubject: text("template_subject").notNull(),
+    templateHtml: text("template_html"),
+    templateText: text("template_text"),
+    environment: text("environment")
+      .$type<"live" | "test">()
+      .notNull(),
+    status: text("status").$type<BroadcastStatus>().default("running").notNull(),
+    pausedAt: timestamp("paused_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("broadcasts_org_id_created_at_idx").on(table.orgId, table.createdAt),
+    index("broadcasts_status_created_at_idx").on(table.status, table.createdAt),
+    check(
+      "broadcasts_name_length_check",
+      sql`char_length(btrim(${table.name})) between 1 and 120`,
+    ),
+    check(
+      "broadcasts_from_length_check",
+      sql`char_length(${table.from}) between 3 and 320`,
+    ),
+    check(
+      "broadcasts_status_check",
+      sql`${table.status} in ('running', 'paused', 'completed', 'cancelled')`,
+    ),
+    check(
+      "broadcasts_environment_check",
+      sql`${table.environment} in ('live', 'test')`,
+    ),
+    check(
+      "broadcasts_template_required_variables_array_check",
+      sql`jsonb_typeof(${table.templateRequiredVariables}) = 'array'`,
+    ),
+    check(
+      "broadcasts_template_body_check",
+      sql`${table.templateHtml} is not null or ${table.templateText} is not null`,
+    ),
+  ],
+);
+
 export const messages = pgTable(
   "messages",
   {
@@ -468,6 +578,70 @@ export const messages = pgTable(
     check(
       "messages_idempotency_key_length_check",
       sql`${table.idempotencyKey} is null or char_length(${table.idempotencyKey}) between 1 and 256`,
+    ),
+  ],
+);
+
+export const broadcastRecipients = pgTable(
+  "broadcast_recipients",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    broadcastId: uuid("broadcast_id")
+      .notNull()
+      .references(() => broadcasts.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    position: integer("position").notNull(),
+    email: text("email").notNull(),
+    data: jsonb("data")
+      .$type<Record<string, unknown>>()
+      .default(sql`'{}'::jsonb`)
+      .notNull(),
+    status: text("status")
+      .$type<BroadcastRecipientStatus>()
+      .default("pending")
+      .notNull(),
+    failureCode: text("failure_code"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("broadcast_recipients_broadcast_id_position_unique").on(
+      table.broadcastId,
+      table.position,
+    ),
+    uniqueIndex("broadcast_recipients_broadcast_id_email_unique").on(
+      table.broadcastId,
+      table.email,
+    ),
+    index("broadcast_recipients_broadcast_id_status_position_idx").on(
+      table.broadcastId,
+      table.status,
+      table.position,
+    ),
+    index("broadcast_recipients_message_id_idx").on(table.messageId),
+    check(
+      "broadcast_recipients_position_check",
+      sql`${table.position} between 0 and 99`,
+    ),
+    check(
+      "broadcast_recipients_email_check",
+      sql`char_length(${table.email}) between 3 and 254 and lower(${table.email}) = ${table.email}`,
+    ),
+    check(
+      "broadcast_recipients_data_object_check",
+      sql`jsonb_typeof(${table.data}) = 'object'`,
+    ),
+    check(
+      "broadcast_recipients_status_check",
+      sql`${table.status} in ('pending', 'processing', 'queued', 'suppressed', 'failed', 'cancelled')`,
     ),
   ],
 );

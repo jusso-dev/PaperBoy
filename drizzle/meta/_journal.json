@@ -71,6 +71,13 @@
       "when": 1787486829081,
       "tag": "0009_lame_shiver_man",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787488829145,
+      "tag": "0010_cynical_sprite",
+      "breakpoints": true
     }
   ]
 }

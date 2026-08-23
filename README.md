@@ -117,6 +117,25 @@ Queue a template through the single or batch send API with the normal envelope f
 
 Do not combine `template_id` with inline `subject`, `html`, or `text`. PaperBoy resolves and validates rendered content before calculating idempotency or persisting the message. The stored queue record therefore contains the exact semantic content delivered later. SMTP MIME and Cloudflare Email Sending's structured payload are built from that same rendered subject, HTML, and text; Cloudflare remains responsible for its own Date and DKIM signature.
 
+### Simple broadcasts
+
+`POST /api/v1/broadcasts` sends one stored template now to a one-off audience snapshot of 1-100 unique addresses:
+
+```json
+{
+  "name": "Morning edition",
+  "from": "Newsroom <news@example.com>",
+  "template_id": "00000000-0000-4000-8000-000000000000",
+  "audience": [
+    { "email": "reader@example.net", "data": { "reader": { "name": "Ada" } } }
+  ]
+}
+```
+
+Creation snapshots the template and begins enqueueing immediately. Before each recipient is enqueued, PaperBoy checks the organization-owned `email_suppressions` table and confirms the originating API key remains active. Suppressed addresses never create message rows and are counted separately; key revocation pauses the broadcast. Every queued message uses the normal semantic queue path, so Cloudflare Email Sending and SMTP receive the same rendered provider-neutral content. Broadcasts do not inject open pixels or click tracking.
+
+Progress is available from `GET /api/v1/broadcasts` and `GET /api/v1/broadcasts/:broadcastId`. Use `POST` on `/pause`, `/resume`, or `/cancel` beneath that broadcast URL. Pause takes effect after an already-processing recipient; resume handles pending recipients; cancel irreversibly marks pending recipients cancelled so they cannot be claimed. Responses expose counts, never audience addresses or rendered bodies. REST timestamps are RFC 3339 UTC; the console renders them in the signed-in user's persisted IANA timezone.
+
 ## Sending domains
 
 Add a domain in the console or through MCP to get exact ownership, SPF, and DKIM TXT records, plus starter DMARC guidance. PaperBoy checks DNS from the application host. Ownership, SPF, and an active DKIM selector must match before the domain becomes verified; a later failed check returns it to pending so live delivery cannot continue on stale state.
@@ -163,7 +182,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 
 Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
 
-The contract exposes capability/account context plus first-class single/batch sending, template list/get/create/update/delete/preview, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, templates, and DNS. `paperboy_preview_template` renders sample JSON and lists missing required variables without queueing or sending mail. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Template, domain, and DKIM CRUD re-read the key creator's current membership and role; destructive deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
+The contract exposes capability/account context plus first-class single/batch sending, template list/get/create/update/delete/preview, broadcast list/get/create/pause/resume/cancel, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, templates, broadcasts, and DNS. `paperboy_preview_template` renders sample JSON and lists missing required variables without queueing or sending mail. Broadcast tools expose aggregate progress without returning audience addresses or message bodies; cancellation requires explicit confirmation. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Template, broadcast, domain, and DKIM mutations re-read the key creator's current membership and role; destructive cancellation/deletion/finalisation requires explicit confirmation. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
 
 HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
 

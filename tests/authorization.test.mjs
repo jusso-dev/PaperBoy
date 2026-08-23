@@ -14,6 +14,9 @@ const matrix = {
     "apiKeys.create",
     "apiKeys.read",
     "apiKeys.revoke",
+    "broadcasts.control",
+    "broadcasts.create",
+    "broadcasts.read",
     "domains.create",
     "domains.delete",
     "domains.manageDkim",
@@ -26,7 +29,12 @@ const matrix = {
     "templates.read",
     "templates.update",
   ]),
-  member: new Set(["domains.read", "members.read", "templates.read"]),
+  member: new Set([
+    "broadcasts.read",
+    "domains.read",
+    "members.read",
+    "templates.read",
+  ]),
 };
 
 for (const [role, allowed] of Object.entries(matrix)) {
@@ -42,6 +50,8 @@ test("members cannot mint API keys or delete domains", () => {
   assert.equal(can("member", "domains.delete"), false);
   assert.equal(can("member", "templates.read"), true);
   assert.equal(can("member", "templates.update"), false);
+  assert.equal(can("member", "broadcasts.read"), true);
+  assert.equal(can("member", "broadcasts.control"), false);
   assert.throws(
     () => requirePermission("member", "apiKeys.create"),
     AuthorizationError,
