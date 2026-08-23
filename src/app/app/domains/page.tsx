@@ -6,6 +6,7 @@ import {
   setupDkimAction,
   verifyDomainAction,
 } from "./actions";
+import { DnsRecordTable } from "./dns-record-table";
 import { can } from "@/lib/authorization";
 import { domainDnsRecords, listDomains } from "@/lib/domains";
 import { requireOrganization } from "@/lib/session";
@@ -30,14 +31,6 @@ const savedMessages: Record<string, string> = {
     "A new DKIM selector is ready. Publish it, then check DNS to switch without downtime.",
   verified: "Required DNS records matched. Live sending is now allowed for this domain.",
 };
-
-const checkLabels = {
-  error: "Resolver error",
-  matched: "Matched",
-  missing: "Not found",
-  pending: "Pending setup",
-  unchecked: "Not checked",
-} as const;
 
 export default async function DomainsPage({ searchParams }: DomainsPageProps) {
   const [{ organization, session }, status] = await Promise.all([
@@ -174,71 +167,13 @@ export default async function DomainsPage({ searchParams }: DomainsPageProps) {
                   ) : null}
                 </div>
 
-                <div className="table-scroll">
-                  <table className="table dns-record-table">
-                    <caption>Records to publish for {domain.name}</caption>
-                    <thead>
-                      <tr>
-                        <th>Purpose</th>
-                        <th>Type</th>
-                        <th>Host</th>
-                        <th>Value</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {records.map((record) => {
-                        const check =
-                          record.status ?? domain.dnsChecks[record.key];
-
-                        return (
-                          <tr key={record.name}>
-                            <td>
-                              <strong>{record.key.toUpperCase()}</strong>
-                              <br />
-                              <span className="dns-description">
-                                {record.description}
-                              </span>
-                              <br />
-                              <span className="dns-requirement">
-                                {record.required
-                                  ? "Required"
-                                  : record.key === "dkim" && !record.value
-                                    ? "Setup required"
-                                    : record.key === "dkim" &&
-                                        record.lifecycle === "retiring"
-                                      ? "Keep during rotation"
-                                      : record.key === "dkim"
-                                        ? "Rotation candidate"
-                                        : "Recommended"}
-                              </span>
-                            </td>
-                            <td>{record.type}</td>
-                            <td>
-                              <code>{record.name}</code>
-                            </td>
-                            <td>
-                              {record.value ? (
-                                <code>{record.value}</code>
-                              ) : (
-                                <span className="dns-pending-value">
-                                  Generated during DKIM setup
-                                </span>
-                              )}
-                            </td>
-                            <td>
-                              <span
-                                className={`dns-check dns-check-${check}`}
-                              >
-                                {checkLabels[check]}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <DnsRecordTable
+                  domainName={domain.name}
+                  records={records.map((record) => ({
+                    ...record,
+                    check: record.status ?? domain.dnsChecks[record.key],
+                  }))}
+                />
 
                 <div className="domain-explainer">
                   <p>

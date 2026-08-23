@@ -248,7 +248,7 @@ Progress is available from `GET /api/v1/broadcasts` and `GET /api/v1/broadcasts/
 
 ## Sending domains
 
-Add a domain in the console or through MCP to get exact ownership, SPF, and DKIM TXT records, plus starter DMARC guidance. PaperBoy checks DNS from the application host. Ownership, SPF, and an active DKIM selector must match before the domain becomes verified; a later failed check returns it to pending so live delivery cannot continue on stale state.
+Add a domain in the console or through MCP to get exact ownership, SPF, and DKIM TXT records, plus starter DMARC guidance. Every console record has an explicit copy control that writes the complete TXT value without trimming or normalization and reports clipboard failure without hiding the selectable value. PaperBoy checks DNS from the application host. Ownership, SPF, and an active DKIM selector must match before the domain becomes verified; a later failed check returns it to pending so live delivery cannot continue on stale state.
 
 The default SPF value is `v=spf1 mx ~all`. Operators whose outbound host is not authorised by the domain's MX records must set `PAPERBOY_SPF_RECORD` to their exact policy before adding or checking domains. Publish only one SPF record at each owner name. The [DNS operator guide](docs/dns.md) gives exact direct-IP, Cloudflare Email Routing, Cloudflare Email Sending, and staged DMARC instructions; authenticated MCP clients can read the identical guide at `paperboy://docs/dns`.
 
