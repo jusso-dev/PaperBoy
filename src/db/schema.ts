@@ -22,9 +22,9 @@ import type {
 import type {
   BroadcastRecipientStatus,
   BroadcastStatus,
-  SuppressionReason,
 } from "@/lib/broadcast-core";
 import type { FeedbackClassification } from "@/lib/feedback-core";
+import type { SuppressionReason } from "@/lib/suppression-core";
 import type { WebhookDeliveryStatus } from "@/lib/webhook-core";
 
 export const orgs = pgTable("orgs", {
@@ -413,6 +413,10 @@ export const emailSuppressions = pgTable(
       .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [

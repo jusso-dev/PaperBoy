@@ -158,6 +158,7 @@ export async function ingestFeedbackReport(input: {
           .onConflictDoUpdate({
             set: {
               reason: sql`case when ${emailSuppressions.reason} = 'complained' then 'complained' else ${reason} end`,
+              updatedAt: now,
             },
             target: [emailSuppressions.orgId, emailSuppressions.email],
           });

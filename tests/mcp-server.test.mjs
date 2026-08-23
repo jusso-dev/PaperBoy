@@ -107,6 +107,13 @@ const firstFeedback = {
   replayed: false,
   suppressed: true,
 };
+const firstSuppression = {
+  createdAt: fixedNow,
+  email: "blocked@example.net",
+  id: "dededede-dede-4ede-8ede-dededededede",
+  reason: "complained",
+  updatedAt: fixedNow,
+};
 const firstTemplate = {
   createdAt: fixedNow,
   html: "<p>Hello {{reader.name}}</p>",
@@ -191,6 +198,25 @@ function feedbackServices(overrides = {}) {
   };
 }
 
+function suppressionServices(overrides = {}) {
+  return {
+    create: async () => firstSuppression,
+    delete: async () => undefined,
+    get: async () => firstSuppression,
+    import: async () => ({
+      created: 1,
+      importedAt: fixedNow,
+      inputRows: 2,
+      unchanged: 1,
+      uniqueRows: 2,
+      updated: 0,
+    }),
+    list: async () => [firstSuppression],
+    update: async () => firstSuppression,
+    ...overrides,
+  };
+}
+
 function templateServices(overrides = {}) {
   return {
     create: async () => firstTemplate,
@@ -251,6 +277,7 @@ function dependencies(overrides = {}) {
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
     templates: templateServices(),
+    suppressions: suppressionServices(),
     webhooks: webhookServices(),
     ...overrides,
   };
@@ -284,6 +311,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "template",
       ],
+      paperboy_create_suppression: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "suppression",
+      ],
       paperboy_delete_domain: [
         "deleted",
         "domainId",
@@ -297,6 +330,13 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
         "templateId",
+      ],
+      paperboy_delete_suppression: [
+        "deleted",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "suppressionId",
       ],
       paperboy_finalize_domain_dkim_rotation: [
         "domain",
@@ -329,6 +369,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "template",
       ],
+      paperboy_get_suppression: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "suppression",
+      ],
       paperboy_get_webhook: [
         "observedAt",
         "protocolTimeZone",
@@ -339,6 +385,16 @@ test("initializes and publishes versioned tool schemas", async () => {
         "data",
         "protocolTimeZone",
         "schemaVersion",
+      ],
+      paperboy_import_suppressions: [
+        "created",
+        "importedAt",
+        "inputRows",
+        "protocolTimeZone",
+        "schemaVersion",
+        "unchanged",
+        "uniqueRows",
+        "updated",
       ],
       paperboy_list_capabilities: [
         "generatedAt",
@@ -377,6 +433,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "protocolTimeZone",
         "schemaVersion",
         "templates",
+      ],
+      paperboy_list_suppressions: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "suppressions",
       ],
       paperboy_configure_webhook: [
         "observedAt",
@@ -440,6 +502,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
         "template",
       ],
+      paperboy_update_suppression: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "suppression",
+      ],
       paperboy_verify_domain: [
         "domain",
         "observedAt",
@@ -458,21 +526,26 @@ test("initializes and publishes versioned tool schemas", async () => {
         "subject",
         "text",
       ],
+      paperboy_create_suppression: ["email", "reason"],
       paperboy_delete_domain: ["confirm", "domainId"],
       paperboy_delete_template: ["confirm", "templateId"],
+      paperboy_delete_suppression: ["confirm", "suppressionId"],
       paperboy_finalize_domain_dkim_rotation: ["confirm", "domainId"],
       paperboy_get_account_context: [],
       paperboy_get_broadcast: ["broadcastId"],
       paperboy_get_delivery_status: ["messageId"],
       paperboy_get_template: ["templateId"],
+      paperboy_get_suppression: ["suppressionId"],
       paperboy_get_webhook: [],
       paperboy_ingest_feedback: ["rawReportBase64"],
+      paperboy_import_suppressions: ["csv"],
       paperboy_list_capabilities: [],
       paperboy_list_broadcasts: [],
       paperboy_list_domains: [],
       paperboy_list_delivery_statuses: ["limit"],
       paperboy_list_message_events: ["messageId"],
       paperboy_list_templates: [],
+      paperboy_list_suppressions: ["limit", "query", "reason"],
       paperboy_configure_webhook: ["url"],
       paperboy_preview_template: ["data", "templateId"],
       paperboy_pause_broadcast: ["broadcastId"],
@@ -500,23 +573,30 @@ test("initializes and publishes versioned tool schemas", async () => {
         "templateId",
         "text",
       ],
+      paperboy_update_suppression: ["email", "reason", "suppressionId"],
       paperboy_verify_domain: ["domainId"],
     };
     const requiredInputSchemaSnapshots = {
       paperboy_create_broadcast: ["audience", "from", "name", "templateId"],
       paperboy_create_template: ["name", "subject"],
+      paperboy_create_suppression: ["email"],
       paperboy_ingest_feedback: ["rawReportBase64"],
+      paperboy_import_suppressions: ["csv"],
+      paperboy_list_suppressions: [],
       paperboy_list_delivery_statuses: [],
       paperboy_send_email: ["from", "to"],
       paperboy_update_template: ["templateId"],
+      paperboy_update_suppression: ["suppressionId"],
     };
     const annotationSnapshots = {
       paperboy_cancel_broadcast: { destructive: true, readOnly: false },
       paperboy_create_broadcast: { destructive: false, readOnly: false },
       paperboy_create_domain: { destructive: false, readOnly: false },
       paperboy_create_template: { destructive: false, readOnly: false },
+      paperboy_create_suppression: { destructive: false, readOnly: false },
       paperboy_delete_domain: { destructive: true, readOnly: false },
       paperboy_delete_template: { destructive: true, readOnly: false },
+      paperboy_delete_suppression: { destructive: true, readOnly: false },
       paperboy_finalize_domain_dkim_rotation: {
         destructive: true,
         readOnly: false,
@@ -525,14 +605,17 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_get_broadcast: { destructive: false, readOnly: true },
       paperboy_get_delivery_status: { destructive: false, readOnly: true },
       paperboy_get_template: { destructive: false, readOnly: true },
+      paperboy_get_suppression: { destructive: false, readOnly: true },
       paperboy_get_webhook: { destructive: false, readOnly: true },
       paperboy_ingest_feedback: { destructive: false, readOnly: false },
+      paperboy_import_suppressions: { destructive: false, readOnly: false },
       paperboy_list_capabilities: { destructive: false, readOnly: true },
       paperboy_list_broadcasts: { destructive: false, readOnly: true },
       paperboy_list_domains: { destructive: false, readOnly: true },
       paperboy_list_delivery_statuses: { destructive: false, readOnly: true },
       paperboy_list_message_events: { destructive: false, readOnly: true },
       paperboy_list_templates: { destructive: false, readOnly: true },
+      paperboy_list_suppressions: { destructive: false, readOnly: true },
       paperboy_configure_webhook: { destructive: false, readOnly: false },
       paperboy_preview_template: { destructive: false, readOnly: true },
       paperboy_pause_broadcast: { destructive: false, readOnly: false },
@@ -542,6 +625,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_send_email_batch: { destructive: false, readOnly: false },
       paperboy_setup_domain_dkim: { destructive: false, readOnly: false },
       paperboy_update_template: { destructive: false, readOnly: false },
+      paperboy_update_suppression: { destructive: false, readOnly: false },
       paperboy_verify_domain: { destructive: false, readOnly: false },
     };
 
@@ -695,6 +779,13 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     assert.match(feedbackGuide.contents[0].text, /RFC 3464/);
     assert.match(feedbackGuide.contents[0].text, /recipient_suppressed/);
     assert.match(feedbackGuide.contents[0].text, /Cloudflare Email Sending/);
+
+    const suppressionGuide = await client.readResource({
+      uri: PAPERBOY_MCP_RESOURCE_URIS[8],
+    });
+    assert.match(suppressionGuide.contents[0].text, /5,000 data rows/);
+    assert.match(suppressionGuide.contents[0].text, /recipient_suppressed/);
+    assert.match(suppressionGuide.contents[0].text, /Cloudflare Email Sending/);
   });
 });
 
@@ -995,6 +1086,97 @@ test("feedback ingestion is tenant-bound, UTC, idempotent, and content-free", as
       assert.deepEqual(calls[0][1], raw);
       assert.equal(JSON.stringify(result).includes("hard-bounce@example.net"), false);
       assert.equal(JSON.stringify(result).includes(raw.toString("base64")), false);
+    },
+  );
+});
+
+test("suppression CRUD and CSV import are first-class tenant-bound MCP operations", async () => {
+  const calls = [];
+  const csv = "email,reason\nblocked@example.net,complained\n";
+
+  await withClient(
+    dependencies({
+      suppressions: suppressionServices({
+        create: async (principal, payload) => {
+          calls.push(["create", principal, payload]);
+          return firstSuppression;
+        },
+        delete: async (principal, suppressionId) => {
+          calls.push(["delete", principal, suppressionId]);
+        },
+        import: async (principal, received) => {
+          calls.push(["import", principal, received]);
+          return {
+            created: 1,
+            importedAt: fixedNow,
+            inputRows: 1,
+            unchanged: 0,
+            uniqueRows: 1,
+            updated: 0,
+          };
+        },
+        list: async (principal, filter) => {
+          calls.push(["list", principal, filter]);
+          return [firstSuppression];
+        },
+      }),
+    }),
+    async (client) => {
+      const listed = await client.callTool({
+        arguments: { limit: 25, query: "example.net", reason: "complained" },
+        name: "paperboy_list_suppressions",
+      });
+      const created = await client.callTool({
+        arguments: { email: firstSuppression.email, reason: "complained" },
+        name: "paperboy_create_suppression",
+      });
+      const imported = await client.callTool({
+        arguments: { csv },
+        name: "paperboy_import_suppressions",
+      });
+      const deleted = await client.callTool({
+        arguments: { confirm: true, suppressionId: firstSuppression.id },
+        name: "paperboy_delete_suppression",
+      });
+
+      assert.deepEqual(listed.structuredContent, {
+        observedAt: fixedNow.toISOString(),
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+        suppressions: [
+          {
+            ...firstSuppression,
+            createdAt: fixedNow.toISOString(),
+            updatedAt: fixedNow.toISOString(),
+          },
+        ],
+      });
+      assert.equal(created.structuredContent.suppression.email, firstSuppression.email);
+      assert.deepEqual(imported.structuredContent, {
+        created: 1,
+        importedAt: fixedNow.toISOString(),
+        inputRows: 1,
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+        unchanged: 0,
+        uniqueRows: 1,
+        updated: 0,
+      });
+      assert.equal(deleted.structuredContent.deleted, true);
+      assert.deepEqual(calls, [
+        [
+          "list",
+          firstPrincipal,
+          { limit: 25, query: "example.net", reason: "complained" },
+        ],
+        [
+          "create",
+          firstPrincipal,
+          { email: firstSuppression.email, reason: "complained" },
+        ],
+        ["import", firstPrincipal, csv],
+        ["delete", firstPrincipal, firstSuppression.id],
+      ]);
     },
   );
 });

@@ -39,6 +39,12 @@ import {
   type PaperBoyMcpFeedbackServices,
 } from "@/mcp/feedback-tools";
 import {
+  PAPERBOY_SUPPRESSION_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_SUPPRESSION_MCP_TOOL_NAMES,
+  registerPaperBoySuppressionTools,
+  type PaperBoyMcpSuppressionServices,
+} from "@/mcp/suppression-tools";
+import {
   PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS,
   PAPERBOY_TEMPLATE_MCP_TOOL_NAMES,
   registerPaperBoyTemplateTools,
@@ -59,6 +65,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
   ...PAPERBOY_EMAIL_MCP_TOOL_NAMES,
   ...PAPERBOY_DELIVERY_MCP_TOOL_NAMES,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_NAMES,
+  ...PAPERBOY_SUPPRESSION_MCP_TOOL_NAMES,
   ...PAPERBOY_WEBHOOK_MCP_TOOL_NAMES,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_NAMES,
   ...PAPERBOY_BROADCAST_MCP_TOOL_NAMES,
@@ -74,6 +81,7 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/worker",
   "paperboy://docs/webhooks",
   "paperboy://docs/feedback",
+  "paperboy://docs/suppressions",
 ] as const;
 
 type PaperBoyMcpDependencies = {
@@ -85,6 +93,7 @@ type PaperBoyMcpDependencies = {
   feedback: PaperBoyMcpFeedbackServices;
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
   now?: () => Date;
+  suppressions: PaperBoyMcpSuppressionServices;
   templates: PaperBoyMcpTemplateServices;
   webhooks: PaperBoyMcpWebhookServices;
 };
@@ -150,6 +159,7 @@ const toolDefinitions = [
   ...PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DELIVERY_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_FEEDBACK_MCP_TOOL_DEFINITIONS,
+  ...PAPERBOY_SUPPRESSION_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_WEBHOOK_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS,
@@ -189,6 +199,10 @@ const resourceDefinitions = [
     description: "Ingest bounces and complaints without resending mail.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[7],
   },
+  {
+    description: "Manage the organization suppression list safely.",
+    uri: PAPERBOY_MCP_RESOURCE_URIS[8],
+  },
 ] as const;
 
 const configurationDocument = `# PaperBoy MCP configuration
@@ -206,6 +220,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - paperboy_list_message_events returns the same tenant- and environment-scoped ordered timeline as GET /api/v1/emails/:id/events. It omits recipients, content, event data, and provider payloads.
 - paperboy_get_webhook and paperboy_configure_webhook manage one organization webhook without accepting an organization ID. A new signing secret is returned only on first creation and is never returned by reads.
 - paperboy_ingest_feedback accepts a bounded Base64 DSN or ARF, correlates only within the authenticated organization, and never sends a test message.
+- Suppression CRUD and CSV import use the same organization blocklist checked before HTTP, MCP, batch, broadcast, SMTP, or Cloudflare delivery can be queued.
 - Send tools accept either inline subject/body fields or \`template_id\` plus a JSON \`data\` object. Template rendering finishes before provider delivery, so SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text.
 - Cloudflare Email Routing keeps its own selectors and shares one merged root SPF record. Cloudflare Email Sending owns its DKIM signature; do not pass it a PaperBoy-signed message.
 - HTTP authentication is checked on every request. Stdio authentication is checked at startup and again for every tool call.
@@ -285,6 +300,17 @@ const feedbackDocument = `# PaperBoy bounce and complaint ingestion
 - The Postfix pipe uses pnpm feedback:ingest with a protected API key file. It reads raw RFC 822 bytes from stdin and never sends mail to test an address.
 - Cloudflare Email Sending owns its cf-bounce return path and provider suppression pipeline. Do not replace it. PaperBoy feedback ingestion remains available for reports routed to PaperBoy, while Cloudflare SMTP delivery continues through the same provider-neutral message-event and webhook path.
 - Ingestion and MCP timestamps are RFC 3339 UTC. Convert only presentation with an explicit IANA timezone.
+`;
+
+const suppressionDocument = `# PaperBoy suppression list
+
+- Suppressions belong to the organization bound to the API key. Never pass an organization ID to a suppression tool.
+- paperboy_list_suppressions and paperboy_get_suppression are available to current members. Create, update, delete, and import require an owner or admin.
+- Reasons are manual, bounced, or complained. The send path returns recipient_suppressed with the reason before inserting a queue row, so the address never reaches SMTP or Cloudflare Email Sending.
+- CSV import accepts UTF-8 with an email header and optional reason column, at most 1 MiB and 5,000 data rows. The entire file validates before mutation. Duplicate rows and existing entries keep the strongest reason: complained, then bounced, then manual.
+- Read a suppression before deleting it and pass confirm: true. Deletion means the address may receive future mail; it does not modify Cloudflare provider suppressions.
+- PaperBoy suppression state is provider-neutral and complements, but does not replace, the Cloudflare-managed cf-bounce and provider suppression pipeline.
+- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
 `;
 
 function authorizationError() {
@@ -406,6 +432,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[5], workerDocument],
     [resourceDefinitions[6], webhookDocument],
     [resourceDefinitions[7], feedbackDocument],
+    [resourceDefinitions[8], suppressionDocument],
   ] as const) {
     server.registerResource(
       resource.uri,
@@ -452,6 +479,13 @@ export function createPaperBoyMcpServer(
     authorize: dependencies.authorize,
     server,
     services: dependencies.feedback,
+  });
+
+  registerPaperBoySuppressionTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.suppressions,
   });
 
   registerPaperBoyWebhookTools({

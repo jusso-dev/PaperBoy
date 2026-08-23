@@ -137,6 +137,14 @@ PaperBoy ingests bounded RFC 3464 DSNs and RFC 5965 ARFs through `pnpm feedback:
 
 For self-hosted SMTP, set `PAPERBOY_BOUNCE_ADDRESS` and route that address to the protected Postfix stdin hook. PaperBoy adds a stable correlation header and requests failure/delay DSNs. Cloudflare Email Sending instead owns its `cf-bounce` return path and provider suppression pipeline; do not replace it. Cloudflare SMTP delivery still emits through the same PaperBoy event/webhook path. See the exact [Postfix and Cloudflare feedback guide](docs/feedback.md).
 
+### Suppression list
+
+The console, REST API, and first-class MCP tools manage the same organization suppression list. Owners and admins can create, update, remove, and atomically import UTF-8 CSV records; members can read them. Search and reason filters expose manual, permanent-bounce, and complaint entries with console timestamps in the signed-in user's IANA timezone and protocol timestamps in UTC.
+
+REST provides `GET`/`POST /api/v1/suppressions`, `GET`/`PATCH`/`DELETE /api/v1/suppressions/:suppressionId`, and `POST /api/v1/suppressions/import` with `Content-Type: text/csv`. CSV is bounded to 1 MiB and 5,000 rows, validates fully before mutation, and keeps the strongest reason across duplicates. The matching MCP tools expose the same CRUD/import services without accepting an organization ID.
+
+Suppression checks happen before queue insertion, so blocked recipients never reach SMTP, Cloudflare Email Sending, or a future adapter. PaperBoy's list complements Cloudflare's independent `cf-bounce` and provider suppression controls; removing a PaperBoy record does not bypass a Cloudflare provider suppression. See [suppression API, CSV, MCP, and Cloudflare behavior](docs/suppressions.md).
+
 ## Signed webhooks
 
 Owners and admins can configure one organization-wide endpoint with `PUT /api/v1/webhooks` or `paperboy_configure_webhook`:

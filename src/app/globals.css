@@ -254,6 +254,7 @@ h3 {
 input[type='text'],
 input[type='email'],
 input[type='password'],
+input[type='file'],
 textarea,
 select {
   background: var(--paper-raised);
@@ -263,6 +264,10 @@ select {
   font-size: 15px;
   padding: 8px 10px;
   width: 100%;
+}
+
+input[type='file'] {
+  font-size: 14px;
 }
 
 input:focus-visible,
@@ -490,6 +495,63 @@ select:focus-visible {
 
 .api-key-table code {
   overflow-wrap: anywhere;
+}
+
+/* ---- Suppressions ---------------------------------------------------- */
+
+.suppression-create-form,
+.suppression-filter-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+}
+
+.suppression-create-form {
+  grid-template-columns: minmax(220px, 1fr) 180px auto;
+}
+
+.suppression-filter-form {
+  grid-template-columns: minmax(220px, 1fr) 180px auto auto;
+}
+
+.suppression-create-form .field,
+.suppression-filter-form .field {
+  margin-bottom: 0;
+}
+
+.suppression-import-form {
+  align-items: end;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(280px, 1fr) auto;
+}
+
+.suppression-import-form .field {
+  margin-bottom: 0;
+}
+
+.suppression-list-heading h2 {
+  margin-bottom: 16px;
+}
+
+.suppression-table {
+  min-width: 920px;
+}
+
+.suppression-table td:last-child {
+  min-width: 210px;
+}
+
+.suppression-delete-form {
+  align-items: center;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.suppression-delete-form label {
+  white-space: nowrap;
 }
 
 /* ---- Sending domains ------------------------------------------------- */
@@ -1018,6 +1080,13 @@ select:focus-visible {
   }
 
   .api-key-form {
+    grid-template-columns: 1fr;
+  }
+
+  .suppression-create-form,
+  .suppression-filter-form,
+  .suppression-import-form {
+    align-items: stretch;
     grid-template-columns: 1fr;
   }
 

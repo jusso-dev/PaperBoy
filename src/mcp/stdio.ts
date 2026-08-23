@@ -21,6 +21,7 @@ async function main() {
     { paperBoyMcpDeliveryServices },
     { paperBoyMcpEmailServices },
     { paperBoyMcpFeedbackServices },
+    { paperBoyMcpSuppressionServices },
     { paperBoyMcpTemplateServices },
     { paperBoyMcpWebhookServices },
   ] = await Promise.all([
@@ -31,6 +32,7 @@ async function main() {
     import("@/mcp/delivery-services"),
     import("@/mcp/email-services"),
     import("@/mcp/feedback-services"),
+    import("@/mcp/suppression-services"),
     import("@/mcp/template-services"),
     import("@/mcp/webhook-services"),
   ]);
@@ -52,6 +54,7 @@ async function main() {
         emails: paperBoyMcpEmailServices,
         feedback: paperBoyMcpFeedbackServices,
         findOrganization: findOrganizationById,
+        suppressions: paperBoyMcpSuppressionServices,
         templates: paperBoyMcpTemplateServices,
         webhooks: paperBoyMcpWebhookServices,
       }),

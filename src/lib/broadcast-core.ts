@@ -22,13 +22,6 @@ export const BROADCAST_RECIPIENT_STATUSES = [
 export type BroadcastRecipientStatus =
   (typeof BROADCAST_RECIPIENT_STATUSES)[number];
 
-export const SUPPRESSION_REASONS = [
-  "manual",
-  "bounced",
-  "complained",
-] as const;
-export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number];
-
 export type BroadcastValidationIssue = {
   field: string;
   message: string;
