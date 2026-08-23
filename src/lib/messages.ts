@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   emailSuppressions,
@@ -56,6 +56,16 @@ export type QueuedMessageBatchItem =
       message: QueuedMessageRecord;
       ok: true;
     };
+
+const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+
+function activeIdempotencyWindow() {
+  return sql`${messages.createdAt} > now() - (${IDEMPOTENCY_TTL_SECONDS} * interval '1 second')`;
+}
+
+function expiredIdempotencyWindow() {
+  return sql`${messages.createdAt} <= now() - (${IDEMPOTENCY_TTL_SECONDS} * interval '1 second')`;
+}
 
 function isUniqueViolation(error: unknown): boolean {
   if (!error || typeof error !== "object") {
@@ -133,6 +143,7 @@ async function findIdempotentMessage(apiKeyId: string, key: string) {
       and(
         eq(messages.apiKeyId, apiKeyId),
         eq(messages.idempotencyKey, key),
+        activeIdempotencyWindow(),
       ),
     )
     .limit(1);
@@ -220,6 +231,23 @@ export async function queueEmail(input: {
 
   try {
     const created = await db.transaction(async (tx) => {
+      if (idempotencyKey && apiKeyId) {
+        await tx
+          .update(messages)
+          .set({
+            idempotencyKey: null,
+            requestHash: null,
+            updatedAt: sql`${messages.updatedAt}`,
+          })
+          .where(
+            and(
+              eq(messages.apiKeyId, apiKeyId),
+              eq(messages.idempotencyKey, idempotencyKey),
+              expiredIdempotencyWindow(),
+            ),
+          );
+      }
+
       await consumeSendRateLimit({
         environment: input.principal.environment,
         now: input.rateLimitNow,

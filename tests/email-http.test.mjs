@@ -121,28 +121,62 @@ test("missing from and to returns JSON validation details with 422", async () =>
   assert.equal(queued.length, 0);
 });
 
-test("Idempotency-Key replays the same id and rejects a changed body", async () => {
+test("header and JSON idempotency keys replay one send", async () => {
   const { dependencies, queued } = testDependencies();
-  const headers = { "Idempotency-Key": "receipt-order-123" };
+  const key = "receipt-order-123";
   const first = await handleSendEmailRequest(
-    request(validBody, { headers }),
+    request({ ...validBody, idempotency_key: key }),
     dependencies,
   );
   const replay = await handleSendEmailRequest(
-    request(validBody, { headers }),
+    request(validBody, { headers: { "Idempotency-Key": key } }),
+    dependencies,
+  );
+  const matchingHeaderAndBody = await handleSendEmailRequest(
+    request(
+      { ...validBody, idempotency_key: key },
+      { headers: { "Idempotency-Key": key } },
+    ),
     dependencies,
   );
   const conflict = await handleSendEmailRequest(
-    request({ ...validBody, subject: "Changed" }, { headers }),
+    request(
+      { ...validBody, idempotency_key: key, subject: "Changed" },
+    ),
     dependencies,
   );
 
   assert.equal(first.status, 200);
   assert.equal(replay.status, 200);
-  assert.equal((await first.json()).id, (await replay.json()).id);
+  assert.equal(matchingHeaderAndBody.status, 200);
+  const firstId = (await first.json()).id;
+  assert.equal(firstId, (await replay.json()).id);
+  assert.equal(firstId, (await matchingHeaderAndBody.json()).id);
   assert.equal(conflict.status, 409);
   assert.equal((await conflict.json()).error.code, "idempotency_conflict");
   assert.equal(queued.length, 1);
+});
+
+test("header and JSON idempotency keys must match", async () => {
+  const { dependencies, queued } = testDependencies();
+  const response = await handleSendEmailRequest(
+    request(
+      { ...validBody, idempotency_key: "body-key" },
+      { headers: { "Idempotency-Key": "header-key" } },
+    ),
+    dependencies,
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 422);
+  assert.equal(body.error.code, "validation_error");
+  assert.deepEqual(body.error.fields, [
+    {
+      field: "idempotency_key",
+      message: "Must match the Idempotency-Key header when both are provided.",
+    },
+  ]);
+  assert.equal(queued.length, 0);
 });
 
 test("invalid JSON and an invalid bearer key fail without queueing", async () => {

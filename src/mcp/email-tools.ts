@@ -27,7 +27,7 @@ export const PAPERBOY_EMAIL_MCP_TOOL_NAMES = [
 export const PAPERBOY_EMAIL_MCP_TOOL_DEFINITIONS = [
   {
     description:
-      "Validate and queue one transactional email for the authenticated organization and API-key environment.",
+      "Validate and queue one transactional email for the authenticated organization and API-key environment. Optional idempotencyKey replay protection is scoped to that API key for 24 hours.",
     mutating: true,
     name: PAPERBOY_EMAIL_MCP_TOOL_NAMES[0],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
@@ -138,7 +138,15 @@ const sendEmailInputSchema = z
     data: templateData.optional(),
     from: address,
     html: z.string().max(2 * 1024 * 1024).optional(),
-    idempotencyKey: z.string().min(1).max(256).optional(),
+    idempotencyKey: z
+      .string()
+      .min(1)
+      .max(256)
+      .regex(/^[\x21-\x7e]+$/)
+      .describe(
+        "API-key-scoped for 24 hours; an identical replay returns the original message without provider resubmission.",
+      )
+      .optional(),
     subject: z.string().min(1).max(998).optional(),
     tags: z.array(tag).max(75).optional(),
     template_id: z.string().uuid().optional(),

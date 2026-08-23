@@ -39,6 +39,7 @@ export type SendTemplateEmailInput = SendEmailEnvelope & {
 export type SendEmailInput = SendInlineEmailInput | SendTemplateEmailInput;
 
 export type SendEmailOptions = {
+  /** API-key-scoped for 24 hours; replays do not reach the outbound provider. */
   idempotencyKey?: string;
 };
 

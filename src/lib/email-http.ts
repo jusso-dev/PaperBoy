@@ -1,7 +1,7 @@
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import { AttachmentStorageError } from "@/lib/attachment-storage";
 import { DomainError } from "@/lib/domain-core";
-import { EmailError } from "@/lib/email-core";
+import { EmailError, normalizeIdempotencyKey } from "@/lib/email-core";
 import type { QueuedMessageRecord } from "@/lib/messages";
 import {
   RateLimitConfigurationError,
@@ -215,6 +215,49 @@ function errorResponse(error: unknown): Response {
   return emailJson(failure.body, failure.status, failure.headers);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function sendRequestInput(request: Request, payload: unknown): {
+  idempotencyKey: string | null;
+  payload: unknown;
+} {
+  const headerKey = request.headers.has("Idempotency-Key")
+    ? normalizeIdempotencyKey(request.headers.get("Idempotency-Key"))
+    : null;
+
+  if (
+    !isRecord(payload) ||
+    !Object.prototype.hasOwnProperty.call(payload, "idempotency_key")
+  ) {
+    return { idempotencyKey: headerKey, payload };
+  }
+
+  const { idempotency_key: rawBodyKey, ...emailPayload } = payload;
+  const bodyKey = normalizeIdempotencyKey(rawBodyKey, "idempotency_key");
+
+  if (!bodyKey) {
+    throw new EmailError("VALIDATION_ERROR", [
+      {
+        field: "idempotency_key",
+        message: "Use 1-256 visible ASCII characters without spaces.",
+      },
+    ]);
+  }
+
+  if (headerKey && headerKey !== bodyKey) {
+    throw new EmailError("VALIDATION_ERROR", [
+      {
+        field: "idempotency_key",
+        message: "Must match the Idempotency-Key header when both are provided.",
+      },
+    ]);
+  }
+
+  return { idempotencyKey: bodyKey, payload: emailPayload };
+}
+
 export async function handleSendEmailRequest(
   request: Request,
   dependencies: EmailHttpDependencies,
@@ -251,9 +294,10 @@ export async function handleSendEmailRequest(
   }
 
   try {
+    const input = sendRequestInput(request, payload);
     const message = await dependencies.queue({
-      idempotencyKey: request.headers.get("Idempotency-Key"),
-      payload,
+      idempotencyKey: input.idempotencyKey,
+      payload: input.payload,
       principal,
     });
 

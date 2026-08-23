@@ -43,7 +43,8 @@ paths:
         Validates and stores one provider-neutral message. Test keys always use
         the isolated test sink. Live keys require a verified organization domain
         and active DKIM state. Cloudflare Email Service remains responsible for
-        provider-owned DKIM and ARC signatures.
+        provider-owned DKIM and ARC signatures. Idempotency may be supplied in
+        the header or JSON body and is active for 24 hours per API key.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -69,7 +70,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The idempotency key was already used with a different request.
+          description: The idempotency key was used with a different request inside its 24-hour window.
           headers:
             Cache-Control:
               $ref: '#/components/headers/NoStore'
@@ -296,13 +297,11 @@ components:
       in: header
       required: false
       description: >-
-        Optional 1-256 visible ASCII characters. Reusing it with the normalized
-        same request returns the original message ID.
+        Alternative to JSON `idempotency_key`. If both are present they must
+        match exactly. Reusing it with the same normalized request during its
+        API-key-scoped 24-hour window returns the original message ID.
       schema:
-        type: string
-        minLength: 1
-        maxLength: 256
-        pattern: '^[!-~]+$'
+        $ref: '#/components/schemas/IdempotencyKeyValue'
   headers:
     NoStore:
       description: Private API responses are never cacheable.
@@ -411,6 +410,8 @@ components:
         html:
           type: string
           maxLength: 2097152
+        idempotency_key:
+          $ref: '#/components/schemas/IdempotencyKeyValue'
         text:
           type: string
           maxLength: 2097152
@@ -434,6 +435,8 @@ components:
           type: object
           additionalProperties: true
           default: {}
+        idempotency_key:
+          $ref: '#/components/schemas/IdempotencyKeyValue'
         tags:
           $ref: '#/components/schemas/EmailTags'
         attachments:
@@ -512,6 +515,14 @@ components:
         id:
           type: string
           format: uuid
+    IdempotencyKeyValue:
+      type: string
+      minLength: 1
+      maxLength: 256
+      pattern: '^[!-~]+$'
+      description: >-
+        API-key-scoped key with a 24-hour lifetime measured using PostgreSQL UTC
+        instants. A replay does not insert or resubmit a provider message.
     Email:
       type: object
       additionalProperties: false

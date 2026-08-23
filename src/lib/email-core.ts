@@ -462,7 +462,10 @@ export function parseSendEmailInput(
   };
 }
 
-export function normalizeIdempotencyKey(value: unknown): string | null {
+export function normalizeIdempotencyKey(
+  value: unknown,
+  field = "Idempotency-Key",
+): string | null {
   if (value === null || value === undefined) {
     return null;
   }
@@ -475,7 +478,7 @@ export function normalizeIdempotencyKey(value: unknown): string | null {
   ) {
     throw new EmailError("VALIDATION_ERROR", [
       {
-        field: "Idempotency-Key",
+        field,
         message: "Use 1-256 visible ASCII characters without spaces.",
       },
     ]);
