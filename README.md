@@ -11,7 +11,7 @@ Self-hosted transactional email. A cheaper Resend you run on your own box.
 - Drizzle ORM + Postgres
 - Better Auth
 - First-class MCP server over the same domain services as HTTP and the console
-- CI on GitHub-hosted runners (`ubuntu-latest`) — repo is public, no self-hosted runners exposed to PRs
+- CI on Linux self-hosted runners with isolated PostgreSQL and Mailpit service containers, UTC process time, read-only repository permissions, and no GitHub-hosted labels. Fork pull requests are skipped so untrusted code never reaches the runner; same-repository pull requests and `main` pushes run the full gate.
 
 ## Theme
 
