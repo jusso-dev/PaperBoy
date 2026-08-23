@@ -598,6 +598,9 @@ test("discovers transports, tools, and authenticated documentation", async () =>
       uri: PAPERBOY_MCP_RESOURCE_URIS[5],
     });
     assert.match(workerGuide.contents[0].text, /five-minute lease/);
+    assert.match(workerGuide.contents[0].text, /SMTP_URL/);
+    assert.match(workerGuide.contents[0].text, /SMTP_TLS_MODE defaults to required/);
+    assert.match(workerGuide.contents[0].text, /smtp\.mx\.cloudflare\.net:465/);
     assert.match(workerGuide.contents[0].text, /Cloudflare Email Sending/);
   });
 });

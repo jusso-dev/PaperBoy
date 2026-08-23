@@ -220,6 +220,10 @@ const broadcastDocument = `# PaperBoy broadcasts
 const workerDocument = `# PaperBoy outbound worker
 
 - Run 'pnpm worker' beside every web deployment. The PostgreSQL queue is the source of truth.
+- Set SMTP_URL to an smtp:// or smtps:// submission endpoint to enable live delivery. Without it, the worker consumes test-sink messages only and leaves live rows queued.
+- SMTP_TLS_MODE defaults to required. smtp:// must negotiate STARTTLS; opportunistic and disabled are weaker opt-ins for controlled environments. smtps:// uses implicit TLS.
+- For local capture, run 'docker compose -f compose.dev.yml up --wait mailpit', use SMTP_URL=smtp://127.0.0.1:1025 with SMTP_TLS_MODE=disabled, and inspect http://127.0.0.1:8025.
+- Cloudflare Email Service works through the same adapter with smtps://api_token:<URL-encoded API token>@smtp.mx.cloudflare.net:465 and required TLS. Keep the token in the worker secret environment, never MCP arguments or output. Cloudflare remains its own DKIM/ARC signing authority.
 - A worker atomically claims an eligible message, records 'sending', and holds a five-minute lease. If it exits mid-delivery, another worker can reclaim the same row after the lease expires.
 - Delivery is at least once. A process exit after a provider accepts a message but before PostgreSQL records 'sent' can cause a duplicate, so preserve send idempotency where the provider supports it.
 - Retry transient network failures, HTTP 5xx, and SMTP 4xx with bounded backoff. SMTP 550 and other permanent failures move directly to 'failed'. Five attempts exhaust the retry budget.

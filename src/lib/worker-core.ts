@@ -165,6 +165,27 @@ export const testSinkAdapter: OutboundAdapter = {
   },
 };
 
+export function routeOutboundAdapters(
+  adapters: Readonly<Partial<Record<MessageDeliveryMode, OutboundAdapter>>>,
+): OutboundAdapter {
+  return {
+    name: "delivery-mode-router",
+    async send(message) {
+      const adapter = adapters[message.deliveryMode];
+
+      if (!adapter) {
+        throw new OutboundDeliveryError({
+          code: "adapter_unavailable",
+          reason: "No outbound adapter is configured for this delivery mode.",
+          retryable: false,
+        });
+      }
+
+      await adapter.send(message);
+    },
+  };
+}
+
 export async function processNextMessage(input: {
   adapter: OutboundAdapter;
   deliveryModes: MessageDeliveryMode[];

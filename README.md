@@ -98,11 +98,34 @@ pnpm worker
 
 The worker needs the same `DATABASE_URL` and `PAPERBOY_ATTACHMENT_STORAGE_PATH` as the web process. `PAPERBOY_WORKER_POLL_MS` controls idle polling from 100 to 60,000 milliseconds and defaults to 1,000. `PAPERBOY_WORKER_ID` can supply a stable 1-128 character process identity; otherwise PaperBoy uses the host name and PID. Keep the process environment on `TZ=UTC`; user-facing delivery times are still rendered with each signed-in user's persisted IANA timezone.
 
+Set `SMTP_URL` to enable live delivery through an operator-selected SMTP server. PaperBoy accepts `smtp://` submission and `smtps://` implicit TLS URLs. `SMTP_TLS_MODE` defaults to `required`: an `smtp://` connection must upgrade with STARTTLS or fail safely. `opportunistic` permits a failed upgrade to continue and `disabled` sends plaintext, so use either weaker mode only on a trusted development network. `smtps://` always requires implicit TLS. Inject URL credentials through the deployment secret store; PaperBoy never writes the URL, credentials, or raw relay response to delivery status or logs.
+
+Without `SMTP_URL`, the worker consumes only isolated `test-sink` messages and leaves live rows queued. SMTP is the default live provider when configured; no Resend, SES, or other paid API is required.
+
+### Mailpit development MTA
+
+The committed development Compose file runs the official Mailpit image with its UI and SMTP listener bound to host loopback:
+
+```sh
+docker compose -f compose.dev.yml up --wait mailpit
+pnpm worker
+```
+
+The development values in `.env.example` point the worker at plaintext Mailpit on `127.0.0.1:1025`; inspect captured messages at [http://127.0.0.1:8025](http://127.0.0.1:8025). Stop this isolated service with `docker compose -f compose.dev.yml down`. Do not carry `SMTP_TLS_MODE=disabled` into production.
+
+For a production Postfix, Haraka, or equivalent submission service, use its authenticated `smtp://...:587` endpoint and leave `SMTP_TLS_MODE` unset so STARTTLS is mandatory. An implicit-TLS relay uses `smtps://...:465`.
+
+### Cloudflare Email Service
+
+Cloudflare Email Service is supported by the same SMTP adapter today, without making Cloudflare the default. After onboarding the sending domain and creating an API token with Email Sending permission, inject an `SMTP_URL` shaped like `smtps://api_token:<URL-encoded API token>@smtp.mx.cloudflare.net:465` and leave `SMTP_TLS_MODE=required`. Cloudflare requires the literal username `api_token`, port 465, and implicit TLS; its SMTP submissions enter the same delivery, DKIM/ARC-signing, limits, and log pipeline as its REST API and Workers binding. See Cloudflare's [SMTP reference](https://developers.cloudflare.com/email-service/api/send-emails/smtp/).
+
+PaperBoy still keeps a provider-neutral semantic queue. SMTP builds raw MIME only inside the SMTP adapter. The separate Cloudflare structured-payload builder remains available for a REST or Workers adapter and deliberately omits PaperBoy-owned Date and DKIM headers. Both paths consume the same validated bodies and attachment bytes, so enabling SMTP does not turn the queue or MCP surface into an SMTP-only contract.
+
 PostgreSQL is the queue and lock service. A worker claims one due `queued` message with `FOR UPDATE SKIP LOCKED`, changes it to `sending`, and holds a five-minute lease. `sent` and `failed` are terminal. If a process exits mid-send, the row remains durable and another worker can reclaim it after lease expiry. Delivery is therefore at least once: a crash after an external provider accepts a message but before PaperBoy commits `sent` can cause a duplicate, so adapters should use provider idempotency where available.
 
 Transient network failures, HTTP 5xx, and SMTP 4xx return to `queued` after 1 minute, 5 minutes, 30 minutes, then 2 hours. Five failed attempts exhaust the retry budget. SMTP 550 and other permanent errors move directly to `failed`. Sanitized error codes and reasons are stored for the console and MCP; message content, recipient addresses, attachments, credentials, and raw provider responses are not returned by those status surfaces.
 
-The committed executable currently consumes the isolated `test-sink` delivery mode. Issue #18 wires the first live self-hosted SMTP adapter; provider selection is deliberately separate. The worker core already accepts an injected adapter and passes one provider-neutral semantic message including verified attachment bytes. Fake-MTA coverage builds MIME from that value, while the Cloudflare compatibility assertion converts that exact value into Cloudflare Email Sending's structured, unsigned payload. No queue schema or template path is provider-specific.
+The worker routes test keys only to the isolated test sink and live keys only to the configured live adapter. The worker core passes one provider-neutral semantic message including verified attachment bytes. SMTP coverage builds MIME from that value, while the Cloudflare compatibility assertion converts that exact value into Cloudflare Email Sending's structured, unsigned REST payload. No queue schema, template path, delivery-status response, or MCP tool is provider-specific.
 
 ## Email templates
 
@@ -166,7 +189,7 @@ Rotation is staged: PaperBoy keeps signing with the active selector while the re
 
 Cloudflare DNS and [Email Routing](https://developers.cloudflare.com/email-service/configuration/domains/) can coexist with PaperBoy signing. PaperBoy selectors start with `pb` and do not collide with Cloudflare's `cf-bounce` or `cf2024-1` selectors. Keep both providers' DKIM TXT records. If Email Routing manages the root SPF record, merge PaperBoy's sending mechanism into a single record; for an MX-authorised PaperBoy MTA the value is `v=spf1 mx include:_spf.mx.cloudflare.net ~all`. Set that complete value in `PAPERBOY_SPF_RECORD`; never publish two `v=spf1` records.
 
-[Cloudflare Email Sending](https://developers.cloudflare.com/email-service/reference/headers/) is different: Cloudflare controls `Date` and `DKIM-Signature` and signs with its provider-managed selector. PaperBoy's Cloudflare payload builder therefore uses structured messages rather than a pre-signed or pre-dated raw message and never decrypts a PaperBoy key. It maps the worker's verified stored files to Cloudflare's Base64 `attachments` objects and enforces Cloudflare's lower 5 MiB total-message limit before a provider request; PaperBoy's general attachment limit remains 10 MiB. A configured Cloudflare adapter uses this worker boundary. SMTP/self-hosted MTA delivery uses PaperBoy's verified active key. This keeps both paths valid without double-signing or leaking private material.
+[Cloudflare Email Sending](https://developers.cloudflare.com/email-service/reference/headers/) supports two compatible PaperBoy boundaries. Its REST API uses structured messages, so PaperBoy's Cloudflare payload builder omits prebuilt Date and DKIM headers, maps verified stored files to Base64 `attachments`, and enforces Cloudflare's lower 5 MiB total-message limit before a provider request. Its authenticated SMTP endpoint accepts the SMTP adapter's raw MIME over implicit TLS and then applies Cloudflare-managed DKIM/ARC signing. A self-hosted MTA remains responsible for signing its own SMTP submissions. PaperBoy never sends its encrypted private key to Cloudflare. This keeps every path valid without double-signing or leaking private material.
 
 Shared delivery policy blocks live keys unless the normalized From domain is verified in that key's organization. Test keys always resolve to the isolated test sink and never bypass into live delivery.
 

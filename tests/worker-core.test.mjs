@@ -10,6 +10,7 @@ import {
   OutboundDeliveryError,
   httpDeliveryError,
   processNextMessage,
+  routeOutboundAdapters,
   smtpDeliveryError,
   testSinkAdapter,
 } from "../src/lib/worker-core.ts";
@@ -226,4 +227,32 @@ test("the built-in sink accepts test mail and rejects live mail", async () => {
       error.code === "adapter_unavailable" &&
       error.retryable === false,
   );
+});
+
+test("the mode router keeps test mail out of the live adapter", async () => {
+  const calls = [];
+  const adapter = routeOutboundAdapters({
+    live: {
+      name: "live",
+      async send(delivery) {
+        calls.push(["live", delivery.id]);
+      },
+    },
+    "test-sink": {
+      name: "test-sink",
+      async send(delivery) {
+        calls.push(["test-sink", delivery.id]);
+      },
+    },
+  });
+
+  await adapter.send(
+    message({ deliveryMode: "test-sink", environment: "test" }),
+  );
+  await adapter.send(message());
+
+  assert.deepEqual(calls, [
+    ["test-sink", message().id],
+    ["live", message().id],
+  ]);
 });
