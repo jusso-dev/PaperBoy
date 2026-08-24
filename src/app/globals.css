@@ -1783,10 +1783,11 @@ select:focus-visible {
 }
 
 .paperboy-logo-image {
+  background: url("https://raw.githubusercontent.com/jusso-dev/PaperBoy/main/docs/banner.jpg") center / cover no-repeat;
   border: 1px solid rgba(23, 74, 116, 0.24);
   box-shadow: 0 2px 4px rgba(55, 45, 30, 0.08);
   display: block;
-  height: auto;
+  height: 152px;
   transform: rotate(-0.35deg);
   width: 228px;
 }
