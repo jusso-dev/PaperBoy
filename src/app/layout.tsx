@@ -1,5 +1,20 @@
 import type { Metadata } from "next";
+import { Bree_Serif, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+
+const displayFont = Bree_Serif({
+  display: "swap",
+  subsets: ["latin"],
+  variable: "--paperboy-font-display",
+  weight: "400",
+});
+
+const monoFont = IBM_Plex_Mono({
+  display: "swap",
+  subsets: ["latin"],
+  variable: "--paperboy-font-mono",
+  weight: ["400", "500", "600", "700"],
+});
 
 const title = "PaperBoy";
 const description =
@@ -34,7 +49,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en-AU">
+    <html className={`${displayFont.variable} ${monoFont.variable}`} lang="en-AU">
       <body>{children}</body>
     </html>
   );

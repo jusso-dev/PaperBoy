@@ -60,7 +60,7 @@ type StatusRow = Pick<
   | "updatedAt"
 >;
 
-async function requireMessageRead(input: {
+export async function requireMessageRead(input: {
   actorUserId: string | null;
   orgId: string;
 }): Promise<void> {

@@ -1,44 +1,62 @@
-import Link from "next/link";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { DateRangeControl } from "@/components/dashboard/date-range-control";
+import { EmailActivityPanel } from "@/components/dashboard/email-activity-panel";
+import { MetricsGrid } from "@/components/dashboard/metrics-grid";
+import { RecentEmails } from "@/components/dashboard/recent-emails";
+import { SendingDomainsTable } from "@/components/dashboard/sending-domains-table";
+import { WelcomeNote } from "@/components/dashboard/welcome-note";
+import { PostalStamp } from "@/components/brand/postal-stamp";
+import {
+  dashboardRangeLabel,
+  getPaperBoyDashboard,
+  parseDashboardRange,
+} from "@/lib/dashboard";
+import { requireOrganization } from "@/lib/session";
 
-export default function Overview() {
+type OverviewProps = {
+  searchParams: Promise<{ range?: string }>;
+};
+
+export default async function Overview({ searchParams }: OverviewProps) {
+  const [{ organization, session }, query] = await Promise.all([
+    requireOrganization(),
+    searchParams,
+  ]);
+  const rangeDays = parseDashboardRange(query.range);
+  const now = new Date();
+  const dashboard = await getPaperBoyDashboard({
+    actorUserId: session.user.id,
+    now,
+    orgId: organization.id,
+    rangeDays,
+    timeZone: session.user.timezone,
+  });
+  const rangeLabel = dashboardRangeLabel({
+    now,
+    rangeDays,
+    timeZone: session.user.timezone,
+  });
+
   return (
-    <section>
-      <h1 className="page-title">Overview</h1>
-      <p className="page-sub">Your console on the kitchen table.</p>
+    <section className="dashboard-overview">
+      <DashboardHeader />
 
-      <div className="card">
-        <h2>Getting started</h2>
-        <p>
-          Add a sending domain, publish its DNS records, then mint an API key.
-          Screens arrive as the board is worked.
-        </p>
-        <p style={{ marginTop: 12 }}>
-          <Link className="btn btn-primary" href="/app/domains">
-            Add a domain
-          </Link>
-        </p>
-      </div>
-
-      <div className="card">
-        <h2>Recent messages</h2>
-        <div className="table-scroll">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>To</th>
-                <th>Subject</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colSpan={4}>No messages yet.</td>
-              </tr>
-            </tbody>
-          </table>
+      <div className="dashboard-welcome-row">
+        <WelcomeNote organizationName={organization.name} />
+        <div className="dashboard-postmark">
+          <PostalStamp />
+          <DateRangeControl label={rangeLabel} rangeDays={rangeDays} />
         </div>
       </div>
+
+      <MetricsGrid metrics={dashboard.metrics} />
+
+      <div className="dashboard-analytics-grid">
+        <EmailActivityPanel data={dashboard.activity} />
+        <RecentEmails emails={dashboard.recentEmails} now={now} />
+      </div>
+
+      <SendingDomainsTable domains={dashboard.domains} timeZone={session.user.timezone} />
     </section>
   );
 }
