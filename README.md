@@ -13,7 +13,7 @@ Self-hosted transactional email. A cheaper Resend you run on your own box.
 - Redis + BullMQ for delayed, retrying, and concurrent jobs
 - Better Auth
 - First-class MCP server over the same domain services as HTTP and the console
-- CI on Linux self-hosted runners with isolated PostgreSQL and Mailpit service containers, the fixed `Australia/Sydney` application timezone, read-only repository permissions, and no GitHub-hosted labels. Fork pull requests are skipped so untrusted code never reaches the runner; same-repository pull requests and `main` pushes run the full gate.
+- CI on GitHub's native Linux ARM64 runner with isolated PostgreSQL, Redis, and Mailpit service containers, the fixed `Australia/Sydney` application timezone, and read-only repository permissions. Fork pull requests are skipped; same-repository pull requests and `main` pushes run the full gate, while `main` also builds and publicly verifies the ARM64 GHCR image.
 
 ## Container image
 
@@ -28,7 +28,7 @@ The image runs Next.js and the remote MCP server on Bun as a non-root user with 
 
 ## Security
 
-PaperBoy's repository-scoped [threat model](docs/threat-model.md) covers Better Auth sessions, authenticator MFA, passkeys, REST and first-class MCP authentication, tenant boundaries, UTC/IANA timezone handling, DKIM and webhook key storage, self-hosted SMTP, Cloudflare Email Service, attachments, and self-hosted CI. Its limits are explicit: a leaked bearer key remains usable until revoked, an incorrectly configured MTA can become an open relay, and provider acceptance is not proof of final delivery.
+PaperBoy's repository-scoped [threat model](docs/threat-model.md) covers Better Auth sessions, authenticator MFA, passkeys, REST and first-class MCP authentication, tenant boundaries, UTC/IANA timezone handling, DKIM and webhook key storage, self-hosted SMTP, Cloudflare Email Service, attachments, and GitHub-hosted ARM64 CI. Its limits are explicit: a leaked bearer key remains usable until revoked, an incorrectly configured MTA can become an open relay, and provider acceptance is not proof of final delivery.
 
 Password sign-in supports TOTP MFA, single-use recovery codes, 30-day trusted devices, and a 15-minute account lock after five failed second-factor attempts. Passkeys are a phishing-resistant passwordless sign-in option and can be enrolled, named, listed, and deleted in Settings. Before enrolling passkeys in production, set `BETTER_AUTH_URL` and `PAPERBOY_PASSKEY_ORIGIN` to the exact external HTTPS origin and set `PAPERBOY_PASSKEY_RP_ID` to that host or a valid parent domain. A passkey sign-in is a standalone passwordless factor; it is not followed by the TOTP challenge used for password sign-in.
 

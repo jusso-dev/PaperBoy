@@ -16,7 +16,7 @@ Security invariants:
 - Amazon SES receives unsigned raw MIME and owns Easy DKIM. Signed SNS or authenticated EventBridge events must correlate both the PaperBoy UUID and SES message ID before they can create events or suppressions.
 - Attachments are private, root-confined, integrity-checked blobs. Public APIs and MCP expose metadata, not bytes, hashes, or storage keys.
 - Queue creation, rate limiting, and idempotency decisions are transactional. Delivery remains at least once.
-- Fork pull requests never execute on the self-hosted CI runner. Secret scanning runs against full Git history before dependency installation or repository code execution.
+- Fork pull requests never execute the CI workflow. Secret scanning runs against full Git history before dependency installation or repository code execution on an ephemeral GitHub-hosted ARM64 runner.
 
 ## Threat Model, Trust Boundaries, and Assumptions
 
@@ -49,7 +49,7 @@ Security invariants:
 | Amazon SNS to public SES callback | Untrusted until the exact per-organization topic, AWS-hosted certificate URL, and cryptographic SNS signature validate | Bounded SNS envelope and embedded SES event; no PaperBoy bearer key |
 | Jobs to webhook receiver | Receiver identity and HTTPS endpoint are configured by an organization owner/admin | Minimal event body plus timestamped HMAC signature |
 | PaperBoy/operator to DNS | Registrar, DNS provider, and change-control accounts are trusted | SPF and DKIM public records, domain verification |
-| GitHub to self-hosted CI runner | Same-repository contributors and workflow definitions are trusted to run code | Source, actions, service containers, runner token, Docker access |
+| GitHub to hosted ARM64 CI runner | Same-repository contributors and workflow definitions are trusted to run code | Source, actions, service containers, short-lived runner token, Docker access |
 
 Callers can control request bodies, IDs, headers, email addresses and content, template data and author-authored HTML, attachments, import/feedback payloads, webhook endpoint URLs, MCP arguments, and replay timing. Remote SMTP servers, webhook receivers, providers, and DNS can return attacker-influenced responses. Operators control deployment secrets, network policy, PostgreSQL, private storage, SMTP relay policy, Cloudflare configuration, DNS, source-control permissions, and the runner host.
 
@@ -128,11 +128,11 @@ The deployment intentionally does not allow users to change timezone. Operators 
 
 ### Source control, dependencies, and CI
 
-Gitleaks scans full Git history with its default rules plus explicit AWS access-key, PaperBoy API-key, webhook-secret, Base64 service-key, SMTP-credential, and Cloudflare Email SMTP-token patterns. The repository-pinned launcher downloads Gitleaks v8.30.1, verifies the release checksum manifest against a pinned SHA-256 digest, verifies the selected archive, and runs locally on the self-hosted runner. Source is not uploaded to a scanning SaaS. Private-key and environment files are ignored, but ignore rules are convenience controls rather than permission to store secrets in the worktree.
+Gitleaks scans full Git history with its default rules plus explicit AWS access-key, PaperBoy API-key, webhook-secret, Base64 service-key, SMTP-credential, and Cloudflare Email SMTP-token patterns. The repository-pinned launcher downloads Gitleaks v8.30.1, verifies the release checksum manifest against a pinned SHA-256 digest, verifies the selected archive, and runs on the ephemeral GitHub-hosted runner. Source is not uploaded to a separate scanning SaaS. Private-key and environment files are ignored, but ignore rules are convenience controls rather than permission to store secrets in the worktree.
 
 Secret detection can miss novel encodings, split secrets, low-entropy credentials, encrypted blobs, runtime leaks, or values introduced after the scan. It also cannot revoke a committed secret: remove the value from use, rotate it, investigate access, and then clean history under an approved incident procedure. A clean scan is evidence about known patterns, not proof that the repository contains no secrets.
 
-Fork pull requests are skipped before reaching the self-hosted runner. Same-repository writers can still alter workflows and run code with the runner's Docker access. Branch protection, code review, minimal GitHub permissions, disposable registration, isolated networking, no production secrets, and post-job destruction are required. Third-party actions and downloaded binaries remain supply-chain boundaries even when versions and checksums are pinned.
+Fork pull requests are skipped. Same-repository writers can still alter workflows and run code with the ephemeral runner's Docker access and short-lived token. Branch protection, code review, minimal GitHub permissions, no production secrets, and GitHub's post-job VM destruction are required. Third-party actions and downloaded binaries remain supply-chain boundaries even when versions and checksums are pinned.
 
 ### Secret handling response
 
