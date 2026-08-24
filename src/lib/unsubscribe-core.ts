@@ -17,7 +17,10 @@ export function parseUnsubscribeSigningKey(
 ): Buffer {
   if (!raw) throw new UnsubscribeConfigurationError();
   const key = Buffer.from(raw, "base64");
-  if (key.length !== 32 || key.toString("base64") !== raw) {
+  if (
+    key.length !== 32 ||
+    (key.toString("base64") !== raw && key.toString("base64url") !== raw)
+  ) {
     throw new UnsubscribeConfigurationError();
   }
   return key;

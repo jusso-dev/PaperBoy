@@ -57,6 +57,14 @@ export function RecentEmails({ emails, now }: { emails: DashboardEmail[]; now: D
           </Button>
         </div>
       )}
+      <a
+        className="paperclip-attribution"
+        href="https://www.flaticon.com/free-icons/paperclip"
+        rel="noreferrer"
+        target="_blank"
+      >
+        Paperclip icons created by Freepik - Flaticon
+      </a>
     </PaperCard>
   );
 }

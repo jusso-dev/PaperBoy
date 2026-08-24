@@ -11,12 +11,22 @@ import {
 import {
   createUnsubscribeToken,
   createUnsubscribeUrl,
+  parseUnsubscribeSigningKey,
   verifyUnsubscribeToken,
   withUnsubscribeFooter,
 } from "../src/lib/unsubscribe-core.ts";
 
 const contactId = "33333333-3333-4333-8333-333333333333";
 const key = Buffer.alloc(32, 7);
+
+test("unsubscribe signing accepts canonical base64 and base64url keys", () => {
+  assert.deepEqual(parseUnsubscribeSigningKey(key.toString("base64")), key);
+  assert.deepEqual(parseUnsubscribeSigningKey(key.toString("base64url")), key);
+  assert.throws(
+    () => parseUnsubscribeSigningKey("not-a-signing-key"),
+    /unsubscribe signing is unavailable/i,
+  );
+});
 
 test("audience and contact input normalize bounded names and plain addresses", () => {
   assert.deepEqual(parseCreateAudienceInput({ name: " Weekly readers " }), {

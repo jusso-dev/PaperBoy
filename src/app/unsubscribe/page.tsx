@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { unsubscribeAction } from "./actions";
+import { PaperboyLogo } from "@/components/brand/paperboy-logo";
 import {
   UnsubscribeConfigurationError,
   verifyUnsubscribeToken,
@@ -21,7 +21,7 @@ export default async function UnsubscribePage({ searchParams }: Props) {
   return (
     <main className="auth-shell">
       <section className="auth-card">
-        <Link className="masthead" href="/">PaperBoy</Link>
+        <PaperboyLogo compact />
         <h1>Email preferences</h1>
         {status === "done" ? (
           <>

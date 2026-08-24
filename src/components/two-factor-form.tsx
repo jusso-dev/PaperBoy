@@ -1,13 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 type VerificationMethod = "backup" | "totp";
 
 export function TwoFactorForm() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [method, setMethod] = useState<VerificationMethod>("totp");
@@ -40,8 +38,7 @@ export function TwoFactorForm() {
       return;
     }
 
-    router.push("/app");
-    router.refresh();
+    window.location.replace("/app");
   }
 
   return (

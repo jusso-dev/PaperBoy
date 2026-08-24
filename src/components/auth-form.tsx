@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { browserTimeZone } from "@/lib/time";
@@ -34,7 +33,6 @@ export function AuthForm({
   allowSignUp?: boolean;
   mode: AuthMode;
 }) {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const labels = copy[mode];
@@ -50,8 +48,9 @@ export function AuthForm({
 
     const result =
       mode === "sign-in"
-        ? await authClient.signIn.email({ email, password })
+        ? await authClient.signIn.email({ callbackURL: "/app", email, password })
         : await authClient.signUp.email({
+            callbackURL: "/app",
             email,
             password,
             name: String(formData.get("name")),
@@ -74,12 +73,11 @@ export function AuthForm({
       "twoFactorRedirect" in result.data &&
       result.data.twoFactorRedirect
     ) {
-      router.push("/two-factor");
+      window.location.replace("/two-factor");
       return;
     }
 
-    router.push("/app");
-    router.refresh();
+    window.location.replace("/app");
   }
 
   async function handlePasskeySignIn() {
@@ -94,8 +92,7 @@ export function AuthForm({
       setIsPending(false);
       return;
     }
-    router.push("/app");
-    router.refresh();
+    window.location.replace("/app");
   }
 
   return (

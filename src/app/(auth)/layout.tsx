@@ -1,12 +1,10 @@
-import Link from "next/link";
+import { PaperboyLogo } from "@/components/brand/paperboy-logo";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <main className="auth-shell">
       <div className="auth-page">
-        <Link className="masthead" href="/">
-          PaperBoy
-        </Link>
+        <PaperboyLogo compact />
         {children}
       </div>
     </main>

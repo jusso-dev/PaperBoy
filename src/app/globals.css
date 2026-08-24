@@ -1772,11 +1772,8 @@ select:focus-visible {
 }
 
 .paperboy-logo {
-  align-items: center;
-  color: var(--postal-blue-dark);
-  display: flex;
+  display: block;
   flex: none;
-  gap: 10px;
   text-decoration: none;
   width: fit-content;
 }
@@ -1785,50 +1782,31 @@ select:focus-visible {
   color: var(--postal-blue-dark);
 }
 
-.paperboy-mark {
-  color: var(--postal-blue-dark);
-  height: 72px;
-  width: 78px;
-}
-
-.paperboy-wordmark {
-  display: grid;
-  line-height: 1;
-}
-
-.paperboy-wordmark strong {
-  font-family: var(--paperboy-font-display), Georgia, serif;
-  font-size: 31px;
-  font-style: italic;
-  font-weight: 400;
-  letter-spacing: -0.045em;
-  text-shadow: 1px 1px 0 rgba(250, 243, 228, 0.7);
-}
-
-.paperboy-wordmark small {
-  color: var(--ink);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  margin-top: 8px;
-  text-align: center;
+.paperboy-logo-image {
+  border: 1px solid rgba(23, 74, 116, 0.24);
+  box-shadow: 0 2px 4px rgba(55, 45, 30, 0.08);
+  display: block;
+  height: auto;
+  transform: rotate(-0.35deg);
+  width: 228px;
 }
 
 .paperboy-logo-compact {
-  gap: 6px;
+  height: 46px;
+  overflow: hidden;
+  width: 120px;
 }
 
-.paperboy-logo-compact .paperboy-mark {
-  height: 38px;
-  width: 42px;
-}
-
-.paperboy-logo-compact .paperboy-wordmark strong {
-  font-size: 23px;
+.paperboy-logo-compact .paperboy-logo-image {
+  height: 80px;
+  object-fit: cover;
+  object-position: center 8%;
+  transform: none;
+  width: 120px;
 }
 
 .dashboard-nav {
-  margin-top: 26px;
+  margin-top: 18px;
 }
 
 .dashboard-nav ul {
@@ -2440,9 +2418,10 @@ select:focus-visible {
 }
 
 .paperclip {
-  color: rgba(64, 70, 67, 0.78);
-  filter: drop-shadow(1px 1px 0 rgba(250, 243, 228, 0.7));
+  background: url("https://cdn-icons-png.flaticon.com/512/0/882.png") center / contain no-repeat;
+  filter: grayscale(1) opacity(0.74) drop-shadow(1px 1px 0 rgba(250, 243, 228, 0.7));
   height: 76px;
+  mix-blend-mode: multiply;
   width: 30px;
 }
 
@@ -2452,6 +2431,14 @@ select:focus-visible {
   top: -17px;
   transform: rotate(-8deg);
   z-index: 2;
+}
+
+.paperclip-attribution {
+  color: var(--ink-muted);
+  display: block;
+  font-size: 8px;
+  margin-top: 9px;
+  text-align: right;
 }
 
 .recent-email-list {
