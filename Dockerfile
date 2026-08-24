@@ -48,6 +48,7 @@ LABEL org.opencontainers.image.source="https://github.com/jusso-dev/PaperBoy"
 
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/.next ./.next
+COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --from=build --chown=node:node /app/next.config.ts /app/package.json /app/tsconfig.json ./
 COPY --from=build --chown=node:node /app/src ./src
 

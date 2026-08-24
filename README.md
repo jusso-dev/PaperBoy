@@ -46,6 +46,10 @@ pnpm db:migrate
 
 Generate a migration after changing `src/db/schema.ts` with `pnpm db:generate`.
 
+The production image includes the immutable `drizzle/` migration bundle and its
+runtime dependencies, so the same `pnpm db:migrate` command can run as a
+one-off release task before the web and worker containers are replaced.
+
 All stored instants and public protocol timestamps are UTC. PaperBoy persists and enforces `Australia/Sydney` for every user-facing calendar, console, log, and scheduling surface; the Settings control is locked while `PAPERBOY_FIXED_TIME_ZONE` is set.
 
 The matching SQL in `drizzle/down/` exists only to prove rollback on a throwaway database. Do not run it against a database containing PaperBoy data.

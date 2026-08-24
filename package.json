@@ -17,7 +17,7 @@
     "test": "tsx --test --test-concurrency=1 tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "tsx src/migrate.ts",
     "db:check": "drizzle-kit check",
     "feedback:ingest": "tsx src/feedback-ingest.ts"
   },
