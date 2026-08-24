@@ -8,6 +8,8 @@ import { can } from "@/lib/authorization";
 import { listAudiences } from "@/lib/audiences";
 import { listBroadcasts } from "@/lib/broadcasts";
 import { listDomains } from "@/lib/domains";
+import { getOutboundProviderSettings } from "@/lib/outbound-providers";
+import { readySenderDomains } from "@/lib/provider-sender-identities";
 import { requireOrganization } from "@/lib/session";
 import { listTemplates } from "@/lib/templates";
 import { formatDateTime } from "@/lib/time";
@@ -47,7 +49,7 @@ export default async function BroadcastsPage({
   const canRead = can(organization.role, "broadcasts.read");
   const canCreate = can(organization.role, "broadcasts.create");
   const canControl = can(organization.role, "broadcasts.control");
-  const [records, audiences, templates, domains] = await Promise.all([
+  const [records, audiences, templates, domains, outboundProviders] = await Promise.all([
     canRead
       ? listBroadcasts({
           actorUserId: session.user.id,
@@ -72,12 +74,26 @@ export default async function BroadcastsPage({
           orgId: organization.id,
         })
       : [],
+    canCreate
+      ? getOutboundProviderSettings({
+          actorUserId: session.user.id,
+          orgId: organization.id,
+        })
+      : null,
   ]);
-  const readyDomains = domains.filter(
-    (domain) =>
-      domain.status === "verified" &&
-      domain.dkimKeys.some((key) => key.status === "active"),
-  );
+  let readyDomains: string[] = [];
+  if (outboundProviders) {
+    try {
+      readyDomains = await readySenderDomains({
+        defaultProvider: outboundProviders.defaultProvider,
+        domains,
+        orgId: organization.id,
+        providerDomains: outboundProviders.domains,
+      });
+    } catch {
+      readyDomains = [];
+    }
+  }
 
   return (
     <section>
@@ -142,14 +158,14 @@ export default async function BroadcastsPage({
                 id="broadcast-from"
                 list="broadcast-sender-identities"
                 name="from"
-                placeholder={`news@${readyDomains[0]?.name ?? "example.com"}`}
+                placeholder={`news@${readyDomains[0] ?? "example.com"}`}
                 required
                 spellCheck={false}
                 type="email"
               />
               <datalist id="broadcast-sender-identities">
                 {readyDomains.map((domain) => (
-                  <option key={domain.id} value={`news@${domain.name}`} />
+                  <option key={domain} value={`news@${domain}`} />
                 ))}
               </datalist>
               <p className="field-help">

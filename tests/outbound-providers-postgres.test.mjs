@@ -202,6 +202,7 @@ test(
         payload: { ...payload, to: "ses@example.net" },
         principal,
         providerEnvironment: sesEnvironment,
+        providerSenderDomains: async () => [domainName],
       });
       assert.equal(fourth.provider, "aws-ses");
       await db

@@ -102,7 +102,7 @@ test(
 
       const queued = await queueConsoleTestEmail({
         actorUserId: adminId,
-        domainId,
+        fromDomain: domainName,
         html: "<p>Console Mailpit proof.</p>",
         orgId,
         subject,
@@ -155,7 +155,7 @@ test(
         () =>
           queueConsoleTestEmail({
             actorUserId: memberId,
-            domainId,
+            fromDomain: domainName,
             html: "<p>Must not queue.</p>",
             orgId,
             subject: "Blocked member",

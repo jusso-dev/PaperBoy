@@ -25,6 +25,7 @@ import {
   type MessageStatus,
 } from "@/lib/email-core";
 import { authorizeSendingDomain } from "@/lib/domains";
+import type { providerVerifiedSenderDomains } from "@/lib/provider-sender-identities";
 import { insertMessageEvent } from "@/lib/message-events";
 import { requestMessageJob } from "@/lib/job-queue";
 import {
@@ -187,6 +188,7 @@ export async function queueEmail(input: {
   payload: unknown;
   principal: MessageQueuePrincipal;
   providerEnvironment?: Readonly<Record<string, string | undefined>>;
+  providerSenderDomains?: typeof providerVerifiedSenderDomains;
   rateLimitNow?: Date;
 }): Promise<QueuedMessageRecord> {
   const payload = await materializeTemplateSendPayload({
@@ -231,12 +233,15 @@ export async function queueEmail(input: {
     }
   }
 
-  const domain = await authorizeSendingDomain({
-    environment: input.principal.environment,
-    fromDomain: email.fromDomain,
-    orgId: input.principal.orgId,
-    providerEnvironment: input.providerEnvironment,
-  });
+  const domain = await authorizeSendingDomain(
+    {
+      environment: input.principal.environment,
+      fromDomain: email.fromDomain,
+      orgId: input.principal.orgId,
+      providerEnvironment: input.providerEnvironment,
+    },
+    { providerSenderDomains: input.providerSenderDomains },
+  );
   if (domain.provider === "aws-ses" && email.to.length !== 1) {
     throw new EmailError("VALIDATION_ERROR", [
       {

@@ -35,8 +35,12 @@ import {
   type OrgPermission,
   type OrgRole,
 } from "@/lib/authorization";
-import { requireProviderConfigured } from "@/lib/outbound-provider-configuration";
+import {
+  OutboundProviderConfigurationError,
+  requireProviderConfigured,
+} from "@/lib/outbound-provider-configuration";
 import { isLiveOutboundProvider } from "@/lib/outbound-provider-core";
+import { providerVerifiedSenderDomains } from "@/lib/provider-sender-identities";
 import { isPostgresErrorCode } from "@/lib/postgres-errors";
 
 export { DomainError } from "@/lib/domain-core";
@@ -554,12 +558,19 @@ export async function deleteDomain(input: {
   });
 }
 
-export async function authorizeSendingDomain(input: {
-  environment: ApiKeyEnvironment;
-  fromDomain: unknown;
-  orgId: string;
-  providerEnvironment?: Readonly<Record<string, string | undefined>>;
-}) {
+type ProviderSenderDomainResolver = typeof providerVerifiedSenderDomains;
+
+export async function authorizeSendingDomain(
+  input: {
+    environment: ApiKeyEnvironment;
+    fromDomain: unknown;
+    orgId: string;
+    providerEnvironment?: Readonly<Record<string, string | undefined>>;
+  },
+  dependencies: {
+    providerSenderDomains?: ProviderSenderDomainResolver;
+  } = {},
+) {
   const name = normalizeSendingDomain(input.fromDomain);
 
   if (!name) {
@@ -575,25 +586,71 @@ export async function authorizeSendingDomain(input: {
     };
   }
 
-  const [domain] = await db
-    .select({
-      dkimKeyId: domainDkimKeys.id,
-      id: domains.id,
-      orgProvider: orgs.outboundProvider,
-      overrideProvider: domains.outboundProvider,
-      status: domains.status,
-    })
-    .from(domains)
-    .innerJoin(orgs, eq(orgs.id, domains.orgId))
-    .innerJoin(
-      domainDkimKeys,
-      and(
-        eq(domainDkimKeys.domainId, domains.id),
-        eq(domainDkimKeys.status, "active"),
-      ),
-    )
-    .where(and(eq(domains.orgId, input.orgId), eq(domains.name, name)))
-    .limit(1);
+  const [[organization], [domain]] = await Promise.all([
+    db
+      .select({ provider: orgs.outboundProvider })
+      .from(orgs)
+      .where(eq(orgs.id, input.orgId))
+      .limit(1),
+    db
+      .select({
+        dkimKeyId: domainDkimKeys.id,
+        id: domains.id,
+        overrideProvider: domains.outboundProvider,
+        status: domains.status,
+      })
+      .from(domains)
+      .leftJoin(
+        domainDkimKeys,
+        and(
+          eq(domainDkimKeys.domainId, domains.id),
+          eq(domainDkimKeys.status, "active"),
+        ),
+      )
+      .where(and(eq(domains.orgId, input.orgId), eq(domains.name, name)))
+      .limit(1),
+  ]);
+
+  if (!organization) throw new DomainError("DOMAIN_NOT_VERIFIED");
+
+  const provider = isLiveOutboundProvider(domain?.overrideProvider)
+    ? domain.overrideProvider
+    : isLiveOutboundProvider(organization.provider)
+      ? organization.provider
+      : "smtp";
+  requireProviderConfigured({
+    environment: input.providerEnvironment,
+    orgId: input.orgId,
+    provider,
+  });
+
+  if (provider === "aws-ses") {
+    let verifiedDomains: string[];
+    try {
+      verifiedDomains = await (
+        dependencies.providerSenderDomains ?? providerVerifiedSenderDomains
+      )({
+        environment: input.providerEnvironment,
+        orgId: input.orgId,
+        provider,
+      });
+    } catch (error) {
+      if (error instanceof OutboundProviderConfigurationError) throw error;
+      throw new OutboundProviderConfigurationError(
+        "CONNECTION_FAILED",
+        provider,
+      );
+    }
+    if (!verifiedDomains.includes(name)) {
+      throw new DomainError("DOMAIN_NOT_VERIFIED");
+    }
+    return {
+      domainId: domain?.id ?? null,
+      mode: "live" as const,
+      name,
+      provider,
+    };
+  }
 
   if (
     !domain ||
@@ -605,17 +662,6 @@ export async function authorizeSendingDomain(input: {
   ) {
     throw new DomainError("DOMAIN_NOT_VERIFIED");
   }
-
-  const provider = isLiveOutboundProvider(domain.overrideProvider)
-    ? domain.overrideProvider
-    : isLiveOutboundProvider(domain.orgProvider)
-      ? domain.orgProvider
-      : "smtp";
-  requireProviderConfigured({
-    environment: input.providerEnvironment,
-    orgId: input.orgId,
-    provider,
-  });
 
   return { domainId: domain.id, mode: "live" as const, name, provider };
 }

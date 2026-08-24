@@ -74,7 +74,7 @@ export async function sendTestEmailAction(formData: FormData) {
   try {
     const message = await queueConsoleTestEmail({
       actorUserId: session.user.id,
-      domainId: formData.get("domainId"),
+      fromDomain: formData.get("fromDomain"),
       html: optionalBody(formData.get("html")),
       orgId: organization.id,
       subject: formData.get("subject"),

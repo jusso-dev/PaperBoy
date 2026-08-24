@@ -5,6 +5,8 @@ import { can } from "@/lib/authorization";
 import { listDomains } from "@/lib/domains";
 import { MessageStatusError } from "@/lib/message-status-core";
 import { getMessageDeliveryStatus } from "@/lib/message-statuses";
+import { getOutboundProviderSettings } from "@/lib/outbound-providers";
+import { readySenderDomains } from "@/lib/provider-sender-identities";
 import { requireOrganization } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
 
@@ -45,9 +47,13 @@ export default async function Send({ searchParams }: SendPageProps) {
     searchParams,
   ]);
   const canSend = can(organization.role, "messages.send");
-  const [domains, sent] = canSend
+  const [domains, outboundProviders, sent] = canSend
     ? await Promise.all([
         listDomains({
+          actorUserId: session.user.id,
+          orgId: organization.id,
+        }),
+        getOutboundProviderSettings({
           actorUserId: session.user.id,
           orgId: organization.id,
         }),
@@ -57,12 +63,21 @@ export default async function Send({ searchParams }: SendPageProps) {
           orgId: organization.id,
         }),
       ])
-    : [[], null];
-  const readyDomains = domains.filter(
-    (domain) =>
-      domain.status === "verified" &&
-      domain.dkimKeys.some((key) => key.status === "active"),
-  );
+    : [[], null, null];
+  let providerIdentityError = false;
+  let readyDomains: string[] = [];
+  if (outboundProviders) {
+    try {
+      readyDomains = await readySenderDomains({
+        defaultProvider: outboundProviders.defaultProvider,
+        domains,
+        orgId: organization.id,
+        providerDomains: outboundProviders.domains,
+      });
+    } catch {
+      providerIdentityError = true;
+    }
+  }
 
   return (
     <section>
@@ -102,8 +117,9 @@ export default async function Send({ searchParams }: SendPageProps) {
         <div className="card">
           <h2>No provider-ready sender identity</h2>
           <p>
-            Configure and verify a sender identity in the active email provider,
-            then test that provider connection.
+            {providerIdentityError
+              ? "Amazon SES identity lookup failed. Test the provider connection for details."
+              : "No verified sender identity was returned by the active email provider."}
           </p>
           <p className="card-actions">
             <Link className="btn btn-primary" href="/app/organization">
@@ -116,13 +132,13 @@ export default async function Send({ searchParams }: SendPageProps) {
           <div className="send-envelope-grid">
             <div className="field">
               <label htmlFor="send-domain">From domain</label>
-              <select defaultValue="" id="send-domain" name="domainId" required>
+              <select defaultValue="" id="send-domain" name="fromDomain" required>
                 <option disabled value="">
                   Choose a verified domain
                 </option>
                 {readyDomains.map((domain) => (
-                  <option key={domain.id} value={domain.id}>
-                    {domain.name} · test@{domain.name}
+                  <option key={domain} value={domain}>
+                    {domain} · test@{domain}
                   </option>
                 ))}
               </select>

@@ -5,11 +5,8 @@ import {
   isOrgRole,
   requirePermission,
 } from "@/lib/authorization";
-import { DomainError, getDomain } from "@/lib/domains";
+import { DomainError } from "@/lib/domains";
 import { queueEmail, type QueuedMessageRecord } from "@/lib/messages";
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function requireConsoleSendPermission(input: {
   actorUserId: string;
@@ -35,7 +32,7 @@ async function requireConsoleSendPermission(input: {
 
 export async function queueConsoleTestEmail(input: {
   actorUserId: string;
-  domainId: unknown;
+  fromDomain: unknown;
   html: unknown;
   orgId: string;
   subject: unknown;
@@ -44,26 +41,13 @@ export async function queueConsoleTestEmail(input: {
 }): Promise<QueuedMessageRecord> {
   await requireConsoleSendPermission(input);
 
-  if (typeof input.domainId !== "string" || !UUID_PATTERN.test(input.domainId)) {
-    throw new DomainError("DOMAIN_NOT_FOUND");
-  }
-
-  const domain = await getDomain({
-    actorUserId: input.actorUserId,
-    domainId: input.domainId,
-    orgId: input.orgId,
-  });
-  const ready =
-    domain.status === "verified" &&
-    domain.dkimKeys.some((key) => key.status === "active");
-
-  if (!ready) {
-    throw new DomainError("DOMAIN_NOT_VERIFIED");
+  if (typeof input.fromDomain !== "string" || input.fromDomain.length === 0) {
+    throw new DomainError("INVALID_DOMAIN");
   }
 
   return queueEmail({
     payload: {
-      from: `PaperBoy <test@${domain.name}>`,
+      from: `PaperBoy <test@${input.fromDomain}>`,
       html: input.html,
       subject: input.subject,
       text: input.text,
