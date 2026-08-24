@@ -17,6 +17,7 @@ import {
   listUserOrganizations,
 } from "@/lib/organizations";
 import { requireOrganization } from "@/lib/session";
+import { normalizeSendingDomain } from "@/lib/domain-core";
 import { getOpenTrackingSettings } from "@/lib/open-tracking";
 import { getOutboundProviderSettings } from "@/lib/outbound-providers";
 import { getRateLimitSettings } from "@/lib/rate-limits";
@@ -25,6 +26,8 @@ import { formatDateTime } from "@/lib/time";
 type OrganizationPageProps = {
   searchParams: Promise<{
     error?: string;
+    providerDomainCount?: string;
+    providerDomains?: string;
     providerMode?: string;
     providerRegion?: string;
     providerSending?: string;
@@ -127,10 +130,32 @@ export default async function OrganizationPage({
     /^[a-z]{2}(?:-[a-z0-9]+)+-[0-9]$/.test(status.providerRegion)
       ? status.providerMode
       : null;
+  const testedSesDomainCount =
+    testedSesMode &&
+    typeof status.providerDomainCount === "string" &&
+    /^\d{1,6}$/.test(status.providerDomainCount)
+      ? Number(status.providerDomainCount)
+      : null;
+  const testedSesDomains =
+    testedSesDomainCount !== null && typeof status.providerDomains === "string"
+      ? status.providerDomains
+          .split(",")
+          .slice(0, 20)
+          .map(normalizeSendingDomain)
+          .filter((domain): domain is string => Boolean(domain))
+      : [];
+  const testedSesDomainSummary =
+    testedSesDomainCount === null
+      ? ""
+      : testedSesDomainCount === 0
+        ? " No verified sending domains were found."
+        : ` Verified domains (${testedSesDomainCount}): ${testedSesDomains.join(", ")}${
+            testedSesDomainCount > testedSesDomains.length ? ", …" : ""
+          }.`;
   const successMessage = testedSesMode
     ? `Amazon SES connection passed in ${status.providerRegion}: ${testedSesMode} access, sending ${
         status.providerSending === "true" ? "enabled" : "disabled"
-      }.`
+      }.${testedSesDomainSummary}`
     : status.saved
       ? successMessages[status.saved]
       : null;

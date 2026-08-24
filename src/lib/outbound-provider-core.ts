@@ -65,6 +65,7 @@ export type OutboundProviderConnectionDetails = {
   accountMode: "production" | "sandbox";
   region: string;
   sendingEnabled: boolean;
+  verifiedDomains: string[];
 };
 
 export type OutboundProviderSuppression = {

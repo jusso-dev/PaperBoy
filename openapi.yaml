@@ -810,7 +810,7 @@ components:
     OutboundProviderConnectionDetails:
       type: object
       additionalProperties: false
-      required: [account_mode, region, sending_enabled]
+      required: [account_mode, region, sending_enabled, verified_domains]
       properties:
         account_mode:
           type: string
@@ -820,6 +820,14 @@ components:
           pattern: '^[a-z]{2}(?:-[a-z0-9]+)+-[0-9]$'
         sending_enabled:
           type: boolean
+        verified_domains:
+          type: array
+          maxItems: 100000
+          uniqueItems: true
+          items:
+            type: string
+            format: hostname
+            maxLength: 253
     AwsSesEventInput:
       type: object
       additionalProperties: true

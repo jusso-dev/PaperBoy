@@ -1318,6 +1318,7 @@ test("outbound providers are first-class tenant-bound MCP settings, tests, and e
               accountMode: "production",
               region: "ap-southeast-2",
               sendingEnabled: true,
+              verifiedDomains: ["rangeros.com.au", "yumait.au"],
             },
             provider: payload.provider,
             testedAt: fixedNow,
@@ -1367,6 +1368,7 @@ test("outbound providers are first-class tenant-bound MCP settings, tests, and e
         accountMode: "production",
         region: "ap-southeast-2",
         sendingEnabled: true,
+        verifiedDomains: ["rangeros.com.au", "yumait.au"],
       });
       assert.equal(ingested.structuredContent.data[0].suppressionCount, 1);
       assert.equal(ingested.structuredContent.protocolTimeZone, "UTC");

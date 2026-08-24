@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   GetAccountCommand,
+  ListEmailIdentitiesCommand,
   SendBulkEmailCommand,
   SendEmailCommand,
 } from "@aws-sdk/client-sesv2";
@@ -148,10 +149,39 @@ test("SES connection tests surface regional sandbox state without credentials", 
     client: {
       async send(command) {
         commands.push(command);
-        return {
-          ProductionAccessEnabled: false,
-          SendingEnabled: true,
-        };
+        return command instanceof GetAccountCommand
+          ? {
+              ProductionAccessEnabled: false,
+              SendingEnabled: true,
+            }
+          : {
+              EmailIdentities: [
+                {
+                  IdentityName: "YUMAIT.AU.",
+                  IdentityType: "DOMAIN",
+                  SendingEnabled: true,
+                  VerificationStatus: "SUCCESS",
+                },
+                {
+                  IdentityName: "rangeros.com.au",
+                  IdentityType: "DOMAIN",
+                  SendingEnabled: true,
+                  VerificationStatus: "SUCCESS",
+                },
+                {
+                  IdentityName: "pending.example",
+                  IdentityType: "DOMAIN",
+                  SendingEnabled: true,
+                  VerificationStatus: "PENDING",
+                },
+                {
+                  IdentityName: "sender@example.com",
+                  IdentityType: "EMAIL_ADDRESS",
+                  SendingEnabled: true,
+                  VerificationStatus: "SUCCESS",
+                },
+              ],
+            };
       },
     },
     configuration,
@@ -160,9 +190,64 @@ test("SES connection tests surface regional sandbox state without credentials", 
     accountMode: "sandbox",
     region: "us-east-1",
     sendingEnabled: true,
+    verifiedDomains: ["rangeros.com.au", "yumait.au"],
   });
   assert.ok(commands[0] instanceof GetAccountCommand);
+  assert.ok(commands[1] instanceof ListEmailIdentitiesCommand);
   assert.equal(JSON.stringify(await adapter.testConnection()).includes("secret"), false);
+});
+
+test("SES connection tests paginate every verified sending domain", async () => {
+  const commands = [];
+  const adapter = createAwsSesAdapter({
+    client: {
+      async send(command) {
+        commands.push(command);
+        if (command instanceof GetAccountCommand) {
+          return {
+            ProductionAccessEnabled: true,
+            SendingEnabled: true,
+          };
+        }
+        return command.input.NextToken
+          ? {
+              EmailIdentities: [
+                {
+                  IdentityName: "yumait.au",
+                  IdentityType: "DOMAIN",
+                  SendingEnabled: true,
+                  VerificationStatus: "SUCCESS",
+                },
+              ],
+            }
+          : {
+              EmailIdentities: [
+                {
+                  IdentityName: "rangeros.com.au",
+                  IdentityType: "DOMAIN",
+                  SendingEnabled: true,
+                  VerificationStatus: "SUCCESS",
+                },
+              ],
+              NextToken: "page-2",
+            };
+      },
+    },
+    configuration,
+  });
+
+  assert.deepEqual(await adapter.testConnection(), {
+    accountMode: "production",
+    region: "us-east-1",
+    sendingEnabled: true,
+    verifiedDomains: ["rangeros.com.au", "yumait.au"],
+  });
+  const identityCommands = commands.filter(
+    (command) => command instanceof ListEmailIdentitiesCommand,
+  );
+  assert.equal(identityCommands.length, 2);
+  assert.equal(identityCommands[0].input.PageSize, 1_000);
+  assert.equal(identityCommands[1].input.NextToken, "page-2");
 });
 
 test("SES delivery reserves recipient quota before sending and honors its distributed delay", async () => {

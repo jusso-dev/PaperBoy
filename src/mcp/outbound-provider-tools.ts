@@ -106,6 +106,7 @@ const testOutputSchema = z.object({
       accountMode: z.enum(["production", "sandbox"]),
       region: z.string(),
       sendingEnabled: z.boolean(),
+      verifiedDomains: z.array(z.string().max(253)).max(100_000),
     })
     .nullable(),
   ok: z.literal(true),

@@ -236,6 +236,7 @@ export async function handleTestOutboundProviderRequest(
               account_mode: result.details.accountMode,
               region: result.details.region,
               sending_enabled: result.details.sendingEnabled,
+              verified_domains: result.details.verifiedDomains,
             }
           : null,
         protocol_time_zone: "UTC",

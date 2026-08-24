@@ -245,6 +245,8 @@ export async function testOutboundProviderAction(formData: FormData) {
     search.set("providerMode", details.accountMode);
     search.set("providerRegion", details.region);
     search.set("providerSending", String(details.sendingEnabled));
+    search.set("providerDomainCount", String(details.verifiedDomains.length));
+    search.set("providerDomains", details.verifiedDomains.slice(0, 20).join(","));
   }
   redirect(`/app/organization?${search.toString()}`);
 }

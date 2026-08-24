@@ -1,14 +1,17 @@
 import { createHash } from "node:crypto";
 import {
   GetAccountCommand,
+  ListEmailIdentitiesCommand,
   SendBulkEmailCommand,
   SendEmailCommand,
   SESv2Client,
   type BulkEmailEntryResult,
+  type ListEmailIdentitiesCommandOutput,
   type SendBulkEmailCommandOutput,
   type SendEmailCommandOutput,
 } from "@aws-sdk/client-sesv2";
 import { fromTemporaryCredentials } from "@aws-sdk/credential-providers";
+import { normalizeSendingDomain } from "@/lib/domain-core";
 import { buildSmtpMimeMessage } from "@/lib/email-delivery";
 import { normalizeEmailAddress } from "@/lib/email-core";
 import {
@@ -36,6 +39,7 @@ export const AWS_SES_MESSAGE_ID_TAG = "paperboy_message_id";
 
 type AwsSesCommand =
   | GetAccountCommand
+  | ListEmailIdentitiesCommand
   | SendBulkEmailCommand
   | SendEmailCommand;
 
@@ -66,6 +70,8 @@ const TRANSIENT_ERROR_NAMES = new Set([
   "TimeoutError",
   "TooManyRequestsException",
 ]);
+const AWS_SES_IDENTITY_PAGE_SIZE = 1_000;
+const AWS_SES_MAX_IDENTITY_PAGES = 100;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -499,6 +505,50 @@ export function createAwsSesAdapter(
     }
   }
 
+  async function verifiedDomains(): Promise<string[]> {
+    const domains = new Set<string>();
+    const seenTokens = new Set<string>();
+    let nextToken: string | undefined;
+
+    for (let page = 0; page < AWS_SES_MAX_IDENTITY_PAGES; page += 1) {
+      const output = (await client.send(
+        new ListEmailIdentitiesCommand({
+          ...(nextToken ? { NextToken: nextToken } : {}),
+          PageSize: AWS_SES_IDENTITY_PAGE_SIZE,
+        }),
+      )) as ListEmailIdentitiesCommandOutput;
+
+      for (const identity of output.EmailIdentities ?? []) {
+        if (
+          identity.IdentityType !== "DOMAIN" ||
+          identity.SendingEnabled !== true ||
+          identity.VerificationStatus !== "SUCCESS"
+        ) {
+          continue;
+        }
+        const domain = normalizeSendingDomain(identity.IdentityName);
+        if (domain) domains.add(domain);
+      }
+
+      if (!output.NextToken) return [...domains].sort();
+      if (seenTokens.has(output.NextToken)) {
+        throw new OutboundDeliveryError({
+          code: "aws_ses_identity_pagination_invalid",
+          reason: "Amazon SES repeated an email-identity pagination token.",
+          retryable: true,
+        });
+      }
+      seenTokens.add(output.NextToken);
+      nextToken = output.NextToken;
+    }
+
+    throw new OutboundDeliveryError({
+      code: "aws_ses_identity_limit_exceeded",
+      reason: "Amazon SES returned too many email-identity pages.",
+      retryable: true,
+    });
+  }
+
   async function quotaSnapshot(): Promise<AwsSesQuotaSnapshot> {
     const current = now();
     if (quotaCache && current.getTime() < quotaCache.expiresAt) {
@@ -709,12 +759,16 @@ export function createAwsSesAdapter(
     },
     async testConnection() {
       try {
-        const output = await getAccount();
+        const [output, domains] = await Promise.all([
+          getAccount(),
+          verifiedDomains(),
+        ]);
         return {
           accountMode:
             output.ProductionAccessEnabled === true ? "production" : "sandbox",
           region: input.configuration.region,
           sendingEnabled: output.SendingEnabled === true,
+          verifiedDomains: domains,
         };
       } catch (error) {
         throw sesError(error, now());

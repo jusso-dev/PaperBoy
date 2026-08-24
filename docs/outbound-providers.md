@@ -93,7 +93,7 @@ PAPERBOY_AWS_SES_EXTERNAL_ID_<ORG>=operator-generated-external-id
 
 When any organisation-scoped credential field exists, PaperBoy resolves the complete credential set only from that scope; it never fills a partial tenant key from operator defaults. A role may use an accompanying access-key pair as its source credentials or the workload's default chain. Without a role or static pair, the default chain is accepted only when `AWS_SES_USE_DEFAULT_CREDENTIAL_CHAIN=true` explicitly opts in. Region, role ARN, configuration-set name, topic ARN, and key completeness are validated before a live queue row is inserted.
 
-`POST /api/v1/providers/test` and `paperboy_test_outbound_provider` call SES `GetAccount`. Their safe result reports only region, `sandbox` or `production`, and whether sending is enabled. The console shows the same result in the signed-in user's flow; AWS keys, account identifiers, quota values, and provider responses remain hidden.
+`POST /api/v1/providers/test` and `paperboy_test_outbound_provider` call SES `GetAccount` and paginate `ListEmailIdentities`. Their safe result reports only region, `sandbox` or `production`, whether sending is enabled, and normalized domain identities whose verification is `SUCCESS` and sending is enabled. The console shows the same verified-domain list in the signed-in user's flow; AWS keys, account identifiers, quota values, unverified identities, individual email identities, and raw provider responses remain hidden. The IAM principal therefore needs `ses:ListEmailIdentities` in addition to its send and `ses:GetAccount` permissions.
 
 ### SES events
 
