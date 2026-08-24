@@ -46,10 +46,11 @@ COPY --from=production-dependencies --chown=bun:bun /app/node_modules ./node_mod
 COPY --from=build --chown=bun:bun /app/.next ./.next
 COPY --from=build --chown=bun:bun /app/drizzle ./drizzle
 COPY --from=build --chown=bun:bun /app/bun.lock /app/next.config.ts /app/package.json /app/tsconfig.json ./
+COPY --from=build --chown=bun:bun /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
 COPY --from=build --chown=bun:bun /app/src ./src
 
 USER bun
 
 EXPOSE 3000
 
-CMD ["bun", "--no-install", "--bun", "next", "start"]
+ENTRYPOINT ["/bin/sh", "/app/scripts/docker-entrypoint.sh"]
