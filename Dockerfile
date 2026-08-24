@@ -3,10 +3,14 @@
 FROM node:22-bookworm-slim AS base
 
 ENV NEXT_TELEMETRY_DISABLED=1 \
+    COREPACK_HOME=/usr/local/share/corepack \
     PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
 
-RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+RUN mkdir -p "$COREPACK_HOME" && \
+    corepack enable && \
+    corepack prepare pnpm@10.33.0 --activate && \
+    chmod -R a+rX "$COREPACK_HOME"
 
 WORKDIR /app
 
@@ -34,7 +38,9 @@ ENV HOSTNAME=0.0.0.0 \
     NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production \
     PORT=3000 \
-    TZ=UTC
+    PAPERBOY_DEFAULT_TIME_ZONE=Australia/Sydney \
+    PAPERBOY_FIXED_TIME_ZONE=Australia/Sydney \
+    TZ=Australia/Sydney
 
 WORKDIR /app
 

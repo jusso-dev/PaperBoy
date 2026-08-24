@@ -8,6 +8,7 @@ import {
   ensureDefaultOrganization,
   getActiveOrganizationContext,
 } from "@/lib/organizations";
+import { effectiveUserTimeZone } from "@/lib/timezone-policy";
 
 export const getSession = cache(async () => {
   const session = await auth.api.getSession({
@@ -25,6 +26,7 @@ export const getSession = cache(async () => {
     user: {
       ...session.user,
       ...organizationIds,
+      timezone: effectiveUserTimeZone(session.user.timezone),
     },
   };
 });

@@ -33,7 +33,7 @@ Quoted RFC-style fields, CRLF, LF, and a UTF-8 BOM are accepted. Unsupported col
 
 The first-class MCP surface provides `paperboy_list_suppressions`, `paperboy_get_suppression`, `paperboy_create_suppression`, `paperboy_update_suppression`, `paperboy_delete_suppression`, and `paperboy_import_suppressions`. All use the organization bound to the authenticated API key and share the REST/console service layer.
 
-Stored instants and REST/MCP timestamps are RFC 3339 UTC. The console formats them with the signed-in user's persisted IANA timezone.
+Stored instants and REST/MCP timestamps are RFC 3339 UTC. The console formats them in fixed `Australia/Sydney` time.
 
 ## Cloudflare Email Service
 

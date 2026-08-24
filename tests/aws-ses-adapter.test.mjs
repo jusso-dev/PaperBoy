@@ -11,6 +11,7 @@ import {
   createAwsSesAdapter,
   mapAwsSesEvent,
 } from "../src/lib/aws-ses-adapter.ts";
+import { OutboundDeliveryError } from "../src/lib/worker-core.ts";
 
 const messageId = "11111111-1111-4111-8111-111111111111";
 const orgId = "22222222-2222-4222-8222-222222222222";
@@ -162,6 +163,190 @@ test("SES connection tests surface regional sandbox state without credentials", 
   });
   assert.ok(commands[0] instanceof GetAccountCommand);
   assert.equal(JSON.stringify(await adapter.testConnection()).includes("secret"), false);
+});
+
+test("SES delivery reserves recipient quota before sending and honors its distributed delay", async () => {
+  const commands = [];
+  const reservations = [];
+  const sleeps = [];
+  const adapter = createAwsSesAdapter({
+    client: {
+      async send(command) {
+        commands.push(command);
+        return command instanceof GetAccountCommand
+          ? {
+              ProductionAccessEnabled: true,
+              SendQuota: {
+                Max24HourSend: 50_000,
+                MaxSendRate: 14,
+                SentLast24Hours: 120,
+              },
+              SendingEnabled: true,
+            }
+          : { MessageId: "010001-quota-safe-send" };
+      },
+    },
+    configuration,
+    now: () => new Date("2026-08-24T01:00:00.000Z"),
+    quotaGuard: {
+      async reserve(input) {
+        reservations.push(input);
+        return {
+          delayMs: 125,
+          scheduledAt: new Date("2026-08-24T01:00:00.125Z"),
+        };
+      },
+    },
+    async sleep(delayMs) {
+      sleeps.push(delayMs);
+    },
+  });
+
+  await adapter.send(message());
+  assert.equal(commands.length, 2);
+  assert.ok(commands[0] instanceof GetAccountCommand);
+  assert.ok(commands[1] instanceof SendEmailCommand);
+  assert.equal(reservations[0].recipientCount, 1);
+  assert.equal(reservations[0].snapshot.maxSendRate, 14);
+  assert.equal(reservations[0].snapshot.max24HourSend, 50_000);
+  assert.deepEqual(sleeps, [125]);
+});
+
+test("SES bulk delivery chunks at the safe recipient rate and preserves result order", async () => {
+  const commands = [];
+  const reservations = [];
+  const adapter = createAwsSesAdapter({
+    client: {
+      async send(command) {
+        commands.push(command);
+        if (command instanceof GetAccountCommand) {
+          return {
+            ProductionAccessEnabled: true,
+            SendQuota: {
+              Max24HourSend: 1_000,
+              MaxSendRate: 2.5,
+              SentLast24Hours: 0,
+            },
+            SendingEnabled: true,
+          };
+        }
+        return {
+          BulkEmailEntryResults: command.input.BulkEmailEntries.map(
+            (entry, index) => ({
+              MessageId: `ses-${entry.ReplacementTags[0].Value}-${index}`,
+              Status: "SUCCESS",
+            }),
+          ),
+        };
+      },
+    },
+    configuration,
+    quotaGuard: {
+      async reserve(input) {
+        reservations.push(input.recipientCount);
+        return { delayMs: 0, scheduledAt: input.now };
+      },
+    },
+  });
+  const messages = Array.from({ length: 5 }, (_, index) =>
+    message({
+      id: `11111111-1111-4111-8111-11111111111${index}`,
+      to: [`reader-${index}@example.net`],
+    }),
+  );
+
+  const results = await adapter.sendBatch(messages);
+  assert.deepEqual(reservations, [2, 2, 1]);
+  assert.equal(
+    commands.filter((command) => command instanceof SendBulkEmailCommand).length,
+    3,
+  );
+  assert.equal(results.length, 5);
+  assert.equal(results[0].providerMessageId.includes(messages[0].id), true);
+  assert.equal(results[4].providerMessageId.includes(messages[4].id), true);
+});
+
+test("SES rolling quota defers without consuming delivery attempts", async () => {
+  const commands = [];
+  const retryAt = new Date("2026-08-24T01:01:00.000Z");
+  const adapter = createAwsSesAdapter({
+    client: {
+      async send(command) {
+        commands.push(command);
+        return {
+          ProductionAccessEnabled: true,
+          SendQuota: {
+            Max24HourSend: 200,
+            MaxSendRate: 1,
+            SentLast24Hours: 200,
+          },
+          SendingEnabled: true,
+        };
+      },
+    },
+    configuration,
+    quotaGuard: {
+      async reserve() {
+        return { retryAt };
+      },
+    },
+  });
+
+  await assert.rejects(
+    adapter.send(message({ attemptCount: 5 })),
+    (error) =>
+      error instanceof OutboundDeliveryError &&
+      error.code === "aws_ses_daily_quota_deferred" &&
+      error.consumeAttempt === false &&
+      error.retryAt?.getTime() === retryAt.getTime(),
+  );
+  assert.equal(commands.length, 1);
+  assert.ok(commands[0] instanceof GetAccountCommand);
+});
+
+test("SES HTTP and bulk quota throttles defer without consuming attempts", async () => {
+  const retryBase = new Date("2026-08-24T01:00:00.000Z");
+  const httpAdapter = createAwsSesAdapter({
+    client: {
+      async send() {
+        const error = new Error("provider detail must not escape");
+        error.$metadata = { httpStatusCode: 429 };
+        throw error;
+      },
+    },
+    configuration,
+    now: () => retryBase,
+  });
+  await assert.rejects(
+    httpAdapter.send(message()),
+    (error) =>
+      error instanceof OutboundDeliveryError &&
+      error.code === "aws_ses_quota_throttled" &&
+      error.consumeAttempt === false &&
+      error.retryAt?.getTime() === retryBase.getTime() + 60_000,
+  );
+
+  const bulkAdapter = createAwsSesAdapter({
+    client: {
+      async send() {
+        return {
+          BulkEmailEntryResults: [
+            { Status: "ACCOUNT_DAILY_QUOTA_EXCEEDED" },
+          ],
+        };
+      },
+    },
+    configuration,
+    now: () => retryBase,
+  });
+  await assert.rejects(
+    bulkAdapter.sendBatch([message()]),
+    (error) =>
+      error instanceof OutboundDeliveryError &&
+      error.code === "aws_ses_quota_throttled" &&
+      error.consumeAttempt === false &&
+      error.retryAt?.getTime() === retryBase.getTime() + 60_000,
+  );
 });
 
 test("recorded SNS and EventBridge fixtures map to stable events and safe suppressions", async () => {

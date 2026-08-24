@@ -13,7 +13,7 @@ PAPERBOY_TEST_RATE_LIMIT_PER_MINUTE=600
 
 The test default must be higher than live. Both variables must be present with the same values in every web and MCP process that can queue mail. Invalid or reversed values fail closed with `rate_limit_unavailable` instead of silently disabling protection.
 
-Owners and admins can set nullable organization overrides in the Organization console. A blank field restores the operator default. Current members can read the effective settings. The console renders `updated_at` in the signed-in user's persisted IANA timezone; storage and protocol output remain UTC.
+Owners and admins can set nullable organization overrides in the Organization console. A blank field restores the operator default. Current members can read the effective settings. The console renders `updated_at` in fixed `Australia/Sydney` time; storage and protocol output remain UTC.
 
 REST exposes `GET` and `PATCH /api/v1/rate-limits`. Tenant and actor context come only from the bearer key:
 
@@ -57,3 +57,7 @@ Broadcast recipients consume ordinary queue slots. When one reaches the cap, Pap
 ## SMTP and Cloudflare Email Sending
 
 Rate limiting is part of PaperBoy's provider-neutral queue transaction. Rejected messages create no queue row, so neither a self-hosted SMTP adapter nor Cloudflare Email Sending receives them. Cloudflare keeps its independent account limits, `cf-bounce` return path, and provider suppression pipeline; those controls can still reject a message after PaperBoy accepts it. PaperBoy's cap does not replace or attempt to bypass them.
+
+## Amazon SES provider quotas
+
+Organization limits govern queue acceptance. SES quotas govern actual regional recipients sent and are enforced later by a separate PostgreSQL-backed guard shared across workers. It refreshes `GetAccount`, schedules at 80% of the observed recipient-per-second rate, and reserves no more than 90% of the rolling 24-hour allowance. A quota wait returns the row to `queued` at the calculated time without exhausting its five delivery attempts. Each ordinary SES worker delivery has exactly one recipient so bounces, complaints, suppression, and retry state remain recipient-specific; batch and broadcast creation still queue independent messages.

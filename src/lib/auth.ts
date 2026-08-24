@@ -1,12 +1,18 @@
 import "server-only";
 
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { twoFactor } from "better-auth/plugins";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { ensureDefaultOrganization } from "@/lib/organizations";
-import { normalizeTimeZone } from "@/lib/time";
+import { configuredPasskeys } from "@/lib/passkey-configuration";
+import {
+  defaultApplicationTimeZone,
+  effectiveUserTimeZone,
+} from "@/lib/timezone-policy";
 
 const secret = process.env.BETTER_AUTH_SECRET;
 const baseURL = process.env.BETTER_AUTH_URL;
@@ -76,13 +82,28 @@ export const auth = betterAuth({
       },
       timezone: {
         type: "string",
-        defaultValue: "UTC",
+        defaultValue: defaultApplicationTimeZone(),
         required: true,
         transform: {
-          input: normalizeTimeZone,
+          input: effectiveUserTimeZone,
         },
       },
     },
   },
-  plugins: [nextCookies()],
+  plugins: [
+    twoFactor({
+      accountLockout: {
+        durationSeconds: 15 * 60,
+        enabled: true,
+        maxFailedAttempts: 5,
+      },
+      allowPasswordless: true,
+      issuer: "PaperBoy",
+      skipVerificationOnEnable: false,
+      trustDeviceMaxAge: 30 * 24 * 60 * 60,
+      twoFactorCookieMaxAge: 10 * 60,
+    }),
+    passkey(configuredPasskeys()),
+    nextCookies(),
+  ],
 });

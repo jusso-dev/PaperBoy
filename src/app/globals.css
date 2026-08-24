@@ -345,6 +345,42 @@ select:focus-visible {
   width: 100%;
 }
 
+.auth-divider {
+  align-items: center;
+  color: var(--ink-soft);
+  display: flex;
+  font-size: 13px;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  background: var(--rule);
+  content: "";
+  flex: 1;
+  height: 1px;
+}
+
+.auth-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.auth-methods [aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper-raised);
+}
+
+.checkbox-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin: 14px 0;
+}
+
 .auth-switch {
   border-top: 1px solid var(--rule);
   font-size: 14px;
@@ -360,6 +396,73 @@ select:focus-visible {
 
 .settings-form {
   margin-top: 18px;
+}
+
+.security-stack,
+.security-actions {
+  display: grid;
+  gap: 20px;
+}
+
+.security-section {
+  border-top: 1px solid var(--rule);
+  padding-top: 20px;
+}
+
+.security-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.totp-enrollment,
+.backup-codes {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.qr-code {
+  background: #fff;
+  display: inline-flex;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.secret-uri {
+  display: block;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.backup-codes ul {
+  display: grid;
+  gap: 5px 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+  margin: 14px 0;
+  padding: 0;
+}
+
+.passkey-list {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+}
+
+.passkey-list li {
+  align-items: center;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 14px 0;
+}
+
+.passkey-list p {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin: 4px 0 0;
 }
 
 /* ---- Organizations ---------------------------------------------------- */

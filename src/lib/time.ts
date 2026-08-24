@@ -1,4 +1,4 @@
-export const DEFAULT_TIME_ZONE = "UTC";
+export const DEFAULT_TIME_ZONE = "Australia/Sydney";
 
 const calendarFormatters = new Map<string, Intl.DateTimeFormat>();
 

@@ -10,7 +10,7 @@ Security invariants:
 
 - Tenant and `live`/`test` environment come from the authenticated session or API-key principal, never a caller-supplied organization ID. REST and MCP enforce the same boundary.
 - A live message requires a verified organization-owned domain and active DKIM state. A test key cannot select a live provider.
-- Stored instants and REST/MCP timestamps are UTC. Calendar boundaries and console presentation use the authenticated user's persisted IANA timezone, so process-local time cannot silently change authorization, rate-limit, idempotency, or scheduling behavior.
+- Stored instants and REST/MCP timestamps are UTC. Calendar boundaries and console presentation use the fixed persisted `Australia/Sydney` policy, so process-local time cannot silently change authorization, rate-limit, idempotency, or scheduling behavior.
 - Raw API keys and webhook secrets are returned only at creation. API-key hashes and context-bound encrypted DKIM/webhook material are stored instead of plaintext secrets.
 - Cloudflare structured messages omit PaperBoy-owned `Date`, DKIM, and ARC headers. Cloudflare remains the signing authority. Self-hosted SMTP signs only in the self-hosted path.
 - Amazon SES receives unsigned raw MIME and owns Easy DKIM. Signed SNS or authenticated EventBridge events must correlate both the PaperBoy UUID and SES message ID before they can create events or suppressions.
@@ -29,13 +29,13 @@ Security invariants:
 - Private attachment bytes and their integrity metadata.
 - Sending-domain DNS, DKIM/SPF records, provider account, IP/domain reputation, and suppression state.
 - CI runner registration tokens, the runner host, Docker socket, repository credentials, and release integrity.
-- The user's IANA timezone and UTC timestamps used for calendar filters, limits, schedules, logs, and signatures.
+- The fixed `Australia/Sydney` IANA policy and UTC timestamps used for calendar filters, limits, schedules, logs, and signatures.
 
 ### Actors and boundaries
 
 | Boundary | Trust granted | Data crossing it |
 | --- | --- | --- |
-| Public browser or mail client to Next.js | Untrusted until Better Auth validates a server session; signed pixels remain public untrusted input | Auth input, unsubscribe tokens, signed pixel paths, console requests |
+| Public browser or mail client to Next.js | Untrusted until Better Auth validates a server session; password sessions may require TOTP/recovery verification and passkeys require a matching HTTPS WebAuthn origin/RP ID; signed pixels remain public untrusted input | Auth input, WebAuthn ceremonies, unsubscribe tokens, signed pixel paths, console requests |
 | REST or HTTP MCP client to PaperBoy | Untrusted until a bearer key is parsed, hashed, matched, and checked for revocation | JSON/MCP arguments, API key, idempotency key |
 | Local MCP stdio client to PaperBoy | The launching operator controls its environment and process boundary | Database URL, PaperBoy API key, feature secrets, MCP messages |
 | PaperBoy services to PostgreSQL | Database and its administrators are trusted infrastructure | Tenant data, encrypted secret envelopes, queue state, timestamps |
@@ -54,7 +54,7 @@ Callers can control request bodies, IDs, headers, email addresses and content, t
 The deployment assumptions are explicit:
 
 - Production secrets come from a protected secret store, are independently generated, and are available only to the processes that need them. They are not placed in Git, images, command-line arguments, logs, or MCP configuration committed to the repository.
-- Web, MCP, and worker processes use `TZ=UTC`. Every signed-in account stores a canonical IANA timezone. Provider timestamps are normalized to UTC before persistence or protocol output.
+- Web, MCP, worker, CI, and development mail processes use `TZ=Australia/Sydney`; `PAPERBOY_FIXED_TIME_ZONE` prevents account drift. Provider and database instants are normalized to UTC before persistence or protocol output.
 - PostgreSQL, attachment storage, backups, and observability stay in the approved region with least-privilege access, encryption, recovery testing, and retention controls.
 - SMTP submission requires authenticated TLS. Cloudflare Email Service uses the literal `api_token` username, an URL-encoded API token, implicit TLS on port 465, and a narrowly scoped token.
 - Production egress policy limits SMTP, Cloudflare, AWS APIs, AWS SNS certificate/confirmation hosts, DNS, and webhook traffic. DNS resolution and connection targets are monitored to reduce private-network access and DNS-rebinding risk.
@@ -69,6 +69,8 @@ An attacker may steal a `pb_live_...` key and call REST or MCP tools. PaperBoy s
 The honest limit is that hashing protects the database copy, not an active bearer token. A leaked API key grants that key's organization/environment capabilities until it is revoked. A leaked local MCP environment also exposes every credential available to that child process. Operators must scope keys, avoid production keys in agent transcripts/configuration, monitor `lastUsedAt`, and revoke on suspicion.
 
 A forged navigation cookie may pass the lightweight route guard, but protected data access still requires the server-side Better Auth session. Account takeover, a leaked Better Auth secret, or a compromised source-control/operator account remains capable of crossing the intended boundary.
+
+Password sign-in can require TOTP or one single-use recovery code. Five failed challenges lock the account for 15 minutes, and a user may explicitly trust the challenge device for 30 days. TOTP secrets and recovery codes are encrypted by Better Auth under the application secret before storage. Passkeys use WebAuthn public-key credentials and are bound to the configured exact HTTPS origin and relying-party ID; private keys remain with the authenticator. Passkey sign-in is an independent passwordless factor and is not followed by TOTP. A compromised active session, trusted-device cookie, authenticator, recovery-code copy, application secret, or HTTPS origin remains an account-takeover boundary.
 
 ### DKIM, SMTP, Cloudflare Email Service, and Amazon SES
 
@@ -85,6 +87,8 @@ Cloudflare Email Service is a first-class live-provider boundary, not a special 
 Amazon SES is also a first-class boundary. Credential fields are resolved from one complete organization scope or an operator default; PaperBoy never combines a partial tenant key with a global secret. IAM role assumption supports an optional external ID, while use of the workload credential chain requires an explicit opt-in. The role and source credentials still need least-privilege `ses:SendEmail`, `ses:SendBulkEmail`, `ses:GetAccount`, and, when assumed, `sts:AssumeRole` policy. An AWS account, role trust policy, access key, verified identity, configuration set, or DNS compromise can bypass PaperBoy's intended controls and damage quota or reputation.
 
 SES `SendEmail` receives bounded raw MIME and `SendBulkEmail` receives one common attachment/template shape with per-entry values and tags. Worker delivery stores the SES message ID; the bulk provider method returns its per-entry IDs. Neither path stores raw provider responses or AWS request IDs. A successful API response means SES accepted the request, not that the recipient server accepted the email. The console's sandbox/production and sending-enabled result is a regional account observation, not live-delivery proof.
+
+SES quotas count recipients and are regional. Before each send, PaperBoy uses a PostgreSQL row lock and rolling reservations shared by workers, refreshes `GetAccount` quotas, and limits itself to 80% of the observed per-second rate and 90% of the rolling 24-hour allowance. Quota waits and SES throttles do not consume a delivery attempt. The guard is deliberately conservative but cannot protect other applications using the same AWS account from collectively consuming the remaining SES quota; account-level monitoring and alarms remain required.
 
 The signed SNS callback contains an organization UUID in its URL because SNS cannot present a PaperBoy bearer key. That UUID is not treated as authorization. PaperBoy requires an exact configured topic ARN, restricts certificate and confirmation URLs to the matching regional SNS host over HTTPS, refuses redirects, bounds downloads and request bodies, validates the X.509 signature, and only then parses the embedded SES event. Signature version 2 is recommended; version 1 remains accepted for AWS compatibility. EventBridge/REST/MCP ingestion instead requires a tenant-bound key whose creator remains an owner or admin.
 
@@ -114,9 +118,9 @@ The honest limit is that an open event proves only that the URL was fetched. Mai
 
 ### Time and timezone integrity
 
-An attacker or misconfigured host may try to exploit local-time differences around midnight, daylight-saving transitions, signature windows, or retry boundaries. PaperBoy stores instants in PostgreSQL `timestamptz`, emits RFC 3339 UTC through REST/MCP, uses fixed UTC instants for rate-limit/idempotency/retry logic, and translates user calendar dates with the persisted canonical IANA timezone. CI and deployed processes set `TZ=UTC`.
+An attacker or misconfigured host may try to exploit local-time differences around midnight, daylight-saving transitions, signature windows, or retry boundaries. PaperBoy stores instants in PostgreSQL `timestamptz`, emits RFC 3339 UTC through REST/MCP, uses fixed UTC instants for rate-limit/idempotency/retry logic, and translates calendar dates with the persisted `Australia/Sydney` IANA timezone. CI and deployed processes set `TZ=Australia/Sydney`, and the fixed policy overrides stored drift.
 
-Changing a user's timezone changes presentation and future calendar-boundary interpretation, not stored instants. Operators must keep tzdata current and must not accept arbitrary abbreviations or raw offsets as account timezones. External provider timestamps remain untrusted input until parsed, bounded, and normalized.
+The deployment intentionally does not allow users to change timezone. Operators must keep tzdata current and change the fixed IANA policy only through a reviewed deployment and data migration, never with abbreviations or raw offsets. External provider timestamps remain untrusted input until parsed, bounded, and normalized.
 
 ### Source control, dependencies, and CI
 

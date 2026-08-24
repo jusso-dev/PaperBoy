@@ -142,16 +142,31 @@ export const postgresWorkerStore: WorkerStore = {
     });
   },
 
-  markRetry(input) {
-    return markOwnedMessage(input, {
-      failureReason: input.reason,
-      lastErrorCode: input.code,
-      leaseExpiresAt: null,
-      nextAttemptAt: input.nextAttemptAt,
-      status: "queued",
-      updatedAt: input.now,
-      workerId: null,
-    });
+  async markRetry(input) {
+    const updated = await db
+      .update(messages)
+      .set({
+        ...(input.consumeAttempt
+          ? {}
+          : { attemptCount: sql`${messages.attemptCount} - 1` }),
+        failureReason: input.reason,
+        lastErrorCode: input.code,
+        leaseExpiresAt: null,
+        nextAttemptAt: input.nextAttemptAt,
+        status: "queued",
+        updatedAt: input.now,
+        workerId: null,
+      })
+      .where(
+        and(
+          eq(messages.id, input.messageId),
+          eq(messages.attemptCount, input.attemptCount),
+          eq(messages.status, "sending"),
+          eq(messages.workerId, input.workerId),
+        ),
+      )
+      .returning({ id: messages.id });
+    return updated.length === 1;
   },
 
   markSent(input) {

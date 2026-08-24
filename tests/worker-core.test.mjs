@@ -236,6 +236,35 @@ test("the fifth transient failure exhausts retries and sanitizes diagnostics", a
   );
 });
 
+test("provider quota deferrals stay queued without exhausting attempts", async () => {
+  const retryAt = new Date("2026-08-23T02:00:00.000Z");
+  const { calls, store } = fakeStore(message({ attemptCount: 5 }));
+  const result = await processNextMessage({
+    adapter: {
+      name: "quota-aware-provider",
+      async send() {
+        throw new OutboundDeliveryError({
+          code: "provider_quota_deferred",
+          consumeAttempt: false,
+          reason: "Provider capacity is temporarily unavailable.",
+          retryAt,
+          retryable: true,
+        });
+      },
+    },
+    deliveryModes: ["live"],
+    now: () => fixedNow,
+    store,
+    workerId: "quota-worker",
+  });
+  const retry = calls.find(([operation]) => operation === "markRetry")[1];
+
+  assert.equal(result.state, "retry");
+  assert.equal(retry.consumeAttempt, false);
+  assert.equal(retry.nextAttemptAt.getTime(), retryAt.getTime());
+  assert.equal(calls.some(([operation]) => operation === "markFailed"), false);
+});
+
 test("the built-in sink accepts test mail and rejects live mail", async () => {
   await testSinkAdapter.send({
     ...message({

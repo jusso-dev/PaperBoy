@@ -1,9 +1,17 @@
 "use client";
 
 import { createAuthClient } from "better-auth/react";
-import { inferAdditionalFields } from "better-auth/client/plugins";
+import { passkeyClient } from "@better-auth/passkey/client";
+import {
+  inferAdditionalFields,
+  twoFactorClient,
+} from "better-auth/client/plugins";
 import type { auth } from "@/lib/auth";
 
 export const authClient = createAuthClient({
-  plugins: [inferAdditionalFields<typeof auth>()],
+  plugins: [
+    twoFactorClient({ twoFactorPage: "/two-factor" }),
+    passkeyClient(),
+    inferAdditionalFields<typeof auth>(),
+  ],
 });

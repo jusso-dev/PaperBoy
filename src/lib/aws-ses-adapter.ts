@@ -11,6 +11,15 @@ import {
 import { fromTemporaryCredentials } from "@aws-sdk/credential-providers";
 import { buildSmtpMimeMessage } from "@/lib/email-delivery";
 import { normalizeEmailAddress } from "@/lib/email-core";
+import {
+  AWS_SES_QUOTA_REFRESH_MS,
+  awsSesQuotaScopeHash,
+  awsSesReservationKey,
+  parseAwsSesQuotaSnapshot,
+  safeAwsSesRecipientsPerSecond,
+  type AwsSesQuotaGuard,
+  type AwsSesQuotaSnapshot,
+} from "@/lib/aws-ses-quota";
 import type { ProviderAwsSesConfiguration } from "@/lib/outbound-provider-configuration";
 import {
   defineOutboundProviderAdapter,
@@ -39,6 +48,8 @@ type AwsSesAdapterInput = {
   client?: AwsSesClient;
   configuration: ProviderAwsSesConfiguration;
   now?: () => Date;
+  quotaGuard?: AwsSesQuotaGuard;
+  sleep?: (delayMs: number) => Promise<void>;
 };
 
 const UUID_PATTERN =
@@ -100,7 +111,7 @@ function requireSesMessage(message: OutboundDeliveryMessage): void {
   }
 }
 
-function sesError(error: unknown): OutboundDeliveryError {
+function sesError(error: unknown, now: Date): OutboundDeliveryError {
   if (error instanceof OutboundDeliveryError) return error;
   if (error && typeof error === "object") {
     const candidate = error as {
@@ -109,12 +120,26 @@ function sesError(error: unknown): OutboundDeliveryError {
     };
     const status = candidate.$metadata?.httpStatusCode;
     const name = typeof candidate.name === "string" ? candidate.name : "";
+    const quotaThrottled =
+      name === "ThrottlingException" ||
+      name === "TooManyRequestsException" ||
+      status === 429;
     const retryable =
       TRANSIENT_ERROR_NAMES.has(name) ||
       status === 429 ||
       (typeof status === "number" && status >= 500);
     return new OutboundDeliveryError({
-      code: retryable ? "aws_ses_temporary_error" : "aws_ses_rejected",
+      code: quotaThrottled
+        ? "aws_ses_quota_throttled"
+        : retryable
+          ? "aws_ses_temporary_error"
+          : "aws_ses_rejected",
+      ...(quotaThrottled
+        ? {
+            consumeAttempt: false,
+            retryAt: new Date(now.getTime() + AWS_SES_QUOTA_REFRESH_MS),
+          }
+        : {}),
       reason: retryable
         ? "Amazon SES could not accept the message temporarily."
         : "Amazon SES rejected the configured sender, message, or credentials.",
@@ -126,6 +151,12 @@ function sesError(error: unknown): OutboundDeliveryError {
     reason: "Amazon SES could not be reached before delivery completed.",
     retryable: true,
   });
+}
+
+function accountQuota(value: unknown): unknown {
+  return value && typeof value === "object"
+    ? (value as { SendQuota?: unknown }).SendQuota
+    : null;
 }
 
 function attachmentFingerprint(message: OutboundDeliveryMessage): string {
@@ -153,7 +184,14 @@ function bulkCompatibility(messages: OutboundDeliveryMessage[]): void {
   const attachmentKey = attachmentFingerprint(first);
   for (const message of messages) {
     requireSesMessage(message);
-    normalizedRecipients(message);
+    if (normalizedRecipients(message).length !== 1) {
+      throw new OutboundDeliveryError({
+        code: "aws_ses_single_recipient_required",
+        reason:
+          "Amazon SES delivery requires one recipient per message so quotas, failures, and suppressions remain recipient-specific.",
+        retryable: false,
+      });
+    }
     if (
       message.from !== first.from ||
       Boolean(message.html) !== Boolean(first.html) ||
@@ -389,9 +427,20 @@ export function mapAwsSesEvent(input: {
   ];
 }
 
-function bulkFailure(results: BulkEmailEntryResult[]): OutboundDeliveryError {
+function bulkFailure(
+  results: BulkEmailEntryResult[],
+  failedAt: Date,
+): OutboundDeliveryError {
   const failed = results.filter((result) => result.Status !== "SUCCESS");
   const partial = failed.length !== results.length;
+  const quotaDeferred =
+    !partial &&
+    failed.length > 0 &&
+    failed.every(
+      (result) =>
+        result.Status === "ACCOUNT_DAILY_QUOTA_EXCEEDED" ||
+        result.Status === "ACCOUNT_THROTTLED",
+    );
   const retryable =
     !partial &&
     failed.length > 0 &&
@@ -401,9 +450,21 @@ function bulkFailure(results: BulkEmailEntryResult[]): OutboundDeliveryError {
         TRANSIENT_BULK_STATUSES.has(result.Status),
     );
   return new OutboundDeliveryError({
-    code: partial ? "aws_ses_partial_bulk_failure" : "aws_ses_bulk_rejected",
+    code: partial
+      ? "aws_ses_partial_bulk_failure"
+      : quotaDeferred
+        ? "aws_ses_quota_throttled"
+        : "aws_ses_bulk_rejected",
+    ...(quotaDeferred
+      ? {
+          consumeAttempt: false,
+          retryAt: new Date(failedAt.getTime() + AWS_SES_QUOTA_REFRESH_MS),
+        }
+      : {}),
     reason: partial
       ? "Amazon SES accepted only part of the bulk request; PaperBoy will not replay successful entries."
+      : quotaDeferred
+        ? "Amazon SES temporarily reported no safe recipient capacity."
       : "Amazon SES rejected the bulk request entries.",
     retryable,
   });
@@ -414,7 +475,148 @@ export function createAwsSesAdapter(
 ): OutboundProviderAdapter & { close: () => void } {
   const client = input.client ?? clientFor(input.configuration);
   const now = input.now ?? (() => new Date());
+  const sleep =
+    input.sleep ??
+    ((delayMs: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
   const configurationSet = input.configuration.configurationSetName;
+  const scopeHash = awsSesQuotaScopeHash(input.configuration);
+  let quotaCache: {
+    expiresAt: number;
+    snapshot: AwsSesQuotaSnapshot;
+  } | null = null;
+
+  async function getAccount() {
+    const requestedAt = now();
+    try {
+      return (await client.send(new GetAccountCommand({}))) as {
+        ProductionAccessEnabled?: boolean;
+        SendQuota?: unknown;
+        SendingEnabled?: boolean;
+      };
+    } catch (error) {
+      throw sesError(error, requestedAt);
+    }
+  }
+
+  async function quotaSnapshot(): Promise<AwsSesQuotaSnapshot> {
+    const current = now();
+    if (quotaCache && current.getTime() < quotaCache.expiresAt) {
+      return quotaCache.snapshot;
+    }
+    const output = await getAccount();
+    const snapshot = parseAwsSesQuotaSnapshot(accountQuota(output), current);
+    if (!snapshot) {
+      throw new OutboundDeliveryError({
+        code: "aws_ses_quota_unavailable",
+        reason: "Amazon SES did not return usable sending quotas.",
+        retryable: true,
+      });
+    }
+    quotaCache = {
+      expiresAt: current.getTime() + AWS_SES_QUOTA_REFRESH_MS,
+      snapshot,
+    };
+    return snapshot;
+  }
+
+  async function reserve(
+    messages: readonly OutboundDeliveryMessage[],
+    snapshot: AwsSesQuotaSnapshot,
+  ): Promise<void> {
+    if (!input.quotaGuard) return;
+    const recipientCount = messages.reduce(
+      (count, message) => count + normalizedRecipients(message).length,
+      0,
+    );
+    const reservation = await input.quotaGuard.reserve({
+      now: now(),
+      recipientCount,
+      reservationKey: awsSesReservationKey(messages),
+      scopeHash,
+      snapshot,
+    });
+    if ("retryAt" in reservation) {
+      throw new OutboundDeliveryError({
+        code: "aws_ses_daily_quota_deferred",
+        consumeAttempt: false,
+        reason:
+          "Amazon SES rolling quota has no safe recipient capacity; delivery remains queued.",
+        retryAt: reservation.retryAt,
+        retryable: true,
+      });
+    }
+    if (reservation.delayMs > 0) await sleep(reservation.delayMs);
+  }
+
+  const templateData = (message: OutboundDeliveryMessage) =>
+    JSON.stringify({
+      ...(message.html === null ? {} : { pb_html: message.html }),
+      pb_subject: message.subject,
+      ...(message.text === null ? {} : { pb_text: message.text }),
+    });
+
+  async function sendBulkChunk(messages: OutboundDeliveryMessage[]) {
+    const first = messages[0];
+    const output = (await client.send(
+      new SendBulkEmailCommand({
+        BulkEmailEntries: messages.map((message) => ({
+          Destination: { ToAddresses: normalizedRecipients(message) },
+          ReplacementEmailContent: {
+            ReplacementTemplate: {
+              ReplacementTemplateData: templateData(message),
+            },
+          },
+          ReplacementHeaders: [
+            { Name: "X-PaperBoy-Message-ID", Value: message.id },
+          ],
+          ReplacementTags: [
+            { Name: AWS_SES_MESSAGE_ID_TAG, Value: message.id },
+          ],
+        })),
+        ...(configurationSet
+          ? { ConfigurationSetName: configurationSet }
+          : {}),
+        DefaultContent: {
+          Template: {
+            Attachments: first.attachments.map((attachment) => ({
+              ContentDisposition: "ATTACHMENT",
+              ContentTransferEncoding: "BASE64",
+              ContentType: attachment.contentType,
+              FileName: attachment.filename,
+              RawContent: attachment.content,
+            })),
+            TemplateContent: {
+              ...(first.html === null ? {} : { Html: "{{pb_html}}" }),
+              Subject: "{{pb_subject}}",
+              ...(first.text === null ? {} : { Text: "{{pb_text}}" }),
+            },
+            TemplateData: templateData(first),
+          },
+        },
+        FromEmailAddress: first.from,
+      }),
+    )) as SendBulkEmailCommandOutput;
+    const results = output.BulkEmailEntryResults ?? [];
+    if (
+      results.length !== messages.length ||
+      results.some((result) => result.Status !== "SUCCESS")
+    ) {
+      throw bulkFailure(results, now());
+    }
+    return results.map((result) => {
+      const providerMessageId = safeProviderMessageId(result.MessageId);
+      if (!providerMessageId) {
+        throw new OutboundDeliveryError({
+          code: "aws_ses_invalid_response",
+          reason:
+            "Amazon SES accepted a bulk entry without a usable message ID.",
+          retryable: false,
+        });
+      }
+      return { providerMessageId };
+    });
+  }
 
   return defineOutboundProviderAdapter({
     capabilities: OUTBOUND_PROVIDER_CATALOG["aws-ses"].capabilities,
@@ -428,6 +630,17 @@ export function createAwsSesAdapter(
     async send(message) {
       requireSesMessage(message);
       const to = normalizedRecipients(message);
+      if (to.length !== 1) {
+        throw new OutboundDeliveryError({
+          code: "aws_ses_single_recipient_required",
+          reason:
+            "Amazon SES delivery requires one recipient per message so quotas, failures, and suppressions remain recipient-specific.",
+          retryable: false,
+        });
+      }
+      if (input.quotaGuard) {
+        await reserve([message], await quotaSnapshot());
+      }
       const envelopeFrom = normalizeEmailAddress(message.from);
       if (!envelopeFrom) {
         throw new OutboundDeliveryError({
@@ -467,87 +680,36 @@ export function createAwsSesAdapter(
         }
         return { providerMessageId };
       } catch (error) {
-        throw sesError(error);
+        throw sesError(error, now());
       }
     },
     async sendBatch(messages) {
       bulkCompatibility(messages);
-      const first = messages[0];
-      const templateData = (message: OutboundDeliveryMessage) =>
-        JSON.stringify({
-          ...(message.html === null ? {} : { pb_html: message.html }),
-          pb_subject: message.subject,
-          ...(message.text === null ? {} : { pb_text: message.text }),
-        });
       try {
-        const output = (await client.send(
-          new SendBulkEmailCommand({
-            BulkEmailEntries: messages.map((message) => ({
-              Destination: { ToAddresses: normalizedRecipients(message) },
-              ReplacementEmailContent: {
-                ReplacementTemplate: {
-                  ReplacementTemplateData: templateData(message),
-                },
-              },
-              ReplacementHeaders: [
-                { Name: "X-PaperBoy-Message-ID", Value: message.id },
-              ],
-              ReplacementTags: [
-                { Name: AWS_SES_MESSAGE_ID_TAG, Value: message.id },
-              ],
-            })),
-            ...(configurationSet
-              ? { ConfigurationSetName: configurationSet }
-              : {}),
-            DefaultContent: {
-              Template: {
-                Attachments: first.attachments.map((attachment) => ({
-                  ContentDisposition: "ATTACHMENT",
-                  ContentTransferEncoding: "BASE64",
-                  ContentType: attachment.contentType,
-                  FileName: attachment.filename,
-                  RawContent: attachment.content,
-                })),
-                TemplateContent: {
-                  ...(first.html === null ? {} : { Html: "{{pb_html}}" }),
-                  Subject: "{{pb_subject}}",
-                  ...(first.text === null ? {} : { Text: "{{pb_text}}" }),
-                },
-                TemplateData: templateData(first),
-              },
-            },
-            FromEmailAddress: first.from,
-          }),
-        )) as SendBulkEmailCommandOutput;
-        const results = output.BulkEmailEntryResults ?? [];
-        if (
-          results.length !== messages.length ||
-          results.some((result) => result.Status !== "SUCCESS")
-        ) {
-          throw bulkFailure(results);
+        const snapshot = input.quotaGuard ? await quotaSnapshot() : null;
+        const chunkSize = snapshot
+          ? Math.min(
+              AWS_SES_MAX_BULK_ENTRIES,
+              Math.max(
+                1,
+                Math.floor(safeAwsSesRecipientsPerSecond(snapshot)),
+              ),
+            )
+          : AWS_SES_MAX_BULK_ENTRIES;
+        const results = [];
+        for (let index = 0; index < messages.length; index += chunkSize) {
+          const chunk = messages.slice(index, index + chunkSize);
+          if (snapshot) await reserve(chunk, snapshot);
+          results.push(...(await sendBulkChunk(chunk)));
         }
-        return results.map((result) => {
-          const providerMessageId = safeProviderMessageId(result.MessageId);
-          if (!providerMessageId) {
-            throw new OutboundDeliveryError({
-              code: "aws_ses_invalid_response",
-              reason:
-                "Amazon SES accepted a bulk entry without a usable message ID.",
-              retryable: false,
-            });
-          }
-          return { providerMessageId };
-        });
+        return results;
       } catch (error) {
-        throw sesError(error);
+        throw sesError(error, now());
       }
     },
     async testConnection() {
       try {
-        const output = (await client.send(new GetAccountCommand({}))) as {
-          ProductionAccessEnabled?: boolean;
-          SendingEnabled?: boolean;
-        };
+        const output = await getAccount();
         return {
           accountMode:
             output.ProductionAccessEnabled === true ? "production" : "sandbox",
@@ -555,7 +717,7 @@ export function createAwsSesAdapter(
           sendingEnabled: output.SendingEnabled === true,
         };
       } catch (error) {
-        throw sesError(error);
+        throw sesError(error, now());
       }
     },
   });

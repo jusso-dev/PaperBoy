@@ -243,6 +243,15 @@ export async function queueEmail(input: {
     orgId: input.principal.orgId,
     providerEnvironment: input.providerEnvironment,
   });
+  if (domain.provider === "aws-ses" && email.to.length !== 1) {
+    throw new EmailError("VALIDATION_ERROR", [
+      {
+        field: "to",
+        message:
+          "Amazon SES messages require exactly one recipient; use a batch or broadcast for bulk delivery.",
+      },
+    ]);
+  }
 
   const attachmentStore = input.attachmentStore ?? localAttachmentStore;
   const storedKeys: string[] = [];

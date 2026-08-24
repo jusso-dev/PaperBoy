@@ -311,7 +311,7 @@ const templateDocument = `# PaperBoy email templates
 - Queue email with \`template_id\` and an optional JSON \`data\` object. Do not combine those fields with inline subject, HTML, or text.
 - Rendering happens before provider delivery, so Cloudflare Email Sending and SMTP receive the same content.
 - Read a template before deleting it, then pass \`confirm: true\` to paperboy_delete_template.
-- Stored instants and MCP timestamps are UTC. Console presentation uses each user's IANA timezone.
+- Stored instants and MCP timestamps are UTC. Console presentation uses the deployment's fixed Australia/Sydney IANA timezone.
 `;
 
 const broadcastDocument = `# PaperBoy broadcasts
@@ -323,7 +323,7 @@ const broadcastDocument = `# PaperBoy broadcasts
 - Progress separates pending, processing, queued, suppressed, failed, and cancelled recipients. Tool output never returns audience addresses or rendered message content.
 - Pause stops before the next recipient. Resume processes remaining recipients. Cancel marks every pending recipient cancelled and prevents further claims; an already-processing recipient may finish.
 - Queue records remain provider-neutral. SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text through the normal worker path.
-- Stored instants and MCP timestamps are UTC. Console presentation uses each user's IANA timezone.
+- Stored instants and MCP timestamps are UTC. Console presentation uses the deployment's fixed Australia/Sydney IANA timezone.
 `;
 
 const workerDocument = `# PaperBoy outbound worker
@@ -333,11 +333,11 @@ const workerDocument = `# PaperBoy outbound worker
 - SMTP_TLS_MODE defaults to required. smtp:// must negotiate STARTTLS; opportunistic and disabled are weaker opt-ins for controlled environments. smtps:// uses implicit TLS.
 - For local capture, run 'docker compose -f compose.dev.yml up --wait mailpit', use SMTP_URL=smtp://127.0.0.1:1025 with SMTP_TLS_MODE=disabled, and inspect http://127.0.0.1:8025.
 - Cloudflare Email Service is selectable directly through the same hardened transport with CLOUDFLARE_EMAIL_SMTP_URL=smtps://api_token:<URL-encoded API token>@smtp.mx.cloudflare.net:465 and required TLS. A compatible SMTP_URL remains supported. Cloudflare remains its own DKIM/ARC signing authority.
-- Amazon SES uses the regional v2 API with an organization IAM role or access-key pair. Worker sends preserve raw MIME and attachments through SendEmail; the provider contract also exposes SendBulkEmail for compatible groups. Configuration-set message tags correlate signed SNS or authenticated EventBridge events without storing provider payloads.
+- Amazon SES uses the regional v2 API with an organization IAM role, access-key pair, or explicitly enabled workload chain. Recipient-specific worker sends preserve raw MIME and attachments through SendEmail; the provider contract also exposes SendBulkEmail for compatible groups. A PostgreSQL guard shares GetAccount-derived recipient-per-second and rolling 24-hour capacity across workers, retaining 20% rate and 10% daily headroom. Configuration-set message tags correlate signed SNS or authenticated EventBridge events without storing provider payloads.
 - Each message stores its resolved provider. Settings changes affect future queue rows only. Missing credentials fail before insertion; credentials removed later fail that row explicitly instead of falling back to another provider.
 - A worker atomically claims an eligible message, records 'sending', and holds a five-minute lease. If it exits mid-delivery, another worker can reclaim the same row after the lease expires.
 - Delivery is at least once. A process exit after a provider accepts a message but before PostgreSQL records 'sent' can cause a duplicate, so preserve send idempotency where the provider supports it.
-- Retry transient network failures, HTTP 5xx, and SMTP 4xx with bounded backoff. SMTP 550 and other permanent failures move directly to 'failed'. Five attempts exhaust the retry budget.
+- Retry transient network failures, HTTP 5xx, and SMTP 4xx with bounded backoff. SES quota waits and throttles return to queued without consuming an attempt. SMTP 550 and other permanent failures move directly to 'failed'. Five real delivery attempts exhaust the retry budget.
 - Failure codes and reasons are sanitized before storage. Message bodies, addresses, attachments, credentials, and provider responses never appear in MCP status output.
 - Use paperboy_list_delivery_statuses and paperboy_get_delivery_status to inspect queued, sending, sent, and failed records. The list supports status, domainId, and RFC 3339 UTC creation bounds while retaining key-derived tenant and environment scope. Use paperboy_list_message_events for the ordered queued, delivered, deferred, bounced, complained, and opted-in opened timeline. Opened events cannot exist unless that message persisted tracking opt-in. MCP timestamps remain RFC 3339 UTC, and these tools never return MIME or provider-owned signing material.
 - The worker hands the same rendered semantic message to every adapter. SMTP builds MIME at delivery time; Cloudflare Email Sending receives structured, unsigned fields and remains its own signing authority.
@@ -375,7 +375,7 @@ const suppressionDocument = `# PaperBoy suppression list
 - CSV import accepts UTF-8 with an email header and optional reason column, at most 1 MiB and 5,000 data rows. The entire file validates before mutation. Duplicate rows and existing entries keep the strongest reason: complained, then bounced, then unsubscribed, then manual.
 - Read a suppression before deleting it and pass confirm: true. Deletion means the address may receive future mail; it does not modify Cloudflare provider suppressions.
 - PaperBoy suppression state is provider-neutral and complements, but does not replace, the Cloudflare-managed cf-bounce and provider suppression pipeline.
-- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
+- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the fixed Australia/Sydney IANA timezone.
 `;
 
 const audienceDocument = `# PaperBoy audiences and contacts
@@ -388,7 +388,7 @@ const audienceDocument = `# PaperBoy audiences and contacts
 - Opening an unsubscribe URL is read-only. The recipient must confirm; confirmation sets unsubscribed_at and creates an organization-wide unsubscribed suppression atomically.
 - PaperBoy links are HMAC-SHA256 signed with PAPERBOY_UNSUBSCRIBE_SIGNING_KEY and have no provider dependency. SMTP and Cloudflare Email Sending receive the same rendered link and body.
 - Cloudflare keeps its independent cf-bounce return path and provider suppression pipeline. PaperBoy unsubscribe state complements it and blocks before provider queue insertion.
-- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
+- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the fixed Australia/Sydney IANA timezone.
 `;
 
 const rateLimitDocument = `# PaperBoy organization send-rate limits
@@ -399,7 +399,7 @@ const rateLimitDocument = `# PaperBoy organization send-rate limits
 - Windows are fixed UTC minutes. A rejected single send returns rate_limit_exceeded with environment, limit, and retryAfterSeconds. HTTP peers return 429 and the same delay in Retry-After.
 - Validation failures, suppressions, attachment-storage rollbacks, and idempotent replays do not consume a slot. Parallel inserts serialize on one organization-and-environment counter row.
 - A broadcast pauses with its unprocessed recipient still pending when the cap is reached. Resume it after the reported window has reset.
-- Rate limiting happens before the provider queue, so SMTP and Cloudflare Email Sending have identical behavior.
+- Rate limiting happens before the provider queue, so SMTP, Cloudflare Email Sending, and SES have identical organization acceptance behavior. SES additionally enforces regional recipient-per-second and rolling 24-hour quotas at delivery time through shared PostgreSQL reservations.
 `;
 
 const openTrackingDocument = `# PaperBoy open tracking
@@ -410,7 +410,7 @@ const openTrackingDocument = `# PaperBoy open tracking
 - An opened event means the pixel was fetched. Security scanners, privacy proxies, and prefetchers can trigger it, so it does not prove a person read the message.
 - PAPERBOY_OPEN_TRACKING_SIGNING_KEY is a dedicated Base64-encoded 32-byte key. Rotation invalidates outstanding pixels. PAPERBOY_PUBLIC_URL supplies their public origin.
 - Pixel URLs and stored HTML are provider-neutral. SMTP and Cloudflare Email Service receive the same body; Cloudflare remains its own DKIM and ARC authority.
-- Event instants and MCP timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
+- Event instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the fixed Australia/Sydney IANA timezone.
 `;
 
 const outboundProviderDocument = `# PaperBoy outbound providers
@@ -423,9 +423,9 @@ const outboundProviderDocument = `# PaperBoy outbound providers
 - Missing or invalid credentials fail closed before a live message enters the queue. Test API keys continue to use the isolated test sink.
 - SMTP_URL remains the operator-default SMTP secret. Cloudflare Email Service may use CLOUDFLARE_EMAIL_SMTP_URL or a Cloudflare SMTP_URL. Amazon SES supports AWS_SES_REGION with an IAM role, access-key pair, or explicitly enabled workload credential chain; every setting has a documented per-organization UUID-suffixed form.
 - Amazon SES is a live v2 delivery and event adapter. Azure remains selectable but unavailable until its adapter lands. Neither path silently falls back to SMTP.
-- SES SendEmail stores the returned SES message ID. SendBulkEmail supports up to 50 compatible entries. Configuration-set tags preserve each PaperBoy UUID, while signed SNS or API-key-authenticated EventBridge ingestion verifies both the tenant message and SES message ID before mutation.
+- SES SendEmail stores the returned SES message ID. SendBulkEmail supports up to 50 compatible entries. Both reserve recipient capacity through a shared PostgreSQL guard using 80% rate and 90% rolling-day headroom; capacity waits do not consume worker attempts. Configuration-set tags preserve each PaperBoy UUID, while signed SNS or API-key-authenticated EventBridge ingestion verifies both the tenant message and SES message ID before mutation.
 - Provider event adapters map into the stable PaperBoy delivered, deferred, bounced, and complained event names. Permanent SES bounces and complaints update the shared organization suppression list; transient bounces and delays do not.
-- Settings and test timestamps are RFC 3339 UTC. Console presentation uses each signed-in user's persisted IANA timezone.
+- Settings and test timestamps are RFC 3339 UTC. Console presentation uses the fixed Australia/Sydney IANA timezone.
 `;
 
 function authorizationError() {

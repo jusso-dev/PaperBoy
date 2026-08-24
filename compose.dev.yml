@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       MP_MAX_MESSAGES: "500"
-      TZ: UTC
+      TZ: Australia/Sydney
     ports:
       - "127.0.0.1:1025:1025"
       - "127.0.0.1:8025:8025"

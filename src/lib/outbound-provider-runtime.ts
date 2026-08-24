@@ -11,6 +11,7 @@ import {
   type OutboundProviderAdapter,
 } from "@/lib/outbound-provider-core";
 import { createAwsSesAdapter } from "@/lib/aws-ses-adapter";
+import type { AwsSesQuotaGuard } from "@/lib/aws-ses-quota";
 import { createSmtpAdapter } from "@/lib/smtp-adapter";
 import {
   OutboundDeliveryError,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/worker-core";
 
 export function createConfiguredOutboundProvider(input: {
+  awsSesQuotaGuard?: AwsSesQuotaGuard;
   environment?: Readonly<Record<string, string | undefined>>;
   orgId: string;
   provider: LiveOutboundProvider;
@@ -51,7 +53,12 @@ export function createConfiguredOutboundProvider(input: {
         input.provider,
       );
     }
-    return createAwsSesAdapter({ configuration });
+    return createAwsSesAdapter({
+      configuration,
+      ...(input.awsSesQuotaGuard
+        ? { quotaGuard: input.awsSesQuotaGuard }
+        : {}),
+    });
   }
 
   throw new OutboundProviderConfigurationError(
@@ -74,6 +81,7 @@ export async function testConfiguredOutboundProvider(input: {
 }
 
 export function createEnvironmentOutboundRouter(input: {
+  awsSesQuotaGuard?: AwsSesQuotaGuard;
   environment?: Readonly<Record<string, string | undefined>>;
 } = {}): OutboundAdapter & { close: () => void } {
   const adapters = new Map<string, OutboundProviderAdapter>();
@@ -93,6 +101,9 @@ export function createEnvironmentOutboundRouter(input: {
       if (!adapter) {
         try {
           adapter = createConfiguredOutboundProvider({
+            ...(input.awsSesQuotaGuard
+              ? { awsSesQuotaGuard: input.awsSesQuotaGuard }
+              : {}),
             environment: input.environment,
             orgId: message.orgId,
             provider: message.provider,

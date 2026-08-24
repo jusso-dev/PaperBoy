@@ -17,7 +17,9 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux]
     env:
-      TZ: UTC
+      PAPERBOY_DEFAULT_TIME_ZONE: Australia/Sydney
+      PAPERBOY_FIXED_TIME_ZONE: Australia/Sydney
+      TZ: Australia/Sydney
     services:
       postgres:
         image: postgres:17-alpine
@@ -36,7 +38,7 @@ jobs:
         image: ghcr.io/axllent/mailpit:v1.31.0@sha256:c96991d9bef73594c246d89ca81411d4e916f03e76a7d2d72fa2ab5dd3c9ce24
         env:
           MP_MAX_MESSAGES: "500"
-          TZ: UTC
+          TZ: Australia/Sydney
         ports:
           - 1025/tcp
           - 8025/tcp

@@ -55,7 +55,7 @@ The first-class MCP tools are:
 
 No tool accepts an organization ID. Reads require current membership; mutations re-check that the API key creator is an owner or admin. Destructive tools require `confirm: true`. The authenticated `paperboy://docs/audiences` resource carries this operating contract.
 
-PostgreSQL stores every instant as `timestamptz`. REST and MCP return RFC 3339 UTC and MCP identifies `protocolTimeZone: UTC`. The console formats contact, audience, and unsubscribe instants using the signed-in user's persisted IANA timezone. Unauthenticated confirmation copy does not invent a local timezone.
+PostgreSQL stores every instant as `timestamptz`. REST and MCP return RFC 3339 UTC and MCP identifies `protocolTimeZone: UTC`. The console formats contact, audience, and unsubscribe instants in fixed `Australia/Sydney` time. Unauthenticated confirmation copy does not invent another local timezone.
 
 ## Cloudflare Email Service
 

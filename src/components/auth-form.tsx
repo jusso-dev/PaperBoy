@@ -62,6 +62,32 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       return;
     }
 
+    if (
+      mode === "sign-in" &&
+      result.data &&
+      "twoFactorRedirect" in result.data &&
+      result.data.twoFactorRedirect
+    ) {
+      router.push("/two-factor");
+      return;
+    }
+
+    router.push("/app");
+    router.refresh();
+  }
+
+  async function handlePasskeySignIn() {
+    setError(null);
+    setIsPending(true);
+    const result = await authClient.signIn.passkey();
+    if (result.error) {
+      setError(
+        result.error.message ||
+          "Passkey sign-in was cancelled or could not be verified.",
+      );
+      setIsPending(false);
+      return;
+    }
     router.push("/app");
     router.refresh();
   }
@@ -92,7 +118,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <div className="field">
           <label htmlFor="email">Email</label>
           <input
-            autoComplete="email"
+            autoComplete={mode === "sign-in" ? "username webauthn" : "email"}
             id="email"
             name="email"
             required
@@ -103,7 +129,11 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <div className="field">
           <label htmlFor="password">Password</label>
           <input
-            autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+            autoComplete={
+              mode === "sign-in"
+                ? "current-password webauthn"
+                : "new-password"
+            }
             id="password"
             maxLength={128}
             minLength={8}
@@ -126,6 +156,22 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           {isPending ? labels.pending : labels.submit}
         </button>
       </form>
+
+      {mode === "sign-in" ? (
+        <>
+          <p className="auth-divider" aria-hidden="true">
+            or
+          </p>
+          <button
+            className="btn auth-submit"
+            disabled={isPending}
+            onClick={handlePasskeySignIn}
+            type="button"
+          >
+            Sign in with a passkey
+          </button>
+        </>
+      ) : null}
 
       <p className="auth-switch">
         {labels.prompt} <Link href={labels.linkHref}>{labels.linkLabel}</Link>

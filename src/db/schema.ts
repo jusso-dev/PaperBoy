@@ -76,7 +76,8 @@ export const users = pgTable(
     name: text("name").notNull(),
     emailVerified: boolean("email_verified").default(false).notNull(),
     image: text("image"),
-    timezone: text("timezone").default("UTC").notNull(),
+    timezone: text("timezone").default("Australia/Sydney").notNull(),
+    twoFactorEnabled: boolean("two_factor_enabled").default(false).notNull(),
     defaultOrgId: uuid("default_org_id").references(() => orgs.id, {
       onDelete: "set null",
     }),
@@ -95,6 +96,57 @@ export const users = pgTable(
     uniqueIndex("users_email_unique").on(table.email),
     uniqueIndex("users_default_org_id_unique").on(table.defaultOrgId),
     index("users_active_org_id_idx").on(table.activeOrgId),
+  ],
+);
+
+export const twoFactors = pgTable(
+  "two_factors",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    verified: boolean("verified").default(true).notNull(),
+    failedVerificationCount: integer("failed_verification_count")
+      .default(0)
+      .notNull(),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("two_factors_user_id_unique").on(table.userId),
+    index("two_factors_secret_idx").on(table.secret),
+    check(
+      "two_factors_failed_verification_count_check",
+      sql`${table.failedVerificationCount} >= 0`,
+    ),
+  ],
+);
+
+export const passkeys = pgTable(
+  "passkeys",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    publicKey: text("public_key").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    credentialID: text("credential_id").notNull(),
+    counter: integer("counter").notNull(),
+    deviceType: text("device_type").notNull(),
+    backedUp: boolean("backed_up").notNull(),
+    transports: text("transports"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    aaguid: text("aaguid"),
+  },
+  (table) => [
+    index("passkeys_user_id_idx").on(table.userId),
+    uniqueIndex("passkeys_credential_id_unique").on(table.credentialID),
+    check("passkeys_counter_check", sql`${table.counter} >= 0`),
   ],
 );
 
@@ -311,6 +363,64 @@ export const sendRateLimitWindows = pgTable(
     check(
       "send_rate_limit_windows_accepted_count_check",
       sql`${table.acceptedCount} between 1 and 1000000`,
+    ),
+  ],
+);
+
+export const awsSesRateLimitStates = pgTable(
+  "aws_ses_rate_limit_states",
+  {
+    scopeHash: text("scope_hash").primaryKey(),
+    nextAvailableAt: timestamp("next_available_at", { withTimezone: true })
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "aws_ses_rate_limit_states_scope_hash_check",
+      sql`${table.scopeHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const awsSesSendReservations = pgTable(
+  "aws_ses_send_reservations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    scopeHash: text("scope_hash")
+      .notNull()
+      .references(() => awsSesRateLimitStates.scopeHash, {
+        onDelete: "cascade",
+      }),
+    reservationKey: text("reservation_key").notNull(),
+    recipientCount: integer("recipient_count").notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("aws_ses_send_reservations_scope_key_unique").on(
+      table.scopeHash,
+      table.reservationKey,
+    ),
+    index("aws_ses_send_reservations_scope_scheduled_at_idx").on(
+      table.scopeHash,
+      table.scheduledAt,
+    ),
+    check(
+      "aws_ses_send_reservations_scope_hash_check",
+      sql`${table.scopeHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "aws_ses_send_reservations_reservation_key_check",
+      sql`${table.reservationKey} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "aws_ses_send_reservations_recipient_count_check",
+      sql`${table.recipientCount} between 1 and 2500`,
     ),
   ],
 );

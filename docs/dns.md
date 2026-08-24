@@ -118,7 +118,7 @@ dig +short TXT <selector>._domainkey.mail.example.com
 
 6. Run Check DNS in the console or `paperboy_verify_domain`. Live sending remains blocked until ownership, the exact configured SPF value, and an active PaperBoy DKIM selector match.
 
-DNS caches may delay a new result. PaperBoy reports timestamps over MCP in UTC and displays console timestamps in the signed-in user's persisted IANA timezone; timezone settings do not change DNS values.
+DNS caches may delay a new result. PaperBoy reports timestamps over MCP in UTC and displays console timestamps in fixed `Australia/Sydney` time; timezone policy does not change DNS values.
 
 ## References
 

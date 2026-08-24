@@ -11,7 +11,7 @@ Self-hosted transactional email. A cheaper Resend you run on your own box.
 - Drizzle ORM + Postgres
 - Better Auth
 - First-class MCP server over the same domain services as HTTP and the console
-- CI on Linux self-hosted runners with isolated PostgreSQL and Mailpit service containers, UTC process time, read-only repository permissions, and no GitHub-hosted labels. Fork pull requests are skipped so untrusted code never reaches the runner; same-repository pull requests and `main` pushes run the full gate.
+- CI on Linux self-hosted runners with isolated PostgreSQL and Mailpit service containers, the fixed `Australia/Sydney` application timezone, read-only repository permissions, and no GitHub-hosted labels. Fork pull requests are skipped so untrusted code never reaches the runner; same-repository pull requests and `main` pushes run the full gate.
 
 ## Container image
 
@@ -22,11 +22,13 @@ docker pull --platform linux/arm64 ghcr.io/jusso-dev/paperboy:main
 docker run --rm --platform linux/arm64 --env-file /path/to/protected.env -p 3000:3000 ghcr.io/jusso-dev/paperboy:main
 ```
 
-The image runs the web and remote MCP server as a non-root user with `TZ=UTC`. Run the outbound worker from the same immutable image digest as a separately supervised process by overriding the command with `pnpm worker`; local MCP clients can use `pnpm mcp:stdio`. User-facing times still use each account's persisted IANA timezone.
+The image runs the web and remote MCP server as a non-root user with `TZ=Australia/Sydney`, `PAPERBOY_DEFAULT_TIME_ZONE=Australia/Sydney`, and `PAPERBOY_FIXED_TIME_ZONE=Australia/Sydney`. Run the outbound worker from the same immutable image digest as a separately supervised process by overriding the command with `pnpm worker`; local MCP clients can use `pnpm mcp:stdio`. The fixed policy applies to every account and presentation surface while stored instants and public protocol timestamps remain UTC.
 
 ## Security
 
-PaperBoy's repository-scoped [threat model](docs/threat-model.md) covers REST and first-class MCP authentication, tenant boundaries, UTC/IANA timezone handling, DKIM and webhook key storage, self-hosted SMTP, Cloudflare Email Service, attachments, and self-hosted CI. Its limits are explicit: a leaked bearer key remains usable until revoked, an incorrectly configured MTA can become an open relay, and Cloudflare/provider acceptance is not proof of final delivery.
+PaperBoy's repository-scoped [threat model](docs/threat-model.md) covers Better Auth sessions, authenticator MFA, passkeys, REST and first-class MCP authentication, tenant boundaries, UTC/IANA timezone handling, DKIM and webhook key storage, self-hosted SMTP, Cloudflare Email Service, attachments, and self-hosted CI. Its limits are explicit: a leaked bearer key remains usable until revoked, an incorrectly configured MTA can become an open relay, and provider acceptance is not proof of final delivery.
+
+Password sign-in supports TOTP MFA, single-use recovery codes, 30-day trusted devices, and a 15-minute account lock after five failed second-factor attempts. Passkeys are a phishing-resistant passwordless sign-in option and can be enrolled, named, listed, and deleted in Settings. Before enrolling passkeys in production, set `BETTER_AUTH_URL` and `PAPERBOY_PASSKEY_ORIGIN` to the exact external HTTPS origin and set `PAPERBOY_PASSKEY_RP_ID` to that host or a valid parent domain. A passkey sign-in is a standalone passwordless factor; it is not followed by the TOTP challenge used for password sign-in.
 
 Run `pnpm security:secrets` before pushing. CI scans full Git history with pinned, checksum-verified Gitleaks default rules plus explicit AWS-key, PaperBoy API-key, webhook-secret, service-key, SMTP-credential, and Cloudflare Email token patterns. Scanning runs locally; the repository is not uploaded to a security SaaS. A clean scan cannot find every runtime or novel secret, so rotate any exposed credential before cleaning source history.
 
@@ -44,7 +46,7 @@ pnpm db:migrate
 
 Generate a migration after changing `src/db/schema.ts` with `pnpm db:generate`.
 
-All stored instants and public protocol timestamps are UTC. Each user has a persisted IANA timezone that controls console, log, and scheduling presentation.
+All stored instants and public protocol timestamps are UTC. PaperBoy persists and enforces `Australia/Sydney` for every user-facing calendar, console, log, and scheduling surface; the Settings control is locked while `PAPERBOY_FIXED_TIME_ZONE` is set.
 
 The matching SQL in `drizzle/down/` exists only to prove rollback on a throwaway database. Do not run it against a database containing PaperBoy data.
 
@@ -66,17 +68,17 @@ Open tracking is a persisted organization setting and is off by default. Current
 
 When enabled, queue creation adds one signed first-party pixel to future HTML messages and snapshots that choice on the message. Plain-text messages remain untracked. The public pixel route always returns the same uncacheable transparent GIF; valid repeated requests create at most one `opened` event and invalid requests reveal no message state. The event contains no recipient, IP address, user agent, or provider payload. A fetch may come from a mail security scanner, privacy proxy, or prefetcher, so it does not prove a person read the message.
 
-The pixel is part of provider-neutral stored HTML before delivery. Self-hosted SMTP and Cloudflare Email Service therefore receive the same signed URL and body while Cloudflare remains responsible for its provider-owned DKIM and ARC signatures. Events are stored and exposed in UTC; the console formats them with the signed-in user's persisted IANA timezone. Rotating the signing key invalidates outstanding pixels. See the [open-tracking privacy, API, MCP, timezone, and Cloudflare guide](docs/open-tracking.md).
+The pixel is part of provider-neutral stored HTML before delivery. Self-hosted SMTP and Cloudflare Email Service therefore receive the same signed URL and body while Cloudflare remains responsible for its provider-owned DKIM and ARC signatures. Events are stored and exposed in UTC; the console formats them in fixed `Australia/Sydney` time. Rotating the signing key invalidates outstanding pixels. See the [open-tracking privacy, API, MCP, timezone, and Cloudflare guide](docs/open-tracking.md).
 
 ## Console test send
 
-The signed-in console at `/app/send` lets owners and admins compose one provider test from a verified domain. It enters the same live queue used by `POST /api/v1/emails` and `paperboy_send_email`, including domain/DKIM authorisation, suppressions, organization rate limits, delivery events, and logs. Members can inspect delivery records but cannot queue a console send. Success timestamps render in the signed-in user's IANA timezone; stored and protocol timestamps remain UTC.
+The signed-in console at `/app/send` lets owners and admins compose one provider test from a verified domain. It enters the same live queue used by `POST /api/v1/emails` and `paperboy_send_email`, including domain/DKIM authorisation, suppressions, organization rate limits, delivery events, and logs. Members can inspect delivery records but cannot queue a console send. Success timestamps render in fixed `Australia/Sydney` time; stored and protocol timestamps remain UTC.
 
 This is a real provider check rather than isolated test-sink traffic. A development worker configured for Mailpit captures it, while a production worker configured for Cloudflare Email Service submits it through the same live SMTP adapter. Use a safe recipient address.
 
 ## Message logs
 
-The signed-in console at `/app/logs` lists the 50 most recent matching messages with status, sending-domain, and inclusive calendar-date filters. Calendar dates are interpreted in the signed-in user's persisted IANA timezone before indexed tenant-safe PostgreSQL queries receive UTC boundaries. Selecting a row opens its safe metadata and ordered event timeline in a drawer without a page reload; message HTML, plain text, attachment bytes, event data, and provider payloads are not rendered there.
+The signed-in console at `/app/logs` lists the 50 most recent matching messages with status, sending-domain, and inclusive calendar-date filters. Calendar dates are interpreted in fixed `Australia/Sydney` time before indexed tenant-safe PostgreSQL queries receive UTC boundaries. Selecting a row opens its safe metadata and ordered event timeline in a drawer without a page reload; message HTML, plain text, attachment bytes, event data, and provider payloads are not rendered there.
 
 Only organization owners can click **Download MIME (.eml)**. The file is an unsigned reconstruction from the stored semantic message and verified private attachment bytes, not a captured provider transmission. PaperBoy never stores Cloudflare's provider-owned DKIM or ARC headers, so those signatures are intentionally absent; Cloudflare Email Service remains the signing authority when it submits the live message. Admins and members can inspect logs and events but cannot download reconstructed MIME.
 
@@ -135,7 +137,7 @@ Each item is validated and queued independently under the same API-key, domain, 
 
 The queue stores semantic `from`, `to`, subject, HTML/text, tags, and private attachment references rather than prebuilt MIME. This leaves Date and DKIM ownership to the selected outbound adapter: a self-hosted SMTP path builds MIME with the stored bytes and can use PaperBoy signing, while Cloudflare Email Sending receives structured Base64 attachments and constructs and signs its provider-managed message without double-signing. This endpoint persists `queued` rows; the outbound worker is a separate deployment component.
 
-Message and event instants are PostgreSQL `timestamptz` values. REST and MCP expose them as RFC 3339 UTC; console presentation uses the signed-in user's persisted IANA timezone.
+Message and event instants are PostgreSQL `timestamptz` values. REST and MCP expose them as RFC 3339 UTC; console presentation uses fixed `Australia/Sydney` time.
 
 ### OpenAPI and TypeScript SDK
 
@@ -151,7 +153,7 @@ Run a supervised worker beside the web process after applying migrations:
 pnpm worker
 ```
 
-The worker needs the same `DATABASE_URL`, `PAPERBOY_ATTACHMENT_STORAGE_PATH`, and `PAPERBOY_WEBHOOK_ENCRYPTION_KEY` as the web process. `PAPERBOY_WORKER_POLL_MS` controls idle polling from 100 to 60,000 milliseconds and defaults to 1,000. `PAPERBOY_WORKER_ID` can supply a stable 1-128 character process identity; otherwise PaperBoy uses the host name and PID. Keep the process environment on `TZ=UTC`; user-facing delivery times are still rendered with each signed-in user's persisted IANA timezone.
+The worker needs the same `DATABASE_URL`, `PAPERBOY_ATTACHMENT_STORAGE_PATH`, and `PAPERBOY_WEBHOOK_ENCRYPTION_KEY` as the web process. `PAPERBOY_WORKER_POLL_MS` controls idle polling from 100 to 60,000 milliseconds and defaults to 1,000. `PAPERBOY_WORKER_ID` can supply a stable 1-128 character process identity; otherwise PaperBoy uses the host name and PID. Keep the process environment on `TZ=Australia/Sydney` with both PaperBoy timezone variables fixed to the same value. Queue instants, retries, and provider timestamps remain explicitly UTC.
 
 Set `SMTP_URL` to provide the operator-default SMTP credential. PaperBoy accepts `smtp://` submission and `smtps://` implicit TLS URLs. `SMTP_TLS_MODE` defaults to `required`: an `smtp://` connection must upgrade with STARTTLS or fail safely. `opportunistic` permits a failed upgrade to continue and `disabled` sends plaintext, so use either weaker mode only on a trusted development network. `smtps://` always requires implicit TLS. Inject URL credentials through the deployment secret store; PaperBoy never writes the URL, credentials, or raw relay response to PostgreSQL, REST, console, MCP, delivery status, or logs.
 
@@ -176,7 +178,7 @@ Cloudflare Email Service is a first-class selectable identity over the same hard
 
 ### Amazon SES
 
-Amazon SES is a first-class regional SES v2 adapter. It accepts an operator default or per-organisation IAM role/access-key configuration, submits worker deliveries as complete raw MIME with `SendEmail`, stores the returned SES message ID, and exposes `SendBulkEmail` through the provider contract for compatible groups of up to 50. `GetAccount` connection tests surface the region, sandbox/production access, and sending-enabled state without exposing AWS credentials or account data. SES Easy DKIM owns signing on this path.
+Amazon SES is a first-class regional SES v2 adapter. It accepts an operator default or per-organisation IAM role/access-key configuration, submits recipient-specific worker deliveries as complete raw MIME with `SendEmail`, stores the returned SES message ID, and exposes `SendBulkEmail` through the provider contract for compatible groups of up to 50. A PostgreSQL-backed quota guard refreshes regional `GetAccount` quotas, reserves recipient capacity across every worker, uses 80% of the observed per-second rate and 90% of the rolling 24-hour allowance, and defers safely when capacity is unavailable without consuming the message retry budget. `GetAccount` connection tests surface only the region, sandbox/production access, and sending-enabled state. SES Easy DKIM owns signing on this path.
 
 Configuration-set tags correlate delivery, delay, bounce, and complaint events. Signed SNS uses the per-organisation public callback; EventBridge, REST, and MCP use the authenticated tenant service. Events are idempotent and content-free. Permanent bounces and complaints update the same provider-neutral suppression list checked before future sends. See the [SES credentials, event endpoints, console, REST, MCP, and DNS guide](docs/outbound-providers.md).
 
@@ -198,7 +200,7 @@ For self-hosted SMTP, set `PAPERBOY_BOUNCE_ADDRESS` and route that address to th
 
 ### Suppression list
 
-The console, REST API, and first-class MCP tools manage the same organization suppression list. Owners and admins can create, update, remove, and atomically import UTF-8 CSV records; members can read them. Search and reason filters expose manual, unsubscribed, permanent-bounce, and complaint entries with console timestamps in the signed-in user's IANA timezone and protocol timestamps in UTC.
+The console, REST API, and first-class MCP tools manage the same organization suppression list. Owners and admins can create, update, remove, and atomically import UTF-8 CSV records; members can read them. Search and reason filters expose manual, unsubscribed, permanent-bounce, and complaint entries with console timestamps in fixed `Australia/Sydney` time and protocol timestamps in UTC.
 
 REST provides `GET`/`POST /api/v1/suppressions`, `GET`/`PATCH`/`DELETE /api/v1/suppressions/:suppressionId`, and `POST /api/v1/suppressions/import` with `Content-Type: text/csv`. CSV is bounded to 1 MiB and 5,000 rows, validates fully before mutation, and keeps the strongest reason across duplicates. The matching MCP tools expose the same CRUD/import services without accepting an organization ID.
 
@@ -225,7 +227,7 @@ Bodies contain only `type`, UTC `created_at`, and `data.email_id` plus `data.env
 
 ## Email templates
 
-Templates are organization-owned records with a case-insensitively unique name, subject, at least one of HTML or plain text, and an explicit `required_variables` list. Owners and admins manage them in the console; members can read and preview them. The console formats template timestamps using the signed-in user's persisted IANA timezone. REST timestamps and MCP timestamps are RFC 3339 UTC.
+Templates are organization-owned records with a case-insensitively unique name, subject, at least one of HTML or plain text, and an explicit `required_variables` list. Owners and admins manage them in the console; members can read and preview them. The console formats template timestamps in fixed `Australia/Sydney` time. REST timestamps and MCP timestamps are RFC 3339 UTC.
 
 The bearer-key REST surface is:
 
@@ -281,7 +283,7 @@ Set `PAPERBOY_PUBLIC_URL` to the stable externally reachable origin and `PAPERBO
 
 The signed URL and rendered footer are part of the provider-neutral semantic body before queue insertion. SMTP and Cloudflare Email Sending therefore receive the same unsubscribe behavior; PaperBoy does not replace or bypass Cloudflare's independent `cf-bounce` and provider suppression pipeline. See [audience, CSV, unsubscribe, MCP, timezone, and Cloudflare behavior](docs/audiences.md).
 
-Progress is available from `GET /api/v1/broadcasts` and `GET /api/v1/broadcasts/:broadcastId`. Use `POST` on `/pause`, `/resume`, or `/cancel` beneath that broadcast URL. Pause takes effect after an already-processing recipient; resume handles pending recipients; cancel irreversibly marks pending recipients cancelled so they cannot be claimed. Responses expose counts and the source audience ID, never contact addresses or rendered bodies. REST timestamps are RFC 3339 UTC; the console renders them in the signed-in user's persisted IANA timezone.
+Progress is available from `GET /api/v1/broadcasts` and `GET /api/v1/broadcasts/:broadcastId`. Use `POST` on `/pause`, `/resume`, or `/cancel` beneath that broadcast URL. Pause takes effect after an already-processing recipient; resume handles pending recipients; cancel irreversibly marks pending recipients cancelled so they cannot be claimed. Responses expose counts and the source audience ID, never contact addresses or rendered bodies. REST timestamps are RFC 3339 UTC; the console renders them in fixed `Australia/Sydney` time.
 
 ## Sending domains
 
@@ -291,7 +293,7 @@ The default SPF value is `v=spf1 mx ~all`. Operators whose outbound host is not 
 
 Set `PAPERBOY_DKIM_ENCRYPTION_KEY` to a base64-encoded 32-byte random value before adding domains or managing DKIM. For example, generate it in the deployment secret store with `openssl rand -base64 32`; do not put the result in source control, command-line arguments, or logs. PaperBoy stores each RSA private key in PostgreSQL inside a context-bound AES-256-GCM envelope. Console, API, and MCP responses expose only selector/public DNS material.
 
-Rotation is staged: PaperBoy keeps signing with the active selector while the replacement is pending. A DNS check activates the replacement only after its public key resolves, moves the old selector to retiring, and keeps both DNS instructions visible. Finalising rotation destroys the retiring encrypted private key. Stored lifecycle instants are UTC; console presentation uses the signed-in user's persisted IANA timezone.
+Rotation is staged: PaperBoy keeps signing with the active selector while the replacement is pending. A DNS check activates the replacement only after its public key resolves, moves the old selector to retiring, and keeps both DNS instructions visible. Finalising rotation destroys the retiring encrypted private key. Stored lifecycle instants are UTC; console presentation uses fixed `Australia/Sydney` time.
 
 ### Cloudflare Email compatibility
 

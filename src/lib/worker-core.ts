@@ -50,6 +50,7 @@ export type WorkerStore = {
   markRetry: (input: {
     attemptCount: number;
     code: string;
+    consumeAttempt: boolean;
     messageId: string;
     nextAttemptAt: Date;
     now: Date;
@@ -74,7 +75,9 @@ export type WorkerResult =
 
 type DeliveryFailure = {
   code: string;
+  consumeAttempt: boolean;
   reason: string;
+  retryAt: Date | null;
   retryable: boolean;
 };
 
@@ -93,14 +96,27 @@ function safeReason(value: string): string {
 
 export class OutboundDeliveryError extends Error {
   readonly code: string;
+  readonly consumeAttempt: boolean;
   readonly reason: string;
+  readonly retryAt: Date | null;
   readonly retryable: boolean;
 
-  constructor(input: { code: string; reason: string; retryable: boolean }) {
+  constructor(input: {
+    code: string;
+    consumeAttempt?: boolean;
+    reason: string;
+    retryAt?: Date;
+    retryable: boolean;
+  }) {
     super(input.code);
     this.name = "OutboundDeliveryError";
     this.code = safeCode(input.code);
+    this.consumeAttempt = input.consumeAttempt ?? true;
     this.reason = safeReason(input.reason);
+    this.retryAt =
+      input.retryAt && Number.isFinite(input.retryAt.getTime())
+        ? new Date(input.retryAt)
+        : null;
     this.retryable = input.retryable;
   }
 }
@@ -129,7 +145,9 @@ function deliveryFailure(error: unknown): DeliveryFailure {
   if (error instanceof OutboundDeliveryError) {
     return {
       code: error.code,
+      consumeAttempt: error.consumeAttempt,
       reason: error.reason,
+      retryAt: error.retryAt,
       retryable: error.retryable,
     };
   }
@@ -137,14 +155,18 @@ function deliveryFailure(error: unknown): DeliveryFailure {
   if (error instanceof DeliveryProviderError) {
     return {
       code: "message_too_large",
+      consumeAttempt: true,
       reason: "Outbound provider rejected the message size.",
+      retryAt: null,
       retryable: false,
     };
   }
 
   return {
     code: "delivery_error",
+    consumeAttempt: true,
     reason: "Outbound adapter failed.",
+    retryAt: null,
     retryable: true,
   };
 }
@@ -240,12 +262,17 @@ export async function processNextMessage(input: {
     const failure = deliveryFailure(error);
     const failedAt = now();
 
-    if (failure.retryable && claim.attemptCount < MAX_DELIVERY_ATTEMPTS) {
+    if (
+      failure.retryable &&
+      (!failure.consumeAttempt || claim.attemptCount < MAX_DELIVERY_ATTEMPTS)
+    ) {
       const updated = await input.store.markRetry({
         attemptCount: claim.attemptCount,
         code: failure.code,
+        consumeAttempt: failure.consumeAttempt,
         messageId: claim.id,
-        nextAttemptAt: nextRetryAt(claim.attemptCount, failedAt),
+        nextAttemptAt:
+          failure.retryAt ?? nextRetryAt(claim.attemptCount, failedAt),
         now: failedAt,
         reason: failure.reason,
         workerId: input.workerId,

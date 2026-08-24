@@ -11,7 +11,7 @@ PAPERBOY_PUBLIC_URL=https://paperboy.example
 PAPERBOY_OPEN_TRACKING_SIGNING_KEY=<Base64-encoded 32-byte key>
 ```
 
-Do not reuse the unsubscribe, webhook, DKIM, Better Auth, SMTP, or Cloudflare secret. The public origin must use HTTPS; plain HTTP is accepted only for loopback development outside production. Enabling fails safely when either value is missing or invalid. Rotation invalidates pixels in already-sent messages. Keep processes on `TZ=UTC`; user-facing console times still use each account's persisted IANA timezone.
+Do not reuse the unsubscribe, webhook, DKIM, Better Auth, SMTP, or Cloudflare secret. The public origin must use HTTPS; plain HTTP is accepted only for loopback development outside production. Enabling fails safely when either value is missing or invalid. Rotation invalidates pixels in already-sent messages. Keep processes on `TZ=Australia/Sydney` with the fixed PaperBoy timezone policy; stored and protocol instants remain UTC.
 
 ## Message and event behavior
 
@@ -25,4 +25,4 @@ An event means only that an image URL was fetched. Security scanners, privacy pr
 
 Instrumentation happens in the shared queue before provider selection. Self-hosted SMTP builds MIME from the stored tracked HTML. Cloudflare Email Service SMTP receives that same HTML through `smtps://api_token:<URL-encoded token>@smtp.mx.cloudflare.net:465`; the structured Cloudflare builder also preserves it unchanged. PaperBoy adds no provider-owned `Date`, DKIM, or ARC header, so Cloudflare remains the signing authority.
 
-The pixel callback returns to the configured PaperBoy public origin, not Cloudflare and not a third-party analytics service. The event stores a PostgreSQL UTC instant. REST and MCP serialize RFC 3339 UTC; console views format it in the signed-in user's persisted IANA timezone.
+The pixel callback returns to the configured PaperBoy public origin, not Cloudflare and not a third-party analytics service. The event stores a PostgreSQL UTC instant. REST and MCP serialize RFC 3339 UTC; console views format it in fixed `Australia/Sydney` time.

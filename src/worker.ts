@@ -28,6 +28,7 @@ function workerIdentity(): string {
 async function main() {
   const [
     { postgresWorkerStore },
+    { postgresAwsSesQuotaGuard },
     { postgresWebhookStore },
     { processNextMessage },
     { createEnvironmentOutboundRouter },
@@ -35,6 +36,7 @@ async function main() {
     { processNextWebhook },
   ] = await Promise.all([
       import("@/lib/postgres-worker-store"),
+      import("@/lib/postgres-aws-ses-quota-guard"),
       import("@/lib/postgres-webhook-store"),
       import("@/lib/worker-core"),
       import("@/lib/outbound-provider-runtime"),
@@ -43,7 +45,10 @@ async function main() {
     ]);
   const workerId = workerIdentity();
   const pollMs = pollInterval();
-  const adapter = createEnvironmentOutboundRouter({ environment: process.env });
+  const adapter = createEnvironmentOutboundRouter({
+    awsSesQuotaGuard: postgresAwsSesQuotaGuard,
+    environment: process.env,
+  });
   const deliveryModes = ["live", "test-sink"] as const;
   const webhookEncryptionKey = process.env.PAPERBOY_WEBHOOK_ENCRYPTION_KEY
     ? configuredWebhookEncryptionKey()

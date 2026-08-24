@@ -70,6 +70,6 @@ Amazon SES feedback uses configuration-set event publishing, not the Postfix pip
 
 Use the signed public SNS callback only with the exact per-organization topic ARN and SNS signature version 2. EventBridge API Destinations use the authenticated SES event REST endpoint; an owner/admin can use the first-class `paperboy_ingest_outbound_provider_event` MCP peer for the same bounded service. Raw AWS payloads are never stored. Permanent bounces and complaints add suppressions, while transient bounces and delivery delays record content-free events without suppression. Exact provider-event replays are idempotent.
 
-All stored instants and API/MCP timestamps remain RFC 3339 UTC. Convert only presentation using the signed-in user's persisted IANA timezone.
+All stored instants and API/MCP timestamps remain RFC 3339 UTC. Console presentation uses fixed `Australia/Sydney` time.
 
 References: [RFC 3464 DSNs](https://www.rfc-editor.org/rfc/rfc3464), [RFC 5965 ARFs](https://www.rfc-editor.org/rfc/rfc5965), [Nodemailer DSN options](https://nodemailer.com/message/dsn), [Postfix transport tables](https://www.postfix.org/transport.5.html), [Postfix pipe delivery](https://www.postfix.org/pipe.8.html), [Cloudflare Email Sending lifecycle](https://developers.cloudflare.com/email-service/concepts/email-lifecycle/), and [Amazon SES event publishing](https://docs.aws.amazon.com/ses/latest/dg/monitor-using-event-publishing.html).
