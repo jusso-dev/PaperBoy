@@ -20,6 +20,35 @@ test("broadcast creation accepts one stored audience id", () => {
   assert.equal(parsed.name, "Morning edition");
   assert.equal(parsed.from, "Newsroom <News@Example.COM>");
   assert.equal(parsed.audienceId, audienceId);
+  assert.equal(parsed.scheduledFor, null);
+});
+
+test("broadcast creation accepts an explicit scheduled UTC instant", () => {
+  const parsed = parseCreateBroadcastInput({
+    audience_id: audienceId,
+    from: "news@example.com",
+    name: "Evening edition",
+    scheduled_for: "2026-08-25T08:30:00.000Z",
+    template_id: templateId,
+  });
+
+  assert.equal(parsed.scheduledFor?.toISOString(), "2026-08-25T08:30:00.000Z");
+});
+
+test("broadcast creation rejects scheduled values without an offset", () => {
+  assert.throws(
+    () =>
+      parseCreateBroadcastInput({
+        audience_id: audienceId,
+        from: "news@example.com",
+        name: "Evening edition",
+        scheduled_for: "2026-08-25T18:30",
+        template_id: templateId,
+      }),
+    (error) =>
+      error instanceof BroadcastError &&
+      error.issues.some((issue) => issue.field === "scheduled_for"),
+  );
 });
 
 test("broadcast input rejects inline recipients and invalid audience ids", () => {

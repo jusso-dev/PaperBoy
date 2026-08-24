@@ -16,6 +16,7 @@ import {
   type TemplateRecord,
   type TemplateValidationIssue,
 } from "@/lib/template-core";
+import { isPostgresErrorCode } from "@/lib/postgres-errors";
 
 const TEMPLATE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -36,15 +37,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
-
-  if ("code" in error && error.code === "23505") {
-    return true;
-  }
-
-  return "cause" in error && isUniqueViolation(error.cause);
+  return isPostgresErrorCode(error, "23505");
 }
 
 function requireTemplateId(templateId: string): void {

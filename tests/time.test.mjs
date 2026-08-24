@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   canonicalTimeZone,
   formatDateTime,
+  formatLocalDateTime,
+  parseLocalDateTime,
   protocolTimestamp,
   startOfCalendarDate,
   startOfNextCalendarDate,
@@ -39,4 +41,28 @@ test("calendar date filters use the user's IANA timezone across DST", () => {
   );
   assert.equal(startOfCalendarDate("2026-02-30", "Australia/Sydney"), null);
   assert.equal(startOfCalendarDate("2026-08-24", "Not/A_Zone"), null);
+});
+
+test("local schedule values round-trip through Australia/Sydney", () => {
+  const instant = parseLocalDateTime(
+    "2026-08-24T19:30",
+    "Australia/Sydney",
+  );
+
+  assert.equal(instant?.toISOString(), "2026-08-24T09:30:00.000Z");
+  assert.equal(
+    formatLocalDateTime(instant, "Australia/Sydney"),
+    "2026-08-24T19:30",
+  );
+});
+
+test("local schedule values reject missing and repeated DST minutes", () => {
+  assert.equal(
+    parseLocalDateTime("2026-10-04T02:30", "Australia/Sydney"),
+    null,
+  );
+  assert.equal(
+    parseLocalDateTime("2026-04-05T02:30", "Australia/Sydney"),
+    null,
+  );
 });

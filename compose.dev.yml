@@ -1,4 +1,28 @@
 services:
+  redis:
+    image: redis:8.2-alpine@sha256:30abb90e62f14b737010746def3ba99cc79fe19dcdb3d37b41f21fc62e7da19d
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory-policy
+      - noeviction
+    environment:
+      TZ: Australia/Sydney
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - paperboy-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   mailpit:
     image: ghcr.io/axllent/mailpit:v1.31.0@sha256:c96991d9bef73594c246d89ca81411d4e916f03e76a7d2d72fa2ab5dd3c9ce24
     restart: unless-stopped
@@ -14,3 +38,6 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+volumes:
+  paperboy-redis:

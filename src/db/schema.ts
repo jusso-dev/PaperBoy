@@ -3,9 +3,9 @@ import {
   bigserial,
   boolean,
   check,
+  customType,
   index,
   integer,
-  jsonb,
   pgTable,
   text,
   timestamp,
@@ -30,6 +30,10 @@ import type {
 import type { FeedbackClassification } from "@/lib/feedback-core";
 import type { SuppressionReason } from "@/lib/suppression-core";
 import type { WebhookDeliveryStatus } from "@/lib/webhook-core";
+
+const bunJsonb = customType<{ data: unknown; driverData: unknown }>({
+  dataType: () => "jsonb",
+});
 
 export const orgs = pgTable("orgs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -438,7 +442,7 @@ export const domains = pgTable(
     verificationToken: uuid("verification_token")
       .defaultRandom()
       .notNull(),
-    dnsChecks: jsonb("dns_checks").$type<DomainDnsCheckSnapshot>(),
+    dnsChecks: bunJsonb("dns_checks").$type<DomainDnsCheckSnapshot>(),
     lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -527,7 +531,7 @@ export const emailTemplates = pgTable(
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    requiredVariables: jsonb("required_variables")
+    requiredVariables: bunJsonb("required_variables")
       .$type<string[]>()
       .default(sql`'[]'::jsonb`)
       .notNull(),
@@ -687,7 +691,6 @@ export const broadcasts = pgTable(
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
     apiKeyId: uuid("api_key_id")
-      .notNull()
       .references(() => apiKeys.id, { onDelete: "restrict" }),
     createdByUserId: text("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -703,7 +706,7 @@ export const broadcasts = pgTable(
     name: text("name").notNull(),
     from: text("from").notNull(),
     templateName: text("template_name").notNull(),
-    templateRequiredVariables: jsonb("template_required_variables")
+    templateRequiredVariables: bunJsonb("template_required_variables")
       .$type<string[]>()
       .default(sql`'[]'::jsonb`)
       .notNull(),
@@ -714,6 +717,7 @@ export const broadcasts = pgTable(
       .$type<"live" | "test">()
       .notNull(),
     status: text("status").$type<BroadcastStatus>().default("running").notNull(),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
     pausedAt: timestamp("paused_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
@@ -728,6 +732,10 @@ export const broadcasts = pgTable(
   (table) => [
     index("broadcasts_org_id_created_at_idx").on(table.orgId, table.createdAt),
     index("broadcasts_status_created_at_idx").on(table.status, table.createdAt),
+    index("broadcasts_status_scheduled_for_idx").on(
+      table.status,
+      table.scheduledFor,
+    ),
     check(
       "broadcasts_name_length_check",
       sql`char_length(btrim(${table.name})) between 1 and 120`,
@@ -738,7 +746,11 @@ export const broadcasts = pgTable(
     ),
     check(
       "broadcasts_status_check",
-      sql`${table.status} in ('running', 'paused', 'completed', 'cancelled')`,
+      sql`${table.status} in ('scheduled', 'running', 'paused', 'completed', 'cancelled')`,
+    ),
+    check(
+      "broadcasts_scheduled_for_check",
+      sql`${table.status} <> 'scheduled' or ${table.scheduledFor} is not null`,
     ),
     check(
       "broadcasts_environment_check",
@@ -769,11 +781,11 @@ export const messages = pgTable(
       onDelete: "set null",
     }),
     from: text("from").notNull(),
-    to: jsonb("to").$type<string[]>().notNull(),
+    to: bunJsonb("to").$type<string[]>().notNull(),
     subject: text("subject").notNull(),
     html: text("html"),
     textBody: text("text"),
-    tags: jsonb("tags")
+    tags: bunJsonb("tags")
       .$type<EmailTag[]>()
       .default(sql`'[]'::jsonb`)
       .notNull(),
@@ -928,7 +940,7 @@ export const broadcastRecipients = pgTable(
     }),
     position: integer("position").notNull(),
     email: text("email").notNull(),
-    data: jsonb("data")
+    data: bunJsonb("data")
       .$type<Record<string, unknown>>()
       .default(sql`'{}'::jsonb`)
       .notNull(),
@@ -1048,7 +1060,7 @@ export const events = pgTable(
         | "opened"
       >()
       .notNull(),
-    data: jsonb("data")
+    data: bunJsonb("data")
       .$type<Record<string, unknown>>()
       .default(sql`'{}'::jsonb`)
       .notNull(),

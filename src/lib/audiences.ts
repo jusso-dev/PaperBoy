@@ -17,6 +17,7 @@ import {
   requirePermission,
   type OrgPermission,
 } from "@/lib/authorization";
+import { isPostgresErrorCode } from "@/lib/postgres-errors";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -54,9 +55,7 @@ export type AudienceRecipient = {
 };
 
 function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  if ("code" in error && error.code === "23505") return true;
-  return "cause" in error && isUniqueViolation(error.cause);
+  return isPostgresErrorCode(error, "23505");
 }
 
 function requireId(value: string, code: "AUDIENCE_NOT_FOUND" | "CONTACT_NOT_FOUND") {

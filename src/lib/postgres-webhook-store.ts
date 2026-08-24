@@ -41,14 +41,19 @@ export const postgresWebhookStore: WebhookStore = {
         .select({ id: webhookDeliveries.id })
         .from(webhookDeliveries)
         .where(
-          or(
-            and(
-              eq(webhookDeliveries.status, "queued"),
-              lte(webhookDeliveries.nextAttemptAt, input.now),
-            ),
-            and(
-              eq(webhookDeliveries.status, "sending"),
-              lte(webhookDeliveries.leaseExpiresAt, input.now),
+          and(
+            ...(input.deliveryId
+              ? [eq(webhookDeliveries.id, input.deliveryId)]
+              : []),
+            or(
+              and(
+                eq(webhookDeliveries.status, "queued"),
+                lte(webhookDeliveries.nextAttemptAt, input.now),
+              ),
+              and(
+                eq(webhookDeliveries.status, "sending"),
+                lte(webhookDeliveries.leaseExpiresAt, input.now),
+              ),
             ),
           ),
         )

@@ -10,7 +10,7 @@ Prefer header-only DSNs (`RET=HDRS`). A report is untrusted and may contain orig
 
 ## Postfix pipe
 
-Choose a dedicated address on a domain whose MX delivers to this Postfix instance, for example `paperboy-bounce@bounces.example.com`. Set this on every PaperBoy SMTP worker:
+Choose a dedicated address on a domain whose MX delivers to this Postfix instance, for example `paperboy-bounce@bounces.example.com`. Set this on every PaperBoy SMTP job process:
 
 ```dotenv
 PAPERBOY_BOUNCE_ADDRESS=paperboy-bounce@bounces.example.com
@@ -44,7 +44,7 @@ Define a final-delivery pipe. Adjust executable and deployment paths to their ex
 # /etc/postfix/master.cf
 paperboy-feedback unix - n n - - pipe
   flags=Rq user=paperboy directory=/srv/paperboy size=10485760
-  argv=/usr/local/bin/pnpm feedback:ingest
+  argv=/usr/local/bin/bun run feedback:ingest
 ```
 
 Then rebuild the indexed table and reload Postfix:
@@ -54,10 +54,10 @@ postmap /etc/postfix/transport
 postfix reload
 ```
 
-`pnpm feedback:ingest` reads one raw RFC 822 report from stdin, authenticates the protected tenant key, writes content-free JSON to stdout, and exits nonzero for malformed, oversized, unauthorized, or uncorrelated reports. Validate parsing with committed fixtures and no outbound delivery:
+`bun run feedback:ingest` reads one raw RFC 822 report from stdin, authenticates the protected tenant key, writes content-free JSON to stdout, and exits nonzero for malformed, oversized, unauthorized, or uncorrelated reports. Validate parsing with committed fixtures and no outbound delivery:
 
 ```sh
-pnpm exec tsx --test tests/feedback-core.test.mjs
+bun test tests/feedback-core.test.mjs
 ```
 
 ## Cloudflare Email Service

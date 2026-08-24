@@ -1,9 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
-import { config } from "dotenv";
 import { MAX_FEEDBACK_REPORT_BYTES } from "@/lib/feedback-core";
 import { protocolTimestamp } from "@/lib/time";
-
-config({ quiet: true });
 
 async function feedbackApiKey(): Promise<string> {
   const direct = process.env.PAPERBOY_FEEDBACK_API_KEY;
@@ -90,7 +87,7 @@ async function main() {
       })}\n`,
     );
   } finally {
-    await db.$client.end();
+    await db.$client.close();
   }
 }
 

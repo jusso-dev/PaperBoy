@@ -22,10 +22,6 @@ function apiKeyErrorMessage(error: unknown): string {
       return "Enter a key name between 1 and 80 characters.";
     }
 
-    if (error.code === "INVALID_ENVIRONMENT") {
-      return "Choose the live or test environment.";
-    }
-
     return "That API key action is no longer available.";
   }
 
@@ -41,7 +37,7 @@ export async function createApiKeyAction(
   try {
     const key = await createApiKey({
       actorUserId: session.user.id,
-      environment: formData.get("environment"),
+      environment: "live",
       name: formData.get("name"),
       orgId: organization.id,
     });

@@ -9,8 +9,8 @@ import {
 } from "@/db/schema";
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import {
+  attachmentStore as configuredAttachmentStore,
   attachmentStorageKey,
-  localAttachmentStore,
   type AttachmentStore,
 } from "@/lib/attachment-storage";
 import {
@@ -26,6 +26,7 @@ import {
 } from "@/lib/email-core";
 import { authorizeSendingDomain } from "@/lib/domains";
 import { insertMessageEvent } from "@/lib/message-events";
+import { requestMessageJob } from "@/lib/job-queue";
 import {
   appendOpenTrackingPixel,
   createOpenTrackingUrl,
@@ -34,6 +35,7 @@ import {
   isOutboundProvider,
   type OutboundProvider,
 } from "@/lib/outbound-provider-core";
+import { isPostgresErrorCode } from "@/lib/postgres-errors";
 import { consumeSendRateLimit } from "@/lib/rate-limits";
 import { materializeTemplateSendPayload } from "@/lib/templates";
 
@@ -78,15 +80,7 @@ function expiredIdempotencyWindow() {
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
-
-  if ("code" in error && error.code === "23505") {
-    return true;
-  }
-
-  return "cause" in error && isUniqueViolation(error.cause);
+  return isPostgresErrorCode(error, "23505");
 }
 
 function messageStatus(value: string): MessageStatus {
@@ -253,7 +247,7 @@ export async function queueEmail(input: {
     ]);
   }
 
-  const attachmentStore = input.attachmentStore ?? localAttachmentStore;
+  const attachmentStore = input.attachmentStore ?? configuredAttachmentStore;
   const storedKeys: string[] = [];
 
   try {
@@ -341,6 +335,7 @@ export async function queueEmail(input: {
           domainId: messages.domainId,
           environment: messages.environment,
           id: messages.id,
+          nextAttemptAt: messages.nextAttemptAt,
           provider: messages.outboundProvider,
           status: messages.status,
         });
@@ -383,6 +378,12 @@ export async function queueEmail(input: {
       }
 
       return inserted;
+    });
+
+    requestMessageJob({
+      attemptCount: 0,
+      messageId: created.id,
+      runAt: created.nextAttemptAt,
     });
 
     return {

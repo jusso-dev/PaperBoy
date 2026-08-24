@@ -35,6 +35,7 @@ const record = {
     suppressed: 2,
     total: 20,
   },
+  scheduledFor: null,
   sourceAudienceId: "77777777-7777-4777-8777-777777777777",
   sourceTemplateId: "88888888-8888-4888-8888-888888888888",
   status: "completed",
@@ -100,6 +101,7 @@ test("broadcast REST create is tenant-bound and returns UTC progress", async () 
   assert.equal(body.data.completed_at, fixedNow.toISOString());
   assert.equal(body.data.progress.suppressed, 2);
   assert.equal(body.data.source_audience_id, record.sourceAudienceId);
+  assert.equal(body.data.scheduled_at, null);
 });
 
 test("broadcast REST list, get, and controls share one authenticated service", async () => {

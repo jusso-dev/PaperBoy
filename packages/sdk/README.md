@@ -29,4 +29,4 @@ Keep the API key in a secret environment, never client-side browser code. Every 
 
 The SDK queues the same provider-neutral semantic message as raw HTTP and the first-class `paperboy_send_email` MCP tool. A self-hosted SMTP worker and Cloudflare Email Service therefore receive the same validated content, limits, suppressions, and event contract; Cloudflare remains responsible for its provider-owned DKIM/ARC signatures.
 
-Build distributable JavaScript and declarations with `pnpm sdk:build`. Generated `packages/sdk/dist` files are intentionally ignored and must not be committed.
+Build distributable JavaScript and declarations with `bun run sdk:build`. Generated `packages/sdk/dist` files are intentionally ignored and must not be committed.

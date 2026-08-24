@@ -1,8 +1,5 @@
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import { config } from "dotenv";
 import { createPaperBoyMcpServer } from "@/mcp/server";
-
-config({ quiet: true });
 
 async function main() {
   const rawApiKey = process.env.PAPERBOY_API_KEY;

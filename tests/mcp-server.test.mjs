@@ -164,6 +164,7 @@ const firstBroadcast = {
     suppressed: 2,
     total: 20,
   },
+  scheduledFor: null,
   sourceAudienceId: firstAudience.id,
   sourceTemplateId: firstTemplate.id,
   status: "completed",
@@ -730,7 +731,13 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_audience: ["audienceId", "name"],
       paperboy_update_contact: ["audienceId", "contactId", "email", "name"],
       paperboy_cancel_broadcast: ["broadcastId", "confirm"],
-      paperboy_create_broadcast: ["audienceId", "from", "name", "templateId"],
+      paperboy_create_broadcast: [
+        "audienceId",
+        "from",
+        "name",
+        "scheduledFor",
+        "templateId",
+      ],
       paperboy_create_domain: ["name"],
       paperboy_create_template: [
         "html",

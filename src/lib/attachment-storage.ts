@@ -7,6 +7,15 @@ import {
   unlink,
 } from "node:fs/promises";
 import { dirname, isAbsolute, parse, resolve, sep } from "node:path";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  type DeleteObjectCommandOutput,
+  type GetObjectCommandOutput,
+  type PutObjectCommandOutput,
+} from "@aws-sdk/client-s3";
 
 export type AttachmentStore = {
   delete: (storageKey: string) => Promise<void>;
@@ -35,6 +44,33 @@ const STORAGE_KEY_PATTERN = new RegExp(
   `^${UUID_SOURCE}/${UUID_SOURCE}/${UUID_SOURCE}\\.blob$`,
   "i",
 );
+const S3_BUCKET_PATTERN =
+  /^(?!\d{1,3}(?:\.\d{1,3}){3}$)(?!.*\.\.)(?!.*(?:\.-|-\.))[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+const S3_PREFIX_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9/_-]{0,127}$/;
+const S3_REGION_PATTERN = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/;
+const MAX_STORED_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+type S3AttachmentCommand =
+  | DeleteObjectCommand
+  | GetObjectCommand
+  | PutObjectCommand;
+
+type S3AttachmentClient = {
+  send: (
+    command: S3AttachmentCommand,
+  ) => Promise<
+    | DeleteObjectCommandOutput
+    | GetObjectCommandOutput
+    | PutObjectCommandOutput
+  >;
+};
+
+type S3AttachmentStoreOptions = {
+  bucket?: string;
+  client?: S3AttachmentClient;
+  prefix?: string;
+  region?: string;
+};
 
 function storageRoot(configuredRoot?: string): string {
   const configured =
@@ -64,6 +100,27 @@ function storedPath(root: string, storageKey: string): string {
   }
 
   return path;
+}
+
+function requiredS3Value(
+  value: string | undefined,
+  pattern: RegExp,
+): string {
+  const configured = value?.trim();
+
+  if (!configured || !pattern.test(configured)) {
+    throw new AttachmentStorageError("CONFIGURATION_INVALID");
+  }
+
+  return configured;
+}
+
+function s3ObjectKey(prefix: string, storageKey: string): string {
+  if (!STORAGE_KEY_PATTERN.test(storageKey)) {
+    throw new AttachmentStorageError("INTEGRITY_FAILED");
+  }
+
+  return `${prefix.replace(/\/+$/, "")}/${storageKey}`;
 }
 
 export function attachmentStorageKey(input: {
@@ -151,6 +208,112 @@ export function createLocalAttachmentStore(
 }
 
 export const localAttachmentStore = createLocalAttachmentStore();
+
+export function createS3AttachmentStore(
+  options: S3AttachmentStoreOptions = {},
+): AttachmentStore {
+  const bucket = requiredS3Value(
+    options.bucket ?? process.env.PAPERBOY_ATTACHMENT_S3_BUCKET,
+    S3_BUCKET_PATTERN,
+  );
+  const prefix = requiredS3Value(
+    options.prefix ?? process.env.PAPERBOY_ATTACHMENT_S3_PREFIX ?? "attachments",
+    S3_PREFIX_PATTERN,
+  ).replace(/\/+$/, "");
+  const region = requiredS3Value(
+    options.region ?? process.env.PAPERBOY_ATTACHMENT_S3_REGION,
+    S3_REGION_PATTERN,
+  );
+  const client = options.client ?? new S3Client({ region });
+
+  return {
+    async delete(storageKey) {
+      try {
+        await client.send(
+          new DeleteObjectCommand({
+            Bucket: bucket,
+            Key: s3ObjectKey(prefix, storageKey),
+          }),
+        );
+      } catch {
+        throw new AttachmentStorageError("DELETE_FAILED");
+      }
+    },
+
+    async put({ content, storageKey }) {
+      if (content.length > MAX_STORED_ATTACHMENT_BYTES) {
+        throw new AttachmentStorageError("INTEGRITY_FAILED");
+      }
+
+      try {
+        await client.send(
+          new PutObjectCommand({
+            Body: content,
+            Bucket: bucket,
+            CacheControl: "no-store",
+            ChecksumSHA256: createHash("sha256")
+              .update(content)
+              .digest("base64"),
+            ContentLength: content.length,
+            ContentType: "application/octet-stream",
+            IfNoneMatch: "*",
+            Key: s3ObjectKey(prefix, storageKey),
+            ServerSideEncryption: "AES256",
+          }),
+        );
+      } catch {
+        throw new AttachmentStorageError("WRITE_FAILED");
+      }
+    },
+
+    async read(storageKey) {
+      try {
+        const response = (await client.send(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: s3ObjectKey(prefix, storageKey),
+            Range: `bytes=0-${MAX_STORED_ATTACHMENT_BYTES}`,
+          }),
+        )) as GetObjectCommandOutput;
+        const bytes = await response.Body?.transformToByteArray();
+
+        if (!bytes || bytes.byteLength > MAX_STORED_ATTACHMENT_BYTES) {
+          throw new AttachmentStorageError("INTEGRITY_FAILED");
+        }
+
+        return Buffer.from(bytes);
+      } catch (error) {
+        if (error instanceof AttachmentStorageError) throw error;
+        throw new AttachmentStorageError("READ_FAILED");
+      }
+    },
+  };
+}
+
+export function createConfiguredAttachmentStore(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): AttachmentStore {
+  const driver =
+    environment.PAPERBOY_ATTACHMENT_STORAGE_DRIVER?.trim() || "local";
+
+  if (driver === "local") {
+    return createLocalAttachmentStore(
+      environment.PAPERBOY_ATTACHMENT_STORAGE_PATH,
+    );
+  }
+
+  if (driver === "s3") {
+    return createS3AttachmentStore({
+      bucket: environment.PAPERBOY_ATTACHMENT_S3_BUCKET,
+      prefix: environment.PAPERBOY_ATTACHMENT_S3_PREFIX,
+      region: environment.PAPERBOY_ATTACHMENT_S3_REGION,
+    });
+  }
+
+  throw new AttachmentStorageError("CONFIGURATION_INVALID");
+}
+
+export const attachmentStore = createConfiguredAttachmentStore();
 
 export function verifyStoredAttachment(input: {
   content: Buffer;

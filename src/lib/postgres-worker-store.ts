@@ -58,6 +58,7 @@ export const postgresWorkerStore: WorkerStore = {
         .from(messages)
         .where(
           and(
+            ...(input.messageId ? [eq(messages.id, input.messageId)] : []),
             inArray(messages.deliveryMode, input.deliveryModes),
             or(
               and(

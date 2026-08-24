@@ -25,7 +25,8 @@ Security invariants:
 - PaperBoy bearer API keys, Better Auth sessions and secret, and MCP process credentials.
 - DKIM private keys; webhook signing secrets; webhook/DKIM encryption keys; unsubscribe and open-tracking signing keys.
 - SMTP usernames/passwords, Cloudflare Email Service API tokens, and AWS access keys, session tokens, IAM role configuration, and external IDs injected through operator-default or per-organization provider variables.
-- PostgreSQL tenant, membership, domain, recipient, template, message, event, suppression, queue, and idempotency data.
+- PostgreSQL tenant, membership, domain, recipient, template, message, event, suppression, authoritative queue, and idempotency data.
+- Redis BullMQ dispatch, delay, retry, and concurrency state.
 - Private attachment bytes and their integrity metadata.
 - Sending-domain DNS, DKIM/SPF records, provider account, IP/domain reputation, and suppression state.
 - CI runner registration tokens, the runner host, Docker socket, repository credentials, and release integrity.
@@ -39,13 +40,14 @@ Security invariants:
 | REST or HTTP MCP client to PaperBoy | Untrusted until a bearer key is parsed, hashed, matched, and checked for revocation | JSON/MCP arguments, API key, idempotency key |
 | Local MCP stdio client to PaperBoy | The launching operator controls its environment and process boundary | Database URL, PaperBoy API key, feature secrets, MCP messages |
 | PaperBoy services to PostgreSQL | Database and its administrators are trusted infrastructure | Tenant data, encrypted secret envelopes, queue state, timestamps |
-| Web/worker to attachment storage | Host, mount, permissions, and backups are trusted infrastructure | Private attachment bytes and generated storage keys |
+| Web/jobs to attachment storage | Local volume or private S3 bucket, IAM role, encryption, permissions, and backups are trusted infrastructure | Private attachment bytes and generated storage keys |
+| Web/jobs to Redis | Private Redis endpoint, persistence, authentication, and `noeviction` policy are trusted infrastructure; PostgreSQL remains authoritative | Bounded job IDs, entity UUIDs, delays, attempts, and locks; no email bodies or attachment bytes |
 | Console/REST/MCP to provider settings | Current tenant membership and role are rechecked; secret values are never accepted | Provider IDs, safe readiness, domain overrides, UTC timestamps |
-| Worker to self-hosted SMTP/MTA | Operator must enforce authentication, relay policy, TLS, egress, and reputation controls | Secret-store credentials and raw MIME, optionally PaperBoy DKIM-signed |
-| Worker to Cloudflare Email Service | Cloudflare account, API token, TLS endpoint, and provider controls are trusted | SMTP MIME or future structured payload; Cloudflare owns final DKIM/ARC and `cf-bounce` behavior |
-| Worker to Amazon SES v2 | AWS account, region, least-privilege IAM credentials, verified identities, configuration set, and SES controls are trusted | Raw MIME or compatible bulk template data; SES owns final Easy DKIM and returns provider message IDs |
+| Jobs to self-hosted SMTP/MTA | Operator must enforce authentication, relay policy, TLS, egress, and reputation controls | Secret-store credentials and raw MIME, optionally PaperBoy DKIM-signed |
+| Jobs to Cloudflare Email Service | Cloudflare account, API token, TLS endpoint, and provider controls are trusted | SMTP MIME or future structured payload; Cloudflare owns final DKIM/ARC and `cf-bounce` behavior |
+| Jobs to Amazon SES v2 | AWS account, region, least-privilege IAM credentials, verified identities, configuration set, and SES controls are trusted | Raw MIME or compatible bulk template data; SES owns final Easy DKIM and returns provider message IDs |
 | Amazon SNS to public SES callback | Untrusted until the exact per-organization topic, AWS-hosted certificate URL, and cryptographic SNS signature validate | Bounded SNS envelope and embedded SES event; no PaperBoy bearer key |
-| Worker to webhook receiver | Receiver identity and HTTPS endpoint are configured by an organization owner/admin | Minimal event body plus timestamped HMAC signature |
+| Jobs to webhook receiver | Receiver identity and HTTPS endpoint are configured by an organization owner/admin | Minimal event body plus timestamped HMAC signature |
 | PaperBoy/operator to DNS | Registrar, DNS provider, and change-control accounts are trusted | SPF and DKIM public records, domain verification |
 | GitHub to self-hosted CI runner | Same-repository contributors and workflow definitions are trusted to run code | Source, actions, service containers, runner token, Docker access |
 
@@ -54,7 +56,9 @@ Callers can control request bodies, IDs, headers, email addresses and content, t
 The deployment assumptions are explicit:
 
 - Production secrets come from a protected secret store, are independently generated, and are available only to the processes that need them. They are not placed in Git, images, command-line arguments, logs, or MCP configuration committed to the repository.
-- Web, MCP, worker, CI, and development mail processes use `TZ=Australia/Sydney`; `PAPERBOY_FIXED_TIME_ZONE` prevents account drift. Provider and database instants are normalized to UTC before persistence or protocol output.
+- Web, MCP, jobs, CI, and development mail processes use `TZ=Australia/Sydney`; `PAPERBOY_FIXED_TIME_ZONE` prevents account drift. Provider and database instants are normalized to UTC before persistence or protocol output.
+- Production Redis uses private networking, persistent storage, and `maxmemory-policy=noeviction`. PostgreSQL reconciliation restores missing BullMQ jobs; Redis must never contain message bodies, recipients, credentials, or attachment bytes.
+- Production S3 attachment storage has all Block Public Access settings enabled, bucket-owner-enforced object ownership, SSE-S3 default encryption, and an EC2 role restricted to the configured object prefix. No attachment object has a public URL or ACL.
 - PostgreSQL, attachment storage, backups, and observability stay in the approved region with least-privilege access, encryption, recovery testing, and retention controls.
 - SMTP submission requires authenticated TLS. Cloudflare Email Service uses the literal `api_token` username, an URL-encoded API token, implicit TLS on port 465, and a narrowly scoped token.
 - Production egress policy limits SMTP, Cloudflare, AWS APIs, AWS SNS certificate/confirmation hosts, DNS, and webhook traffic. DNS resolution and connection targets are monitored to reduce private-network access and DNS-rebinding risk.
@@ -88,7 +92,7 @@ Amazon SES is also a first-class boundary. Credential fields are resolved from o
 
 SES `SendEmail` receives bounded raw MIME and `SendBulkEmail` receives one common attachment/template shape with per-entry values and tags. Worker delivery stores the SES message ID; the bulk provider method returns its per-entry IDs. Neither path stores raw provider responses or AWS request IDs. A successful API response means SES accepted the request, not that the recipient server accepted the email. The console's sandbox/production and sending-enabled result is a regional account observation, not live-delivery proof.
 
-SES quotas count recipients and are regional. Before each send, PaperBoy uses a PostgreSQL row lock and rolling reservations shared by workers, refreshes `GetAccount` quotas, and limits itself to 80% of the observed per-second rate and 90% of the rolling 24-hour allowance. Quota waits and SES throttles do not consume a delivery attempt. The guard is deliberately conservative but cannot protect other applications using the same AWS account from collectively consuming the remaining SES quota; account-level monitoring and alarms remain required.
+SES quotas count recipients and are regional. Before each send, PaperBoy uses a PostgreSQL row lock and rolling reservations shared by job processes, refreshes `GetAccount` quotas, and limits itself to 80% of the observed per-second rate and 90% of the rolling 24-hour allowance. Quota waits and SES throttles do not consume a delivery attempt. The guard is deliberately conservative but cannot protect other applications using the same AWS account from collectively consuming the remaining SES quota; account-level monitoring and alarms remain required.
 
 The signed SNS callback contains an organization UUID in its URL because SNS cannot present a PaperBoy bearer key. That UUID is not treated as authorization. PaperBoy requires an exact configured topic ARN, restricts certificate and confirmation URLs to the matching regional SNS host over HTTPS, refuses redirects, bounds downloads and request bodies, validates the X.509 signature, and only then parses the embedded SES event. Signature version 2 is recommended; version 1 remains accepted for AWS compatibility. EventBridge/REST/MCP ingestion instead requires a tenant-bound key whose creator remains an owner or admin.
 
@@ -106,9 +110,9 @@ If `PAPERBOY_WEBHOOK_ENCRYPTION_KEY` and the database both leak, stored signing 
 
 Template authors control email HTML. PaperBoy supports only bounded dotted variable substitution, rejects helpers/expressions/prototype-sensitive keys, escapes HTML substitutions, and sandboxes the console preview without scripts, forms, same-origin credentials, navigation, or remote subresources. Recipients still receive author-controlled HTML in their mail client; safe template review and mail-client defenses remain necessary.
 
-Attachment filenames never become paths. Bytes are written under generated root-confined keys with restrictive permissions and exclusive creation, then size and SHA-256 integrity are checked before delivery. Public status surfaces expose metadata only. Host administrators, compromised application processes, unsafe mounts, snapshots, and backups can still read attachment bytes. The web and worker must share a private, correctly permissioned volume and avoid serving it as static content.
+Attachment filenames never become paths. Bytes are written under generated keys with create-only semantics and a SHA-256 checksum, then size and integrity are checked before delivery. Local storage uses root-confined keys and restrictive permissions. S3 storage uses bounded private objects, explicit SSE-S3, bucket-level public-access blocks, and workload-role credentials. Public status surfaces expose metadata only. Host or AWS administrators, compromised application processes or roles, unsafe mounts, snapshots, and backups can still read attachment bytes.
 
-Suppressions, per-organization limits, domain verification, API-key environment separation, and transactional queue insertion constrain abuse. They do not make outbound content trustworthy, stop every enumeration attempt, or replace provider/MTA abuse controls. A worker crash after a provider accepts a message but before `sent` commits can produce a duplicate because delivery is at least once.
+Suppressions, per-organization limits, domain verification, API-key environment separation, and transactional queue insertion constrain abuse. They do not make outbound content trustworthy, stop every enumeration attempt, or replace provider/MTA abuse controls. A job-process crash after a provider accepts a message but before `sent` commits can produce a duplicate because delivery is at least once.
 
 ### Open tracking and recipient privacy
 

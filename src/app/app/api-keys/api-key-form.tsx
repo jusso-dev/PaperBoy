@@ -55,17 +55,10 @@ export function ApiKeyForm() {
             id="key-name"
             maxLength={80}
             name="name"
-            placeholder="Production app"
+            placeholder="Automation"
             required
             type="text"
           />
-        </div>
-        <div className="field">
-          <label htmlFor="key-environment">Environment</label>
-          <select defaultValue="live" id="key-environment" name="environment">
-            <option value="live">Live</option>
-            <option value="test">Test</option>
-          </select>
         </div>
         <button className="btn btn-primary" disabled={isPending} type="submit">
           {isPending ? "Creating…" : "Create API key"}

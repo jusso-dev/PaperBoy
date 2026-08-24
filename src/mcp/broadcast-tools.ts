@@ -39,7 +39,7 @@ export const PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS = [
   },
   {
     description:
-      "Send one template now to a stored audience snapshot with signed unsubscribe links and suppression checks.",
+      "Send or schedule one template to a stored audience snapshot with signed unsubscribe links and suppression checks.",
     mutating: true,
     name: PAPERBOY_BROADCAST_MCP_TOOL_NAMES[2],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
@@ -94,6 +94,7 @@ const createBroadcastInputSchema = z
     audienceId: z.string().uuid(),
     from: z.string().min(3).max(320),
     name: z.string().min(1).max(MAX_BROADCAST_NAME_LENGTH),
+    scheduledFor: z.iso.datetime({ offset: true }).optional(),
     templateId: z.string().uuid(),
   })
   .strict();
@@ -129,9 +130,10 @@ const broadcastSchema = z.object({
   name: z.string(),
   pausedAt: z.iso.datetime({ offset: true }).nullable(),
   progress: progressSchema,
+  scheduledFor: z.iso.datetime({ offset: true }).nullable(),
   sourceAudienceId: z.string().uuid().nullable(),
   sourceTemplateId: z.string().uuid().nullable(),
-  status: z.enum(["running", "paused", "completed", "cancelled"]),
+  status: z.enum(["scheduled", "running", "paused", "completed", "cancelled"]),
   templateName: z.string(),
   updatedAt: z.iso.datetime({ offset: true }),
 });
@@ -167,6 +169,9 @@ function serialize(record: BroadcastRecord) {
     name: record.name,
     pausedAt: record.pausedAt ? protocolTimestamp(record.pausedAt) : null,
     progress: record.progress,
+    scheduledFor: record.scheduledFor
+      ? protocolTimestamp(record.scheduledFor)
+      : null,
     sourceAudienceId: record.sourceAudienceId,
     sourceTemplateId: record.sourceTemplateId,
     status: record.status,

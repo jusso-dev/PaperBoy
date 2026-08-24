@@ -54,8 +54,8 @@ export default async function ApiKeysPage({ searchParams }: ApiKeysPageProps) {
         {canCreate ? (
           <>
             <p>
-              Live and test keys are separate. The raw key appears once and is
-              never stored by PaperBoy.
+              Keys belong to this PaperBoy deployment. The raw key appears once
+              and is never stored by PaperBoy.
             </p>
             <ApiKeyForm />
           </>
@@ -95,8 +95,6 @@ export default async function ApiKeysPage({ searchParams }: ApiKeysPageProps) {
                       <tr key={key.id}>
                         <td>
                           {key.name}
-                          <br />
-                          <span className="pill pill-muted">{environment}</span>
                         </td>
                         <td>
                           <code>

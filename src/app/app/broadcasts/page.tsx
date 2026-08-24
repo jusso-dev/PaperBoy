@@ -1,11 +1,15 @@
 import {
   cancelBroadcastAction,
+  createBroadcastAction,
   pauseBroadcastAction,
   resumeBroadcastAction,
 } from "./actions";
 import { can } from "@/lib/authorization";
+import { listAudiences } from "@/lib/audiences";
 import { listBroadcasts } from "@/lib/broadcasts";
+import { listDomains } from "@/lib/domains";
 import { requireOrganization } from "@/lib/session";
+import { listTemplates } from "@/lib/templates";
 import { formatDateTime } from "@/lib/time";
 
 type BroadcastsPageProps = {
@@ -13,15 +17,24 @@ type BroadcastsPageProps = {
 };
 
 const errorMessages: Record<string, string> = {
+  "audience-empty": "Choose an audience with at least one active subscribed contact.",
+  "audience-not-found": "That audience is no longer available.",
+  "consent-required": "Confirm recipient consent and sender identification before sending.",
   forbidden: "Your role does not allow that broadcast operation.",
+  "invalid-schedule": "Choose one unambiguous future date and time.",
   "invalid-transition": "That broadcast can no longer make this state change.",
   "not-found": "That broadcast is no longer available.",
+  "template-not-found": "That template is no longer available.",
+  "unsubscribe-unavailable": "Public unsubscribe signing is not configured.",
+  validation: "Check the broadcast name, sender, audience, template, and schedule.",
 };
 
 const successMessages: Record<string, string> = {
   cancel: "Broadcast cancelled. Pending recipients will not be queued.",
+  created: "Broadcast created and queued.",
   pause: "Broadcast paused after its current recipient.",
   resume: "Broadcast resumed.",
+  scheduled: "Broadcast scheduled.",
 };
 
 export default async function BroadcastsPage({
@@ -32,19 +45,45 @@ export default async function BroadcastsPage({
     searchParams,
   ]);
   const canRead = can(organization.role, "broadcasts.read");
+  const canCreate = can(organization.role, "broadcasts.create");
   const canControl = can(organization.role, "broadcasts.control");
-  const records = canRead
-    ? await listBroadcasts({
-        actorUserId: session.user.id,
-        orgId: organization.id,
-      })
-    : [];
+  const [records, audiences, templates, domains] = await Promise.all([
+    canRead
+      ? listBroadcasts({
+          actorUserId: session.user.id,
+          orgId: organization.id,
+        })
+      : [],
+    canCreate
+      ? listAudiences({
+          actorUserId: session.user.id,
+          orgId: organization.id,
+        })
+      : [],
+    canCreate
+      ? listTemplates({
+          actorUserId: session.user.id,
+          orgId: organization.id,
+        })
+      : [],
+    canCreate
+      ? listDomains({
+          actorUserId: session.user.id,
+          orgId: organization.id,
+        })
+      : [],
+  ]);
+  const readyDomains = domains.filter(
+    (domain) =>
+      domain.status === "verified" &&
+      domain.dkimKeys.some((key) => key.status === "active"),
+  );
 
   return (
     <section>
       <h1 className="page-title">Broadcasts</h1>
       <p className="page-sub">
-        Send-now snapshots of stored audiences created through REST or MCP.
+        Send now or schedule stored audience snapshots from console, REST, or MCP.
         Progress times use <code>{session.user.timezone}</code>.
       </p>
 
@@ -59,13 +98,101 @@ export default async function BroadcastsPage({
         </p>
       ) : null}
 
+      <div className="card">
+        <h2>Create broadcast</h2>
+        {!canCreate ? (
+          <p>Owners and admins create broadcasts.</p>
+        ) : audiences.length === 0 || templates.length === 0 || readyDomains.length === 0 ? (
+          <p>
+            Create an audience and template first. Sender identities come from
+            the configured email provider; PaperBoy does not onboard domains here.
+          </p>
+        ) : (
+          <form action={createBroadcastAction} className="template-form">
+            <div className="field">
+              <label htmlFor="broadcast-name">Broadcast name</label>
+              <input id="broadcast-name" maxLength={120} name="name" required />
+            </div>
+            <div className="send-envelope-grid">
+              <div className="field">
+                <label htmlFor="broadcast-audience">Audience</label>
+                <select id="broadcast-audience" name="audienceId" required>
+                  {audiences.map((audience) => (
+                    <option key={audience.id} value={audience.id}>
+                      {audience.name} · {audience.activeContactCount} active
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="broadcast-template">Template</label>
+                <select id="broadcast-template" name="templateId" required>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="broadcast-from">From address</label>
+              <input
+                autoCapitalize="none"
+                id="broadcast-from"
+                list="broadcast-sender-identities"
+                name="from"
+                placeholder={`news@${readyDomains[0]?.name ?? "example.com"}`}
+                required
+                spellCheck={false}
+                type="email"
+              />
+              <datalist id="broadcast-sender-identities">
+                {readyDomains.map((domain) => (
+                  <option key={domain.id} value={`news@${domain.name}`} />
+                ))}
+              </datalist>
+              <p className="field-help">
+                Domain must be a verified sender identity in the active provider.
+              </p>
+            </div>
+            <fieldset className="field">
+              <legend>Delivery</legend>
+              <label>
+                <input defaultChecked name="delivery" type="radio" value="now" /> Send now
+              </label>
+              <label>
+                <input name="delivery" type="radio" value="scheduled" /> Schedule
+              </label>
+              <input
+                aria-label={`Scheduled time in ${session.user.timezone}`}
+                name="scheduledLocal"
+                type="datetime-local"
+              />
+              <p className="field-help">
+                Schedule interpreted as <code>{session.user.timezone}</code>.
+              </p>
+            </fieldset>
+            <label>
+              <input name="consentConfirmed" required type="checkbox" value="yes" />{" "}
+              Recipients consented, and template identifies sender with current contact details.
+            </label>
+            <p className="field-help">
+              PaperBoy adds a public signed unsubscribe link and suppresses opted-out recipients.
+            </p>
+            <button className="btn btn-primary" type="submit">
+              Create broadcast
+            </button>
+          </form>
+        )}
+      </div>
+
       {!canRead ? (
         <p className="empty-state">Your role cannot read broadcasts.</p>
       ) : records.length === 0 ? (
         <p className="empty-state">
-          No broadcasts yet. Use <code>POST /api/v1/broadcasts</code> or the
-          MCP broadcast tool with an audience ID to send one template to up to
-          100 active contacts.
+          No broadcasts yet. Create one above, use <code>POST /api/v1/broadcasts</code>,
+          or use the MCP broadcast tool.
         </p>
       ) : (
         <div className="broadcast-list">
@@ -115,24 +242,28 @@ export default async function BroadcastsPage({
                 </dl>
 
                 <p className="template-meta">
-                  Started {formatDateTime(record.createdAt, session.user.timezone)} · updated{" "}
+                  {record.scheduledFor
+                    ? `Scheduled ${formatDateTime(record.scheduledFor, session.user.timezone)}`
+                    : `Started ${formatDateTime(record.createdAt, session.user.timezone)}`} · updated{" "}
                   {formatDateTime(record.updatedAt, session.user.timezone)}
                 </p>
 
                 {canControl &&
-                (record.status === "running" || record.status === "paused") ? (
+                (record.status === "scheduled" ||
+                  record.status === "running" ||
+                  record.status === "paused") ? (
                   <div className="broadcast-actions">
                     {record.status === "running" ? (
                       <form action={pauseBroadcastAction}>
                         <input name="broadcastId" type="hidden" value={record.id} />
                         <button className="btn btn-compact" type="submit">Pause</button>
                       </form>
-                    ) : (
+                    ) : record.status === "paused" ? (
                       <form action={resumeBroadcastAction}>
                         <input name="broadcastId" type="hidden" value={record.id} />
                         <button className="btn btn-compact" type="submit">Resume</button>
                       </form>
-                    )}
+                    ) : null}
                     <form action={cancelBroadcastAction}>
                       <input name="broadcastId" type="hidden" value={record.id} />
                       <button className="btn btn-danger btn-compact" type="submit">

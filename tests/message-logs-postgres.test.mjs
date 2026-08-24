@@ -91,9 +91,9 @@ test(
     const attachmentId = randomUUID();
     const attachment = Buffer.from("Cloudflare-compatible attachment proof\n");
     const storageKey = `${orgId}/${mimeMessage.id}/${attachmentId}.blob`;
-    const lock = await db.$client.connect();
+    const lock = await db.$client.reserve();
 
-    await lock.query("SELECT pg_advisory_lock($1)", [190026]);
+    await lock`SELECT pg_advisory_lock(${190026})`;
 
     try {
       await db.insert(orgs).values([
@@ -251,19 +251,18 @@ test(
       assert.doesNotMatch(emlText, /DKIM-Signature:/i);
       assert.doesNotMatch(emlText, /ARC-Seal:/i);
 
-      const indexResult = await lock.query(
-        `SELECT indexname FROM pg_indexes
+      const indexResult = await lock`
+        SELECT indexname FROM pg_indexes
          WHERE schemaname = 'public'
            AND tablename = 'messages'
-           AND indexname = ANY($1::text[])`,
-        [[
-          "messages_org_id_created_at_id_idx",
-          "messages_org_id_status_created_at_id_idx",
-          "messages_org_id_domain_id_created_at_id_idx",
-        ]],
-      );
+           AND indexname IN (
+             ${"messages_org_id_created_at_id_idx"},
+             ${"messages_org_id_status_created_at_id_idx"},
+             ${"messages_org_id_domain_id_created_at_id_idx"}
+           )
+      `;
       assert.deepEqual(
-        indexResult.rows.map((row) => row.indexname).sort(),
+        indexResult.map((row) => row.indexname).sort(),
         [
           "messages_org_id_created_at_id_idx",
           "messages_org_id_domain_id_created_at_id_idx",
@@ -275,9 +274,8 @@ test(
         await db.delete(orgs).where(inArray(orgs.id, [orgId, otherOrgId]));
         await db.delete(users).where(inArray(users.id, [ownerId, adminId, memberId]));
       } finally {
-        await lock.query("SELECT pg_advisory_unlock($1)", [190026]);
+        await lock`SELECT pg_advisory_unlock(${190026})`;
         lock.release();
-        await db.$client.end();
       }
     }
   },

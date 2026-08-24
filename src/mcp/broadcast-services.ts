@@ -11,9 +11,13 @@ function servicePayload(payload: unknown): unknown {
   const mapped: Record<string, unknown> = {
     ...input,
     audience_id: input.audienceId,
+    ...(input.scheduledFor === undefined
+      ? {}
+      : { scheduled_for: input.scheduledFor }),
     template_id: input.templateId,
   };
   delete mapped.audienceId;
+  delete mapped.scheduledFor;
   delete mapped.templateId;
   return mapped;
 }

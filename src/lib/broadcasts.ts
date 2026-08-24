@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
   apiKeys,
@@ -11,20 +11,27 @@ import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import { AudienceError } from "@/lib/audience-core";
 import { getActiveAudienceContacts } from "@/lib/audiences";
 import {
+  can,
   isOrgRole,
   requirePermission,
   type OrgPermission,
 } from "@/lib/authorization";
 import {
   BroadcastError,
+  MAX_BROADCAST_SCHEDULE_AHEAD_MS,
   parseCreateBroadcastInput,
   type BroadcastRecipientStatus,
   type BroadcastStatus,
 } from "@/lib/broadcast-core";
 import { DomainError } from "@/lib/domain-core";
 import { EmailError } from "@/lib/email-core";
-import { queueEmail, type QueuedMessageRecord } from "@/lib/messages";
+import {
+  queueEmail,
+  type MessageQueuePrincipal,
+  type QueuedMessageRecord,
+} from "@/lib/messages";
 import { RateLimitError } from "@/lib/rate-limit-core";
+import { requestBroadcastJob } from "@/lib/job-queue";
 import { TemplateError, renderTemplateForSend } from "@/lib/template-core";
 import { getTemplate } from "@/lib/templates";
 import {
@@ -52,6 +59,7 @@ export type BroadcastRecord = {
   name: string;
   pausedAt: Date | null;
   progress: BroadcastProgress;
+  scheduledFor: Date | null;
   sourceAudienceId: string | null;
   sourceTemplateId: string | null;
   status: BroadcastStatus;
@@ -59,11 +67,15 @@ export type BroadcastRecord = {
   updatedAt: Date;
 };
 
+export type BroadcastPrincipal = Omit<ApiKeyPrincipal, "apiKeyId"> & {
+  apiKeyId: string | null;
+};
+
 export type BroadcastQueue = (input: {
   allowAttachments?: boolean;
   idempotencyKey?: unknown;
   payload: unknown;
-  principal: ApiKeyPrincipal;
+  principal: MessageQueuePrincipal;
 }) => Promise<QueuedMessageRecord>;
 
 type ProcessBroadcastDependencies = {
@@ -84,6 +96,7 @@ const broadcastSelection = {
   name: broadcasts.name,
   orgId: broadcasts.orgId,
   pausedAt: broadcasts.pausedAt,
+  scheduledFor: broadcasts.scheduledFor,
   sourceAudienceId: broadcasts.sourceAudienceId,
   sourceTemplateId: broadcasts.sourceTemplateId,
   status: broadcasts.status,
@@ -173,6 +186,7 @@ async function recordFromRow(
     name: row.name,
     pausedAt: row.pausedAt,
     progress: await broadcastProgress(row.id),
+    scheduledFor: row.scheduledFor,
     sourceAudienceId: row.sourceAudienceId,
     sourceTemplateId: row.sourceTemplateId,
     status: row.status,
@@ -249,18 +263,38 @@ async function claimRecipient(input: {
       return null;
     }
 
-    const [credential] = await tx
-      .select({ revokedAt: apiKeys.revokedAt })
-      .from(apiKeys)
-      .where(
-        and(
-          eq(apiKeys.id, broadcast.apiKeyId),
-          eq(apiKeys.orgId, broadcast.orgId),
-        ),
-      )
-      .limit(1);
+    let authorized = false;
+    if (broadcast.apiKeyId) {
+      const [credential] = await tx
+        .select({ revokedAt: apiKeys.revokedAt })
+        .from(apiKeys)
+        .where(
+          and(
+            eq(apiKeys.id, broadcast.apiKeyId),
+            eq(apiKeys.orgId, broadcast.orgId),
+          ),
+        )
+        .limit(1);
+      authorized = Boolean(credential && !credential.revokedAt);
+    } else if (broadcast.createdByUserId) {
+      const [membership] = await tx
+        .select({ role: orgMembers.role })
+        .from(orgMembers)
+        .where(
+          and(
+            eq(orgMembers.orgId, broadcast.orgId),
+            eq(orgMembers.userId, broadcast.createdByUserId),
+          ),
+        )
+        .limit(1);
+      authorized = Boolean(
+        membership &&
+          isOrgRole(membership.role) &&
+          can(membership.role, "broadcasts.create"),
+      );
+    }
 
-    if (!credential || credential.revokedAt) {
+    if (!authorized) {
       await tx
         .update(broadcasts)
         .set({ pausedAt: input.now, status: "paused", updatedAt: input.now })
@@ -442,7 +476,9 @@ export async function processBroadcast(
       );
       const message = await queue({
         allowAttachments: false,
-        idempotencyKey: `broadcast:${broadcast.id}:${recipient.id}`,
+        ...(broadcast.apiKeyId
+          ? { idempotencyKey: `broadcast:${broadcast.id}:${recipient.id}` }
+          : {}),
         payload: {
           from: broadcast.from,
           ...(rendered.html === null ? {} : { html: rendered.html }),
@@ -491,7 +527,7 @@ export async function processBroadcast(
 }
 
 export async function createBroadcast(
-  input: { payload: unknown; principal: ApiKeyPrincipal },
+  input: { payload: unknown; principal: BroadcastPrincipal },
   dependencies: ProcessBroadcastDependencies = {},
 ): Promise<BroadcastRecord> {
   const actorUserId = await requireOrganizationPermission({
@@ -500,6 +536,20 @@ export async function createBroadcast(
     permission: "broadcasts.create",
   });
   const definition = parseCreateBroadcastInput(input.payload);
+  const now = dependencies.now?.() ?? new Date();
+  if (
+    definition.scheduledFor &&
+    (definition.scheduledFor <= now ||
+      definition.scheduledFor.getTime() - now.getTime() >
+        MAX_BROADCAST_SCHEDULE_AHEAD_MS)
+  ) {
+    throw new BroadcastError("VALIDATION_ERROR", [
+      {
+        field: "scheduled_for",
+        message: "Schedule broadcasts in the future and no more than 366 days ahead.",
+      },
+    ]);
+  }
   const [template, audience] = await Promise.all([
     getTemplate({
       actorUserId,
@@ -540,6 +590,7 @@ export async function createBroadcast(
         from: definition.from,
         name: definition.name,
         orgId: input.principal.orgId,
+        scheduledFor: definition.scheduledFor,
         sourceAudienceId: definition.audienceId,
         sourceTemplateId: template.id,
         templateHtml: templateBodies.html,
@@ -547,6 +598,9 @@ export async function createBroadcast(
         templateRequiredVariables: template.requiredVariables,
         templateSubject: template.subject,
         templateText: templateBodies.text,
+        ...(definition.scheduledFor ? { status: "scheduled" as const } : {}),
+        createdAt: now,
+        updatedAt: now,
       })
       .returning({ id: broadcasts.id });
 
@@ -567,10 +621,18 @@ export async function createBroadcast(
     return broadcast;
   });
 
-  await processBroadcast(
-    { broadcastId: created.id, orgId: input.principal.orgId },
-    dependencies,
-  );
+  if (!definition.scheduledFor && dependencies.queue) {
+    await processBroadcast(
+      { broadcastId: created.id, orgId: input.principal.orgId },
+      dependencies,
+    );
+  } else {
+    requestBroadcastJob({
+      broadcastId: created.id,
+      orgId: input.principal.orgId,
+      runAt: definition.scheduledFor ?? now,
+    });
+  }
 
   return recordFromRow(
     await readBroadcastRow({
@@ -578,6 +640,101 @@ export async function createBroadcast(
       orgId: input.principal.orgId,
     }),
   );
+}
+
+export async function processBroadcastJob(
+  input: { broadcastId: string; orgId: string },
+  dependencies: ProcessBroadcastDependencies = {},
+): Promise<boolean> {
+  requireBroadcastId(input.broadcastId);
+  const now = dependencies.now?.() ?? new Date();
+  const runnable = await db.transaction(async (tx) => {
+    const [broadcast] = await tx
+      .select({
+        id: broadcasts.id,
+        orgId: broadcasts.orgId,
+        scheduledFor: broadcasts.scheduledFor,
+        status: broadcasts.status,
+      })
+      .from(broadcasts)
+      .where(
+        and(
+          eq(broadcasts.id, input.broadcastId),
+          eq(broadcasts.orgId, input.orgId),
+        ),
+      )
+      .for("update");
+
+    if (!broadcast) {
+      return null;
+    }
+
+    if (broadcast.status === "running") {
+      return { id: broadcast.id, orgId: broadcast.orgId };
+    }
+
+    if (
+      broadcast.status !== "scheduled" ||
+      !broadcast.scheduledFor ||
+      broadcast.scheduledFor > now
+    ) {
+      return null;
+    }
+
+    const [updated] = await tx
+      .update(broadcasts)
+      .set({ status: "running", updatedAt: now })
+      .where(
+        and(
+          eq(broadcasts.id, broadcast.id),
+          eq(broadcasts.status, "scheduled"),
+        ),
+      )
+      .returning({ id: broadcasts.id, orgId: broadcasts.orgId });
+    return updated ?? null;
+  });
+
+  if (!runnable) return false;
+  await processBroadcast(
+    { broadcastId: runnable.id, orgId: runnable.orgId },
+    dependencies,
+  );
+  return true;
+}
+
+export async function processNextScheduledBroadcast(
+  dependencies: ProcessBroadcastDependencies = {},
+): Promise<boolean> {
+  const now = dependencies.now?.() ?? new Date();
+  const claimed = await db.transaction(async (tx) => {
+    const [due] = await tx
+      .select({ id: broadcasts.id, orgId: broadcasts.orgId })
+      .from(broadcasts)
+      .where(
+        and(
+          eq(broadcasts.status, "scheduled"),
+          lte(broadcasts.scheduledFor, now),
+        ),
+      )
+      .orderBy(asc(broadcasts.scheduledFor), asc(broadcasts.createdAt))
+      .limit(1)
+      .for("update", { skipLocked: true });
+
+    if (!due) return null;
+    const [updated] = await tx
+      .update(broadcasts)
+      .set({ status: "running", updatedAt: now })
+      .where(and(eq(broadcasts.id, due.id), eq(broadcasts.status, "scheduled")))
+      .returning({ id: broadcasts.id, orgId: broadcasts.orgId });
+    return updated ?? null;
+  });
+
+  if (!claimed) return false;
+  await processBroadcast(
+    { broadcastId: claimed.id, orgId: claimed.orgId },
+    dependencies,
+  );
+  return true;
 }
 
 export async function listBroadcasts(input: {
@@ -646,7 +803,9 @@ async function setBroadcastStatus(input: {
       (input.target === "paused" && current.status === "running") ||
       (input.target === "running" && current.status === "paused") ||
       (input.target === "cancelled" &&
-        (current.status === "running" || current.status === "paused"));
+        (current.status === "scheduled" ||
+          current.status === "running" ||
+          current.status === "paused"));
 
     if (!allowed) {
       throw new BroadcastError("INVALID_TRANSITION");
@@ -674,6 +833,14 @@ async function setBroadcastStatus(input: {
         );
     }
   });
+
+  if (input.target === "running") {
+    requestBroadcastJob({
+      broadcastId: input.broadcastId,
+      orgId: input.orgId,
+      runAt: now,
+    });
+  }
 }
 
 export async function pauseBroadcast(input: {
@@ -694,7 +861,9 @@ export async function resumeBroadcast(
   dependencies: ProcessBroadcastDependencies = {},
 ): Promise<BroadcastRecord> {
   await setBroadcastStatus({ ...input, target: "running", now: dependencies.now });
-  await processBroadcast(input, dependencies);
+  if (dependencies.queue) {
+    await processBroadcast(input, dependencies);
+  }
   return getBroadcast(input);
 }
 

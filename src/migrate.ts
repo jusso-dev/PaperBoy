@@ -1,8 +1,5 @@
 import { resolve } from "node:path";
-import { config } from "dotenv";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-
-config({ quiet: true });
+import { migrate } from "drizzle-orm/bun-sql/migrator";
 
 async function main() {
   const { db } = await import("@/db");
@@ -12,7 +9,7 @@ async function main() {
     });
     console.error("PaperBoy database migrations applied.");
   } finally {
-    await db.$client.end();
+    await db.$client.close();
   }
 }
 

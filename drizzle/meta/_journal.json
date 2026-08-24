@@ -162,6 +162,13 @@
       "when": 1787537459081,
       "tag": "0022_strong_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787562981561,
+      "tag": "0023_cold_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

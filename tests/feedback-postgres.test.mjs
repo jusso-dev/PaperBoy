@@ -20,11 +20,15 @@ async function runFeedbackCli({ databaseUrl, keyFile, raw }) {
     PAPERBOY_FEEDBACK_API_KEY_FILE: keyFile,
   };
   delete environment.PAPERBOY_FEEDBACK_API_KEY;
-  const child = spawn("pnpm", ["exec", "tsx", "src/feedback-ingest.ts"], {
-    cwd: repositoryRoot,
-    env: environment,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const child = spawn(
+    process.execPath,
+    ["--no-install", "src/feedback-ingest.ts"],
+    {
+      cwd: repositoryRoot,
+      env: environment,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
   const stdout = [];
   const stderr = [];
   child.stdout.on("data", (chunk) => stdout.push(chunk));
@@ -74,7 +78,7 @@ test(
     const orgId = randomUUID();
     const apiKeyId = randomUUID();
     const userId = `feedback-user-${randomUUID()}`;
-    const integrationLock = await db.$client.connect();
+    const integrationLock = await db.$client.reserve();
     const encryptionKey = Buffer.alloc(32, 12);
     const generatedKey = generateApiKey("test");
     const secretDirectory = await mkdtemp(
@@ -103,7 +107,7 @@ test(
       to: ["Hard Bounce <hard-bounce@example.net>"],
     };
 
-    await integrationLock.query("SELECT pg_advisory_lock($1)", [190019]);
+    await integrationLock`SELECT pg_advisory_lock(${190019})`;
 
     try {
       await db.insert(orgs).values({ id: orgId, name: "Feedback integration" });
@@ -310,9 +314,8 @@ test(
         await db.delete(users).where(eq(users.id, userId));
       } finally {
         await rm(secretDirectory, { force: true, recursive: true });
-        await integrationLock.query("SELECT pg_advisory_unlock($1)", [190019]);
+        await integrationLock`SELECT pg_advisory_unlock(${190019})`;
         integrationLock.release();
-        await db.$client.end();
       }
     }
   },

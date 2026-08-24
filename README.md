@@ -9,6 +9,8 @@ Self-hosted transactional email. A cheaper Resend you run on your own box.
 - Next.js 16.3 App Router
 - Instant navigation (no full reloads on dashboard routes)
 - Drizzle ORM + Postgres
+- Bun 1.4 runtime, package manager, and test runner
+- Redis + BullMQ for delayed, retrying, and concurrent jobs
 - Better Auth
 - First-class MCP server over the same domain services as HTTP and the console
 - CI on Linux self-hosted runners with isolated PostgreSQL and Mailpit service containers, the fixed `Australia/Sydney` application timezone, read-only repository permissions, and no GitHub-hosted labels. Fork pull requests are skipped so untrusted code never reaches the runner; same-repository pull requests and `main` pushes run the full gate.
@@ -22,7 +24,7 @@ docker pull --platform linux/arm64 ghcr.io/jusso-dev/paperboy:main
 docker run --rm --platform linux/arm64 --env-file /path/to/protected.env -p 3000:3000 ghcr.io/jusso-dev/paperboy:main
 ```
 
-The image runs the web and remote MCP server as a non-root user with `TZ=Australia/Sydney`, `PAPERBOY_DEFAULT_TIME_ZONE=Australia/Sydney`, and `PAPERBOY_FIXED_TIME_ZONE=Australia/Sydney`. Run the outbound worker from the same immutable image digest as a separately supervised process by overriding the command with `pnpm worker`; local MCP clients can use `pnpm mcp:stdio`. The fixed policy applies to every account and presentation surface while stored instants and public protocol timestamps remain UTC.
+The image runs Next.js and the remote MCP server on Bun as a non-root user with `TZ=Australia/Sydney`, `PAPERBOY_DEFAULT_TIME_ZONE=Australia/Sydney`, and `PAPERBOY_FIXED_TIME_ZONE=Australia/Sydney`. Run BullMQ jobs from the same immutable image digest as a separately supervised process by overriding the command with `bun run jobs`; local MCP clients can use `bun run mcp:stdio`. The fixed policy applies to every account and presentation surface while stored instants and public protocol timestamps remain UTC.
 
 ## Security
 
@@ -30,7 +32,7 @@ PaperBoy's repository-scoped [threat model](docs/threat-model.md) covers Better 
 
 Password sign-in supports TOTP MFA, single-use recovery codes, 30-day trusted devices, and a 15-minute account lock after five failed second-factor attempts. Passkeys are a phishing-resistant passwordless sign-in option and can be enrolled, named, listed, and deleted in Settings. Before enrolling passkeys in production, set `BETTER_AUTH_URL` and `PAPERBOY_PASSKEY_ORIGIN` to the exact external HTTPS origin and set `PAPERBOY_PASSKEY_RP_ID` to that host or a valid parent domain. A passkey sign-in is a standalone passwordless factor; it is not followed by the TOTP challenge used for password sign-in.
 
-Run `pnpm security:secrets` before pushing. CI scans full Git history with pinned, checksum-verified Gitleaks default rules plus explicit AWS-key, PaperBoy API-key, webhook-secret, service-key, SMTP-credential, and Cloudflare Email token patterns. Scanning runs locally; the repository is not uploaded to a security SaaS. A clean scan cannot find every runtime or novel secret, so rotate any exposed credential before cleaning source history.
+Run `bun run security:secrets` before pushing. CI scans full Git history with pinned, checksum-verified Gitleaks default rules plus explicit AWS-key, PaperBoy API-key, webhook-secret, service-key, SMTP-credential, and Cloudflare Email token patterns. Scanning runs locally; the repository is not uploaded to a security SaaS. A clean scan cannot find every runtime or novel secret, so rotate any exposed credential before cleaning source history.
 
 ## Theme
 
@@ -41,14 +43,14 @@ Paper watermark (newsprint, cream stock). Light blue accent `#7EB8DA`. Ink `#1A1
 PaperBoy uses PostgreSQL through Drizzle ORM. Set `DATABASE_URL` to an operator-controlled PostgreSQL instance hosted in the approved Australian region, then apply the in-repo migrations:
 
 ```sh
-pnpm db:migrate
+bun run db:migrate
 ```
 
-Generate a migration after changing `src/db/schema.ts` with `pnpm db:generate`.
+Generate a migration after changing `src/db/schema.ts` with `bun run db:generate`.
 
 The production image includes the immutable `drizzle/` migration bundle and its
-runtime dependencies, so the same `pnpm db:migrate` command can run as a
-one-off release task before the web and worker containers are replaced.
+runtime dependencies, so the same `bun run db:migrate` command can run as a
+one-off release task before the web and job containers are replaced.
 
 All stored instants and public protocol timestamps are UTC. PaperBoy persists and enforces `Australia/Sydney` for every user-facing calendar, console, log, and scheduling surface; the Settings control is locked while `PAPERBOY_FIXED_TIME_ZONE` is set.
 
@@ -78,7 +80,7 @@ The pixel is part of provider-neutral stored HTML before delivery. Self-hosted S
 
 The signed-in console at `/app/send` lets owners and admins compose one provider test from a verified domain. It enters the same live queue used by `POST /api/v1/emails` and `paperboy_send_email`, including domain/DKIM authorisation, suppressions, organization rate limits, delivery events, and logs. Members can inspect delivery records but cannot queue a console send. Success timestamps render in fixed `Australia/Sydney` time; stored and protocol timestamps remain UTC.
 
-This is a real provider check rather than isolated test-sink traffic. A development worker configured for Mailpit captures it, while a production worker configured for Cloudflare Email Service submits it through the same live SMTP adapter. Use a safe recipient address.
+This is a real provider check rather than isolated test-sink traffic. A development job runner configured for Mailpit captures it, while a production job runner configured for Cloudflare Email Service submits it through the same live SMTP adapter. Use a safe recipient address.
 
 ## Message logs
 
@@ -115,7 +117,9 @@ curl https://paperboy.example/api/v1/emails \
 
 Single sends accept up to 100 private attachments as `{content, filename, content_type}`. `content` must be canonical Base64; filenames cannot contain paths or control characters; MIME types use forms such as `application/pdf` or `image/png`. Decoded attachment bytes may total at most 10 MiB per message, with an HTTP 413 response above that limit. The batch endpoint intentionally rejects attachments.
 
-Set `PAPERBOY_ATTACHMENT_STORAGE_PATH` to a dedicated absolute path on a private local or shared Australian-hosted volume. PaperBoy creates generated tenant/message blob keys with directory mode `0700` and file mode `0600`; it never uses the submitted filename as a path and never creates a public download URL. PostgreSQL stores only attachment metadata, byte size, SHA-256 integrity hash, and the opaque storage key. The application and worker must mount the same path.
+For local storage, set `PAPERBOY_ATTACHMENT_STORAGE_DRIVER=local` and `PAPERBOY_ATTACHMENT_STORAGE_PATH` to a dedicated absolute path on a private volume shared by web and jobs. PaperBoy creates generated blob keys with directory mode `0700` and file mode `0600`.
+
+For production S3, set the driver to `s3` plus `PAPERBOY_ATTACHMENT_S3_BUCKET`, `PAPERBOY_ATTACHMENT_S3_REGION`, and optional `PAPERBOY_ATTACHMENT_S3_PREFIX` (default `attachments`). The AWS SDK uses the standard credential chain, including the EC2 instance role; do not inject static access keys. Writes are create-only, checksum-protected, private, and explicitly SSE-S3 encrypted. Keep all S3 Block Public Access controls enabled and grant only `GetObject`, `PutObject`, and `DeleteObject` on the configured prefix. PaperBoy never creates an attachment URL. PostgreSQL stores only attachment metadata, byte size, SHA-256 integrity hash, and the opaque storage key.
 
 A live key can queue only from a verified domain in its organization with an active PaperBoy DKIM key. A test key always queues to the isolated `test-sink` mode and cannot become live delivery. Send idempotency is optional through either the `Idempotency-Key` header or JSON `idempotency_key` field; when both are present they must match exactly. Keys are scoped to the authenticated API key, limited to 256 visible ASCII characters, and active for 24 hours from the first accepted message using PostgreSQL UTC instants. During that window, repeating the same normalized request returns the original ID and a changed body returns 409. After expiry, reuse creates a new message. Replays insert no queue row, consume no rate-limit slot, and never resubmit to SMTP or Cloudflare Email Service. The first-class MCP `idempotencyKey` input uses the same 24-hour service.
 
@@ -139,40 +143,42 @@ curl https://paperboy.example/api/v1/emails/batch \
 
 Each item is validated and queued independently under the same API-key, domain, suppression, and organization rate-limit rules. Inline and template-backed items can be mixed in one batch. Mixed success returns HTTP 207 with each array position containing either `{id}` or a structured `{error}`; valid neighbors are not dropped. If rate limiting affects any item, `Retry-After` reports the window delay; an entirely capped batch returns 429. Invalid envelopes return 422. Batch idempotency is not available yet, so an `Idempotency-Key` fails explicitly instead of being ignored.
 
-The queue stores semantic `from`, `to`, subject, HTML/text, tags, and private attachment references rather than prebuilt MIME. This leaves Date and DKIM ownership to the selected outbound adapter: a self-hosted SMTP path builds MIME with the stored bytes and can use PaperBoy signing, while Cloudflare Email Sending receives structured Base64 attachments and constructs and signs its provider-managed message without double-signing. This endpoint persists `queued` rows; the outbound worker is a separate deployment component.
+The queue stores semantic `from`, `to`, subject, HTML/text, tags, and private attachment references rather than prebuilt MIME. This leaves Date and DKIM ownership to the selected outbound adapter: a self-hosted SMTP path builds MIME with the stored bytes and can use PaperBoy signing, while Cloudflare Email Sending receives structured Base64 attachments and constructs and signs its provider-managed message without double-signing. This endpoint persists authoritative `queued` rows in PostgreSQL and dispatches exact BullMQ jobs through Redis; the job runner is a separate deployment component.
 
 Message and event instants are PostgreSQL `timestamptz` values. REST and MCP expose them as RFC 3339 UTC; console presentation uses fixed `Australia/Sydney` time.
 
 ### OpenAPI and TypeScript SDK
 
-[`openapi.yaml`](openapi.yaml) is the linted OpenAPI 3.1 contract for single-message send/detail/events, outbound-provider selection and testing, organization open tracking, its public signed pixel, webhook configuration, and raw-body signature verification. It also records each private operation's first-class MCP equivalent. Validate it with `pnpm openapi:lint`.
+[`openapi.yaml`](openapi.yaml) is the linted OpenAPI 3.1 contract for single-message send/detail/events, outbound-provider selection and testing, organization open tracking, its public signed pixel, webhook configuration, and raw-body signature verification. It also records each private operation's first-class MCP equivalent. Validate it with `bun run openapi:lint`.
 
-The handwritten [`@paperboy/sdk`](packages/sdk/README.md) exposes `send()` and `get(id)` over the same HTTP surface using platform `fetch` and no runtime dependencies. Build JavaScript and declarations with `pnpm sdk:build`; generated `packages/sdk/dist` output is ignored and must not be committed. SDK and MCP timestamps remain UTC, with explicit IANA timezones applied only by presentation clients. Self-hosted SMTP and Cloudflare Email Service consume the same provider-neutral queued message; Cloudflare remains responsible for its provider-owned DKIM/ARC signatures.
+The handwritten [`@paperboy/sdk`](packages/sdk/README.md) exposes `send()` and `get(id)` over the same HTTP surface using platform `fetch` and no runtime dependencies. Build JavaScript and declarations with `bun run sdk:build`; generated `packages/sdk/dist` output is ignored and must not be committed. SDK and MCP timestamps remain UTC, with explicit IANA timezones applied only by presentation clients. Self-hosted SMTP and Cloudflare Email Service consume the same provider-neutral queued message; Cloudflare remains responsible for its provider-owned DKIM/ARC signatures.
 
-## Outbound worker
+## BullMQ jobs
 
-Run a supervised worker beside the web process after applying migrations:
+Run a supervised job process beside the web process after applying migrations:
 
 ```sh
-pnpm worker
+bun run jobs
 ```
 
-The worker needs the same `DATABASE_URL`, `PAPERBOY_ATTACHMENT_STORAGE_PATH`, and `PAPERBOY_WEBHOOK_ENCRYPTION_KEY` as the web process. `PAPERBOY_WORKER_POLL_MS` controls idle polling from 100 to 60,000 milliseconds and defaults to 1,000. `PAPERBOY_WORKER_ID` can supply a stable 1-128 character process identity; otherwise PaperBoy uses the host name and PID. Keep the process environment on `TZ=Australia/Sydney` with both PaperBoy timezone variables fixed to the same value. Queue instants, retries, and provider timestamps remain explicitly UTC.
+Both web and jobs require `REDIS_URL`. The job process also needs the same `DATABASE_URL`, attachment driver settings, provider variables, and `PAPERBOY_WEBHOOK_ENCRYPTION_KEY` as the web process. Redis is BullMQ's dispatch, delay, and concurrency plane; configure persistent storage and `maxmemory-policy=noeviction`. PostgreSQL remains the authoritative message, broadcast, webhook, lease, retry, and delivery state. A five-second reconciler restores Redis jobs from PostgreSQL after enqueue errors, Redis loss, or process restarts.
+
+`PAPERBOY_MESSAGE_JOB_CONCURRENCY`, `PAPERBOY_BROADCAST_JOB_CONCURRENCY`, and `PAPERBOY_WEBHOOK_JOB_CONCURRENCY` default to 5, 1, and 5. `PAPERBOY_JOB_RECONCILE_MS` defaults to 5,000 and `PAPERBOY_JOB_RECONCILE_LIMIT` to 250. `PAPERBOY_QUEUE_PREFIX` defaults to `paperboy`; set a distinct prefix when multiple PaperBoy deployments share Redis. `PAPERBOY_JOB_WORKER_ID` may supply a stable process identity. Keep every process on fixed `Australia/Sydney`; queue instants, retries, and provider timestamps remain UTC.
 
 Set `SMTP_URL` to provide the operator-default SMTP credential. PaperBoy accepts `smtp://` submission and `smtps://` implicit TLS URLs. `SMTP_TLS_MODE` defaults to `required`: an `smtp://` connection must upgrade with STARTTLS or fail safely. `opportunistic` permits a failed upgrade to continue and `disabled` sends plaintext, so use either weaker mode only on a trusted development network. `smtps://` always requires implicit TLS. Inject URL credentials through the deployment secret store; PaperBoy never writes the URL, credentials, or raw relay response to PostgreSQL, REST, console, MCP, delivery status, or logs.
 
-Each organisation selects a default provider and may override individual sending domains. The choice is snapshotted on every queued message, so later changes cannot reroute existing mail. Missing credentials fail closed with a clear 422 before a new live row is inserted. If credentials disappear after queueing, the worker fails that provider route explicitly instead of silently falling back to SMTP. See the [provider contract, secret naming, REST, console, MCP, and Cloudflare guide](docs/outbound-providers.md).
+Each organisation selects a default provider and may override individual sending domains. The choice is snapshotted on every queued message, so later changes cannot reroute existing mail. Missing credentials fail closed with a clear 422 before a new live row is inserted. If credentials disappear after queueing, the job runner fails that provider route explicitly instead of silently falling back to SMTP. See the [provider contract, secret naming, REST, console, MCP, and Cloudflare guide](docs/outbound-providers.md).
 
 ### Mailpit development MTA
 
 The committed development Compose file runs the official Mailpit image with its UI and SMTP listener bound to host loopback:
 
 ```sh
-docker compose -f compose.dev.yml up --wait mailpit
-pnpm worker
+docker compose -f compose.dev.yml up --wait redis mailpit
+bun run jobs
 ```
 
-The development values in `.env.example` point the worker at plaintext Mailpit on `127.0.0.1:1025`; inspect captured messages at [http://127.0.0.1:8025](http://127.0.0.1:8025). Stop this isolated service with `docker compose -f compose.dev.yml down`. Do not carry `SMTP_TLS_MODE=disabled` into production.
+The development values in `.env.example` point jobs at plaintext Mailpit on `127.0.0.1:1025` and Redis on `127.0.0.1:6379`; inspect captured messages at [http://127.0.0.1:8025](http://127.0.0.1:8025). Start both with `docker compose -f compose.dev.yml up --wait redis mailpit`. Stop this isolated service with `docker compose -f compose.dev.yml down`. Do not carry `SMTP_TLS_MODE=disabled` into production.
 
 For a production Postfix, Haraka, or equivalent submission service, use its authenticated `smtp://...:587` endpoint and leave `SMTP_TLS_MODE` unset so STARTTLS is mandatory. An implicit-TLS relay uses `smtps://...:465`.
 
@@ -182,23 +188,23 @@ Cloudflare Email Service is a first-class selectable identity over the same hard
 
 ### Amazon SES
 
-Amazon SES is a first-class regional SES v2 adapter. It accepts an operator default or per-organisation IAM role/access-key configuration, submits recipient-specific worker deliveries as complete raw MIME with `SendEmail`, stores the returned SES message ID, and exposes `SendBulkEmail` through the provider contract for compatible groups of up to 50. A PostgreSQL-backed quota guard refreshes regional `GetAccount` quotas, reserves recipient capacity across every worker, uses 80% of the observed per-second rate and 90% of the rolling 24-hour allowance, and defers safely when capacity is unavailable without consuming the message retry budget. Connection tests combine `GetAccount` with paginated `ListEmailIdentities` discovery and surface only the region, sandbox/production access, sending-enabled state, and normalized domains whose SES verification is successful and sending is enabled. SES Easy DKIM owns signing on this path.
+Amazon SES is a first-class regional SES v2 adapter. It accepts an operator default or per-organisation IAM role/access-key configuration, submits recipient-specific jobs as complete raw MIME with `SendEmail`, stores the returned SES message ID, and exposes `SendBulkEmail` through the provider contract for compatible groups of up to 50. A PostgreSQL-backed quota guard refreshes regional `GetAccount` quotas, reserves recipient capacity across every job process, uses 80% of the observed per-second rate and 90% of the rolling 24-hour allowance, and defers safely when capacity is unavailable without consuming the message retry budget. Connection tests combine `GetAccount` with paginated `ListEmailIdentities` discovery and surface only the region, sandbox/production access, sending-enabled state, and normalized domains whose SES verification is successful and sending is enabled. SES Easy DKIM owns signing on this path.
 
 Configuration-set tags correlate delivery, delay, bounce, and complaint events. Signed SNS uses the per-organisation public callback; EventBridge, REST, and MCP use the authenticated tenant service. Events are idempotent and content-free. Permanent bounces and complaints update the same provider-neutral suppression list checked before future sends. See the [SES credentials, event endpoints, console, REST, MCP, and DNS guide](docs/outbound-providers.md).
 
 PaperBoy still keeps a provider-neutral semantic queue. SMTP builds raw MIME only inside the SMTP adapter. The separate Cloudflare structured-payload builder remains available for a REST or Workers adapter and deliberately omits PaperBoy-owned Date and DKIM headers. Both paths consume the same validated bodies, signed first-party open pixels when the organization opted in, and attachment bytes, so enabling SMTP does not turn the queue or MCP surface into an SMTP-only contract.
 
-PostgreSQL is the queue and lock service. A worker claims one due `queued` message with `FOR UPDATE SKIP LOCKED`, changes it to `sending`, and holds a five-minute lease. `sent` and `failed` are terminal. If a process exits mid-send, the row remains durable and another worker can reclaim it after lease expiry. Delivery is therefore at least once: a crash after an external provider accepts a message but before PaperBoy commits `sent` can cause a duplicate, so adapters should use provider idempotency where available.
+BullMQ schedules exact message, broadcast, webhook, and reconciliation jobs in Redis. Each job re-checks authoritative PostgreSQL state before acting. A message job claims one due `queued` message with `FOR UPDATE SKIP LOCKED`, changes it to `sending`, and holds a five-minute lease. `sent` and `failed` are terminal. If a process exits mid-send, PostgreSQL retains the row and reconciliation makes it claimable after lease expiry. Delivery remains at least once: a crash after an external provider accepts a message but before PaperBoy commits `sent` can cause a duplicate, so adapters should use provider idempotency where available.
 
 Transient network failures, HTTP 5xx, and SMTP 4xx return to `queued` after 1 minute, 5 minutes, 30 minutes, then 2 hours. Five failed attempts exhaust the retry budget. SMTP 550 and other permanent errors move directly to `failed`. Sanitized error codes and reasons are stored for the console and MCP; message content, recipient addresses, attachments, credentials, and raw provider responses are not returned by those status surfaces.
 
-The worker routes test keys only to the isolated test sink and routes live messages by their persisted provider identity. The shared contract supports send, optional batch and scheduling operations, connection tests, provider receipts, and event mapping. SMTP, explicit Cloudflare, and Amazon SES identities are live now; Azure fails explicitly until its dedicated adapter lands. The worker core passes one provider-neutral semantic message including verified attachment bytes. SMTP and SES build MIME from that value, while the Cloudflare compatibility assertion also converts that exact value into Cloudflare Email Sending's structured, unsigned REST payload.
+The job runner routes test keys only to the isolated test sink and routes live messages by their persisted provider identity. The shared contract supports send, optional batch and scheduling operations, connection tests, provider receipts, and event mapping. SMTP, explicit Cloudflare, and Amazon SES identities are live now; Azure fails explicitly until its dedicated adapter lands. Delivery passes one provider-neutral semantic message including verified attachment bytes. SMTP and SES build MIME from that value, while the Cloudflare compatibility assertion also converts that exact value into Cloudflare Email Sending's structured, unsigned REST payload.
 
-Queue creation stores its `queued` event in the same transaction as the message. A successful worker transition stores `sent` state and its initial `delivered` event atomically, so self-hosted SMTP, Cloudflare Email Service SMTP, and SES share one event contract. SES configuration-set feedback then adds idempotent `delivered`, `deferred`, `bounced`, or `complained` provider outcomes. Equal event instants use an internal sequence tie-break; REST and MCP timelines remain stable without exposing that sequence.
+Queue creation stores its `queued` event in the same transaction as the message. A successful job transition stores `sent` state and its initial `delivered` event atomically, so self-hosted SMTP, Cloudflare Email Service SMTP, and SES share one event contract. SES configuration-set feedback then adds idempotent `delivered`, `deferred`, `bounced`, or `complained` provider outcomes. Equal event instants use an internal sequence tie-break; REST and MCP timelines remain stable without exposing that sequence.
 
 ### Bounce and complaint feedback
 
-PaperBoy ingests bounded RFC 3464 DSNs and RFC 5965 ARFs through `pnpm feedback:ingest` or the first-class `paperboy_ingest_feedback` MCP tool. Permanent `5.x.x` bounces and complaints add organization suppressions; transient `4.x.x` bounces do not. Future single, batch, broadcast, HTTP, and MCP sends reject suppressed recipients with `recipient_suppressed` before queue insertion. Raw reports are never stored, exact replays are idempotent, events and signed webhooks contain no recipient or report content, and every timestamp remains UTC.
+PaperBoy ingests bounded RFC 3464 DSNs and RFC 5965 ARFs through `bun run feedback:ingest` or the first-class `paperboy_ingest_feedback` MCP tool. Permanent `5.x.x` bounces and complaints add organization suppressions; transient `4.x.x` bounces do not. Future single, batch, broadcast, HTTP, and MCP sends reject suppressed recipients with `recipient_suppressed` before queue insertion. Raw reports are never stored, exact replays are idempotent, events and signed webhooks contain no recipient or report content, and every timestamp remains UTC.
 
 For self-hosted SMTP, set `PAPERBOY_BOUNCE_ADDRESS` and route that address to the protected Postfix stdin hook. PaperBoy adds a stable correlation header and requests failure/delay DSNs. Cloudflare Email Sending instead owns its `cf-bounce` return path and provider suppression pipeline; do not replace it. Cloudflare SMTP delivery still emits through the same PaperBoy event/webhook path. See the exact [Postfix and Cloudflare feedback guide](docs/feedback.md).
 
@@ -221,7 +227,7 @@ curl -X PUT https://paperboy.example/api/v1/webhooks \
   --data '{"url":"https://hooks.example.com/paperboy"}'
 ```
 
-First creation returns a generated `whsec_...` `signing_secret`. Store it immediately in the receiver's secret manager: PaperBoy keeps only a context-bound AES-256-GCM envelope and `GET /api/v1/webhooks` never returns either raw or encrypted secret. Reconfiguring the URL preserves the existing secret and returns `signing_secret: null`. Set the same `PAPERBOY_WEBHOOK_ENCRYPTION_KEY` to a dedicated Base64-encoded 32-byte key in every web, MCP, and worker process; do not reuse the DKIM key. Without it, the worker leaves webhook deliveries queued.
+First creation returns a generated `whsec_...` `signing_secret`. Store it immediately in the receiver's secret manager: PaperBoy keeps only a context-bound AES-256-GCM envelope and `GET /api/v1/webhooks` never returns either raw or encrypted secret. Reconfiguring the URL preserves the existing secret and returns `signing_secret: null`. Set the same `PAPERBOY_WEBHOOK_ENCRYPTION_KEY` to a dedicated Base64-encoded 32-byte key in every web, MCP, and job process; do not reuse the DKIM key. Without it, webhook delivery jobs remain queued.
 
 Each event POST carries `webhook-id`, `webhook-timestamp`, and `webhook-signature`. The signature is `v1,<Base64 HMAC-SHA256>` over the exact raw UTF-8 string `<id>.<Unix-seconds timestamp>.<body>`, keyed by the Base64-decoded portion after `whsec_`. Verify the raw body before JSON parsing, compare in constant time, and reject timestamps outside a five-minute tolerance. The format follows Svix's [white-labelled signing contract and manual verification algorithm](https://docs.svix.com/receiving/verifying-payloads/how-manual).
 
@@ -312,7 +318,7 @@ Shared delivery policy blocks live keys unless the normalized From domain is ver
 PaperBoy exposes the same organization-safe application services to agents through two MCP transports:
 
 - Streamable HTTP at `https://<paperboy-host>/api/mcp`
-- stdio with `pnpm mcp:stdio`
+- stdio with `bun run mcp:stdio`
 
 Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Local stdio clients provide `DATABASE_URL` and `PAPERBOY_API_KEY` through the child process environment:
 
@@ -320,8 +326,8 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 {
   "mcpServers": {
     "paperboy": {
-      "command": "pnpm",
-      "args": ["--dir", "/absolute/path/to/PaperBoy", "mcp:stdio"],
+      "command": "bun",
+      "args": ["--cwd", "/absolute/path/to/PaperBoy", "run", "mcp:stdio"],
       "env": {
         "DATABASE_URL": "<injected database URL>",
         "PAPERBOY_API_KEY": "<injected PaperBoy API key>",
@@ -331,7 +337,9 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
         "PAPERBOY_WEBHOOK_ENCRYPTION_KEY": "<injected different base64-encoded 32-byte key>",
         "PAPERBOY_UNSUBSCRIBE_SIGNING_KEY": "<injected dedicated base64-encoded 32-byte key>",
         "PAPERBOY_PUBLIC_URL": "https://paperboy.example",
-        "PAPERBOY_ATTACHMENT_STORAGE_PATH": "<private shared attachment path>"
+        "PAPERBOY_ATTACHMENT_STORAGE_DRIVER": "s3",
+        "PAPERBOY_ATTACHMENT_S3_BUCKET": "<private bucket>",
+        "PAPERBOY_ATTACHMENT_S3_REGION": "ap-southeast-2"
       }
     }
   }
@@ -340,7 +348,7 @@ Streamable HTTP clients must send `Authorization: Bearer <PaperBoy API key>`. Lo
 
 Inject secrets through the agent runtime's secret or environment facility. Do not put keys in tool arguments, URLs, command-line arguments, source control, or logs.
 
-The contract exposes capability/account context plus first-class rate-limit settings, audience/contact CRUD and CSV import, single/batch sending, delivery-status list/get, ordered message-event timelines, signed webhook get/configure, template list/get/create/update/delete/preview, broadcast list/get/create/pause/resume/cancel, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, rate limits, audiences, worker operation, signed webhook verification, templates, broadcasts, suppressions, and DNS. Rate-limit and audience/contact tools never accept an organization ID; destructive deletions require explicit confirmation. `paperboy_list_delivery_statuses` and `paperboy_get_delivery_status` expose attempts, state times, and sanitized failures without recipients or message content. `paperboy_list_message_events` exposes the ordered lifecycle without recipients, content, event data, provider payloads, or the internal sequence. `paperboy_get_webhook` omits all secret material; `paperboy_configure_webhook` returns a signing secret only when first creating the endpoint. `paperboy_preview_template` renders sample JSON and lists missing required variables without queueing or sending mail. Broadcast tools accept an audience ID and expose aggregate progress without returning contact addresses or message bodies; cancellation requires explicit confirmation. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Rate-limit, template, audience, contact, broadcast, delivery, webhook, domain, and DKIM reads or mutations re-read the key creator's current membership and role. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
+The contract exposes capability/account context plus first-class rate-limit settings, audience/contact CRUD and CSV import, single/batch sending, delivery-status list/get, ordered message-event timelines, signed webhook get/configure, template list/get/create/update/delete/preview, broadcast list/get/create/pause/resume/cancel, domain list/create/verify/delete, and DKIM setup/rotate/finalise tools. Authenticated resources cover configuration, operator safety, rate limits, audiences, BullMQ job operation, signed webhook verification, templates, broadcasts, suppressions, and DNS. Rate-limit and audience/contact tools never accept an organization ID; destructive deletions require explicit confirmation. `paperboy_list_delivery_statuses` and `paperboy_get_delivery_status` expose attempts, state times, and sanitized failures without recipients or message content. `paperboy_list_message_events` exposes the ordered lifecycle without recipients, content, event data, provider payloads, or the internal sequence. `paperboy_get_webhook` omits all secret material; `paperboy_configure_webhook` returns a signing secret only when first creating the endpoint. `paperboy_preview_template` renders sample JSON and lists missing required variables without queueing or sending mail. Broadcast tools accept an audience ID and expose aggregate progress without returning contact addresses or message bodies; cancellation requires explicit confirmation. `paperboy_send_email` accepts inline content or `template_id` plus `data`, as well as the same private Base64 attachments as HTTP, but never returns message or attachment content. `paperboy_send_email_batch` preserves input order, reports per-item failures, supports template-backed items, and rejects attachments. Every tool schema carries `paperboy/schemaVersion`. Tenant context comes from the key; callers cannot select another organization. Rate-limit, template, audience, contact, broadcast, delivery, webhook, domain, and DKIM reads or mutations re-read the key creator's current membership and role. MCP protocol timestamps are RFC 3339 UTC and identify `UTC` explicitly. DKIM output contains public DNS material and lifecycle metadata only.
 
 HTTP checks revocation on every request. Stdio checks at startup and before every tool call; after revocation, reconnect with a newly issued key. Tool schemas and non-tenant documentation may remain discoverable on an already-open stdio connection, but tenant operations fail immediately.
 

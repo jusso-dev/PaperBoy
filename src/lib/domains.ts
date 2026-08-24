@@ -37,6 +37,7 @@ import {
 } from "@/lib/authorization";
 import { requireProviderConfigured } from "@/lib/outbound-provider-configuration";
 import { isLiveOutboundProvider } from "@/lib/outbound-provider-core";
+import { isPostgresErrorCode } from "@/lib/postgres-errors";
 
 export { DomainError } from "@/lib/domain-core";
 export type { DomainErrorCode } from "@/lib/domain-core";
@@ -57,15 +58,7 @@ export type SendingDomainRecord = {
 type DomainAccess = SendingDomainRecord & { role: OrgRole };
 
 function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
-
-  if ("code" in error && error.code === "23505") {
-    return true;
-  }
-
-  return "cause" in error && isUniqueViolation(error.cause);
+  return isPostgresErrorCode(error, "23505");
 }
 
 export function configuredSpfRecord(): string {

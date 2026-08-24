@@ -25,6 +25,7 @@ export const ORG_PERMISSIONS = [
   "messages.send",
   "openTracking.manage",
   "openTracking.read",
+  "organizations.rename",
   "outboundProviders.manage",
   "outboundProviders.read",
   "rateLimits.manage",

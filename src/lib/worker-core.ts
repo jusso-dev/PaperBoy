@@ -35,6 +35,7 @@ export type WorkerStore = {
   claim: (input: {
     deliveryModes: MessageDeliveryMode[];
     leaseExpiresAt: Date;
+    messageId?: string;
     now: Date;
     workerId: string;
   }) => Promise<Omit<WorkerClaim, "attachments"> | null>;
@@ -227,6 +228,7 @@ export const routeOutboundAdapters = routeOutboundProviders;
 export async function processNextMessage(input: {
   adapter: OutboundAdapter;
   deliveryModes: MessageDeliveryMode[];
+  messageId?: string;
   now?: () => Date;
   store: WorkerStore;
   workerId: string;
@@ -236,6 +238,7 @@ export async function processNextMessage(input: {
   const claim = await input.store.claim({
     deliveryModes: input.deliveryModes,
     leaseExpiresAt: new Date(claimedAt.getTime() + DELIVERY_LEASE_MS),
+    ...(input.messageId ? { messageId: input.messageId } : {}),
     now: claimedAt,
     workerId: input.workerId,
   });

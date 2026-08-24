@@ -60,9 +60,9 @@ test(
     const recipient = `reader-${randomUUID()}@example.net`;
     const subject = `PaperBoy console proof ${randomUUID()}`;
     const fixedNow = new Date("2026-08-24T05:06:07.000Z");
-    const lock = await db.$client.connect();
+    const lock = await db.$client.reserve();
 
-    await lock.query("SELECT pg_advisory_lock($1)", [190025]);
+    await lock`SELECT pg_advisory_lock(${190025})`;
     try {
       await db.insert(orgs).values({ id: orgId, name: "Console send tenant" });
       await db.insert(users).values([
@@ -233,9 +233,8 @@ test(
         await db.delete(users).where(eq(users.id, adminId));
         await db.delete(users).where(eq(users.id, memberId));
       } finally {
-        await lock.query("SELECT pg_advisory_unlock($1)", [190025]);
+        await lock`SELECT pg_advisory_unlock(${190025})`;
         lock.release();
-        await db.$client.end();
       }
     }
   },

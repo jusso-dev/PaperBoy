@@ -89,6 +89,9 @@ test("members cannot mint API keys or delete domains", () => {
   assert.equal(can("member", "openTracking.manage"), false);
   assert.equal(can("member", "outboundProviders.read"), true);
   assert.equal(can("member", "outboundProviders.manage"), false);
+  assert.equal(can("owner", "organizations.rename"), true);
+  assert.equal(can("admin", "organizations.rename"), false);
+  assert.equal(can("member", "organizations.rename"), false);
   assert.throws(
     () => requirePermission("member", "apiKeys.create"),
     AuthorizationError,

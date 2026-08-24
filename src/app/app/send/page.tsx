@@ -100,14 +100,14 @@ export default async function Send({ searchParams }: SendPageProps) {
         </div>
       ) : readyDomains.length === 0 ? (
         <div className="card">
-          <h2>No live-ready domain</h2>
+          <h2>No provider-ready sender identity</h2>
           <p>
-            Verify a sending domain and activate its DKIM selector before
-            composing a provider test.
+            Configure and verify a sender identity in the active email provider,
+            then test that provider connection.
           </p>
           <p className="card-actions">
-            <Link className="btn btn-primary" href="/app/domains">
-              Open sending domains
+            <Link className="btn btn-primary" href="/app/organization">
+              Open outbound providers
             </Link>
           </p>
         </div>

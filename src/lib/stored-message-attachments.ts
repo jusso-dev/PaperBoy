@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { messageAttachments } from "@/db/schema";
 import {
-  localAttachmentStore,
+  attachmentStore as configuredAttachmentStore,
   verifyStoredAttachment,
   type AttachmentStore,
 } from "@/lib/attachment-storage";
@@ -21,7 +21,7 @@ export async function loadMessageAttachments(input: {
   attachmentStore?: AttachmentStore;
   messageId: string;
 }): Promise<LoadedMessageAttachment[]> {
-  const attachmentStore = input.attachmentStore ?? localAttachmentStore;
+  const attachmentStore = input.attachmentStore ?? configuredAttachmentStore;
   const rows = await db
     .select({
       contentSha256: messageAttachments.contentSha256,

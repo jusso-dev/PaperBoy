@@ -33,6 +33,7 @@ export type OrganizationErrorCode =
   | "CANNOT_REMOVE_OWNER"
   | "CANNOT_REMOVE_SELF"
   | "INVALID_EMAIL"
+  | "INVALID_NAME"
   | "INVALID_ROLE"
   | "INVITATION_NOT_FOUND"
   | "MEMBERSHIP_REQUIRED"
@@ -66,6 +67,16 @@ export function normalizeInviteEmail(value: unknown): string | null {
   }
 
   return email;
+}
+
+export function normalizeOrganizationName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.trim();
+  return name.length >= 1 &&
+    name.length <= 120 &&
+    !/[\u0000-\u001f\u007f]/.test(name)
+    ? name
+    : null;
 }
 
 export async function ensureDefaultOrganization(user: UserOrganizationSeed) {
@@ -444,6 +455,42 @@ export async function switchActiveOrganization(input: {
     .update(users)
     .set({ activeOrgId: input.orgId })
     .where(eq(users.id, input.userId));
+}
+
+export async function renameOrganization(input: {
+  actorUserId: string;
+  name: unknown;
+  orgId: string;
+}) {
+  const name = normalizeOrganizationName(input.name);
+  if (!name) throw new OrganizationError("INVALID_NAME");
+
+  return db.transaction(async (tx) => {
+    const [membership] = await tx
+      .select({ role: orgMembers.role })
+      .from(orgMembers)
+      .where(
+        and(
+          eq(orgMembers.orgId, input.orgId),
+          eq(orgMembers.userId, input.actorUserId),
+        ),
+      )
+      .for("share");
+
+    if (!membership || !isOrgRole(membership.role)) {
+      throw new OrganizationError("MEMBERSHIP_REQUIRED");
+    }
+
+    requirePermission(membership.role, "organizations.rename");
+    const [updated] = await tx
+      .update(orgs)
+      .set({ name, updatedAt: new Date() })
+      .where(eq(orgs.id, input.orgId))
+      .returning({ id: orgs.id, name: orgs.name });
+
+    if (!updated) throw new OrganizationError("MEMBERSHIP_REQUIRED");
+    return updated;
+  });
 }
 
 export async function removeOrganizationMember(input: {

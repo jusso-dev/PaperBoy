@@ -55,8 +55,8 @@ test(
     const messageId = randomUUID();
     const providerMessageId = "010001-ses-message-fixture";
     const receivedAt = new Date("2026-08-24T01:06:00.000Z");
-    const lock = await db.$client.connect();
-    await lock.query("SELECT pg_advisory_lock($1)", [190034]);
+    const lock = await db.$client.reserve();
+    await lock`SELECT pg_advisory_lock(${190034})`;
 
     try {
       await db.insert(orgs).values([
@@ -189,9 +189,8 @@ test(
         await db.delete(users).where(eq(users.id, userId));
         await db.delete(users).where(eq(users.id, otherUserId));
       } finally {
-        await lock.query("SELECT pg_advisory_unlock($1)", [190034]);
+        await lock`SELECT pg_advisory_unlock(${190034})`;
         lock.release();
-        await db.$client.end();
       }
     }
   },

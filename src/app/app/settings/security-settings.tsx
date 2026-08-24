@@ -50,6 +50,39 @@ export function SecuritySettings({
     setIsPending(true);
   }
 
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    begin();
+    const form = new FormData(event.currentTarget);
+    const currentPassword = String(form.get("currentPassword"));
+    const newPassword = String(form.get("newPassword"));
+    const confirmation = String(form.get("confirmPassword"));
+
+    if (newPassword !== confirmation) {
+      setError("New password and confirmation do not match.");
+      setIsPending(false);
+      return;
+    }
+
+    const result = await authClient.changePassword({
+      currentPassword,
+      newPassword,
+      revokeOtherSessions: true,
+    });
+    if (result.error) {
+      setError(
+        result.error.message ||
+          "Password could not be changed. Check your current password.",
+      );
+      setIsPending(false);
+      return;
+    }
+
+    event.currentTarget.reset();
+    setStatus("Password changed. Other signed-in devices were signed out.");
+    setIsPending(false);
+  }
+
   async function enableTwoFactor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     begin();
@@ -188,6 +221,51 @@ export function SecuritySettings({
         </p>
       ) : null}
 
+      <section className="security-section" aria-labelledby="password-heading">
+        <h3 id="password-heading">Password</h3>
+        <p>Change your password and sign out every other active session.</p>
+        <form className="settings-form" onSubmit={changePassword}>
+          <div className="field">
+            <label htmlFor="password-current">Current password</label>
+            <input
+              autoComplete="current-password"
+              id="password-current"
+              maxLength={128}
+              name="currentPassword"
+              required
+              type="password"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="password-new">New password</label>
+            <input
+              autoComplete="new-password"
+              id="password-new"
+              maxLength={128}
+              minLength={8}
+              name="newPassword"
+              required
+              type="password"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="password-confirm">Confirm new password</label>
+            <input
+              autoComplete="new-password"
+              id="password-confirm"
+              maxLength={128}
+              minLength={8}
+              name="confirmPassword"
+              required
+              type="password"
+            />
+          </div>
+          <button className="btn btn-primary" disabled={isPending} type="submit">
+            Change password
+          </button>
+        </form>
+      </section>
+
       <section className="security-section" aria-labelledby="mfa-heading">
         <h3 id="mfa-heading">Authenticator MFA</h3>
         <p>
@@ -303,7 +381,7 @@ export function SecuritySettings({
         <p>
           Passkeys provide phishing-resistant sign-in using your device,
           password manager, or hardware security key. Ceremonies are bound to
-          <code> {passkeyOrigin}</code>.
+          <span className="inline-url"> {passkeyOrigin}</span>.
         </p>
         <form className="settings-form" onSubmit={addPasskey}>
           <div className="field">

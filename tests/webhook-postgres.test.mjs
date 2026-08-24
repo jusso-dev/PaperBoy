@@ -79,9 +79,9 @@ test(
     const address = server.address();
     assert.equal(typeof address, "object");
     const endpointUrl = `http://127.0.0.1:${address.port}/paperboy-events`;
-    const integrationLock = await db.$client.connect();
+    const integrationLock = await db.$client.reserve();
 
-    await integrationLock.query("SELECT pg_advisory_lock($1)", [190019]);
+    await integrationLock`SELECT pg_advisory_lock(${190019})`;
 
     try {
       await db.insert(orgs).values({ id: orgId, name: "Webhook integration" });
@@ -257,9 +257,8 @@ test(
         await db.delete(orgs).where(eq(orgs.id, orgId));
         await db.delete(users).where(eq(users.id, userId));
       } finally {
-        await integrationLock.query("SELECT pg_advisory_unlock($1)", [190019]);
+        await integrationLock`SELECT pg_advisory_unlock(${190019})`;
         integrationLock.release();
-        await db.$client.end();
         await new Promise((resolve, reject) =>
           server.close((error) => (error ? reject(error) : resolve())),
         );

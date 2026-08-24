@@ -164,6 +164,7 @@ export function serializeBroadcast(record: BroadcastRecord) {
     name: record.name,
     paused_at: record.pausedAt?.toISOString() ?? null,
     progress: record.progress,
+    scheduled_at: record.scheduledFor?.toISOString() ?? null,
     source_audience_id: record.sourceAudienceId,
     source_template_id: record.sourceTemplateId,
     status: record.status,

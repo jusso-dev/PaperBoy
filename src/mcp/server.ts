@@ -106,7 +106,7 @@ export const PAPERBOY_MCP_RESOURCE_URIS = [
   "paperboy://docs/dns",
   "paperboy://docs/templates",
   "paperboy://docs/broadcasts",
-  "paperboy://docs/worker",
+  "paperboy://docs/jobs",
   "paperboy://docs/webhooks",
   "paperboy://docs/feedback",
   "paperboy://docs/suppressions",
@@ -228,7 +228,7 @@ const resourceDefinitions = [
     uri: PAPERBOY_MCP_RESOURCE_URIS[4],
   },
   {
-    description: "Operate and inspect the durable outbound worker.",
+    description: "Operate and inspect durable Redis and BullMQ jobs.",
     uri: PAPERBOY_MCP_RESOURCE_URIS[5],
   },
   {
@@ -264,7 +264,7 @@ const resourceDefinitions = [
 const configurationDocument = `# PaperBoy MCP configuration
 
 - Remote agents use Streamable HTTP at \`/api/mcp\` with \`Authorization: Bearer <PaperBoy API key>\`.
-- Local agents launch \`pnpm mcp:stdio\` with \`DATABASE_URL\`, \`PAPERBOY_API_KEY\`, \`PAPERBOY_PUBLIC_URL\`, \`PAPERBOY_UNSUBSCRIBE_SIGNING_KEY\`, \`PAPERBOY_OPEN_TRACKING_SIGNING_KEY\`, and other feature secrets injected through the process environment.
+- Local agents launch \`bun run mcp:stdio\` with \`DATABASE_URL\`, \`PAPERBOY_API_KEY\`, \`PAPERBOY_PUBLIC_URL\`, \`PAPERBOY_UNSUBSCRIBE_SIGNING_KEY\`, \`PAPERBOY_OPEN_TRACKING_SIGNING_KEY\`, and other feature secrets injected through the process environment.
 - Never put an API key in a tool argument, URL, command-line argument, source file, or diagnostic log.
 - A key is bound to one organization and one environment (\`live\` or \`test\`).
 - Audience and contact tools derive organization context from that key and never accept an organization ID.
@@ -322,26 +322,29 @@ const broadcastDocument = `# PaperBoy broadcasts
 - Template data contains name, email, contact.name, contact.email, and unsubscribe_url. Opening the link is read-only; the recipient confirms before PaperBoy records the opt-out.
 - Progress separates pending, processing, queued, suppressed, failed, and cancelled recipients. Tool output never returns audience addresses or rendered message content.
 - Pause stops before the next recipient. Resume processes remaining recipients. Cancel marks every pending recipient cancelled and prevents further claims; an already-processing recipient may finish.
-- Queue records remain provider-neutral. SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text through the normal worker path.
+- Queue records remain provider-neutral. SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text through the normal job path.
 - Stored instants and MCP timestamps are UTC. Console presentation uses the deployment's fixed Australia/Sydney IANA timezone.
 `;
 
-const workerDocument = `# PaperBoy outbound worker
+const jobsDocument = `# PaperBoy BullMQ jobs
 
-- Run 'pnpm worker' beside every web deployment. The PostgreSQL queue is the source of truth.
+- Run 'bun run jobs' beside every web deployment. REDIS_URL is required by both web and jobs. Redis carries BullMQ dispatch, delays, and concurrency; PostgreSQL remains authoritative state.
+- Configure persistent Redis storage and maxmemory-policy=noeviction. A recurring reconciliation job restores exact message, broadcast, and webhook jobs from PostgreSQL after Redis loss or enqueue failure.
+- PAPERBOY_MESSAGE_JOB_CONCURRENCY, PAPERBOY_BROADCAST_JOB_CONCURRENCY, and PAPERBOY_WEBHOOK_JOB_CONCURRENCY default to 5, 1, and 5. PAPERBOY_JOB_RECONCILE_MS defaults to 5000.
 - SMTP_URL supplies the operator-default SMTP secret. Per-organization SMTP, Cloudflare Email Service, and Amazon SES variables use a normalized organization UUID suffix. Credentials stay in operator injection and never enter MCP arguments or output.
 - SMTP_TLS_MODE defaults to required. smtp:// must negotiate STARTTLS; opportunistic and disabled are weaker opt-ins for controlled environments. smtps:// uses implicit TLS.
 - For local capture, run 'docker compose -f compose.dev.yml up --wait mailpit', use SMTP_URL=smtp://127.0.0.1:1025 with SMTP_TLS_MODE=disabled, and inspect http://127.0.0.1:8025.
 - Cloudflare Email Service is selectable directly through the same hardened transport with CLOUDFLARE_EMAIL_SMTP_URL=smtps://api_token:<URL-encoded API token>@smtp.mx.cloudflare.net:465 and required TLS. A compatible SMTP_URL remains supported. Cloudflare remains its own DKIM/ARC signing authority.
-- Amazon SES uses the regional v2 API with an organization IAM role, access-key pair, or explicitly enabled workload chain. Recipient-specific worker sends preserve raw MIME and attachments through SendEmail; the provider contract also exposes SendBulkEmail for compatible groups. A PostgreSQL guard shares GetAccount-derived recipient-per-second and rolling 24-hour capacity across workers, retaining 20% rate and 10% daily headroom. Configuration-set message tags correlate signed SNS or authenticated EventBridge events without storing provider payloads.
+- Amazon SES uses the regional v2 API with an organization IAM role, access-key pair, or explicitly enabled workload chain. Recipient-specific jobs preserve raw MIME and attachments through SendEmail; the provider contract also exposes SendBulkEmail for compatible groups. A PostgreSQL guard shares GetAccount-derived recipient-per-second and rolling 24-hour capacity across job processes, retaining 20% rate and 10% daily headroom. Configuration-set message tags correlate signed SNS or authenticated EventBridge events without storing provider payloads.
+- PAPERBOY_ATTACHMENT_STORAGE_DRIVER=s3 uses the standard AWS credential chain with PAPERBOY_ATTACHMENT_S3_BUCKET and PAPERBOY_ATTACHMENT_S3_REGION. Keep the bucket private and grant only GetObject, PutObject, and DeleteObject on its configured prefix. PostgreSQL retains attachment metadata and hashes.
 - Each message stores its resolved provider. Settings changes affect future queue rows only. Missing credentials fail before insertion; credentials removed later fail that row explicitly instead of falling back to another provider.
-- A worker atomically claims an eligible message, records 'sending', and holds a five-minute lease. If it exits mid-delivery, another worker can reclaim the same row after the lease expires.
+- A message job atomically claims an eligible row, records 'sending', and holds a five-minute lease. If it exits mid-delivery, reconciliation makes the row claimable again after lease expiry.
 - Delivery is at least once. A process exit after a provider accepts a message but before PostgreSQL records 'sent' can cause a duplicate, so preserve send idempotency where the provider supports it.
 - Retry transient network failures, HTTP 5xx, and SMTP 4xx with bounded backoff. SES quota waits and throttles return to queued without consuming an attempt. SMTP 550 and other permanent failures move directly to 'failed'. Five real delivery attempts exhaust the retry budget.
 - Failure codes and reasons are sanitized before storage. Message bodies, addresses, attachments, credentials, and provider responses never appear in MCP status output.
 - Use paperboy_list_delivery_statuses and paperboy_get_delivery_status to inspect queued, sending, sent, and failed records. The list supports status, domainId, and RFC 3339 UTC creation bounds while retaining key-derived tenant and environment scope. Use paperboy_list_message_events for the ordered queued, delivered, deferred, bounced, complained, and opted-in opened timeline. Opened events cannot exist unless that message persisted tracking opt-in. MCP timestamps remain RFC 3339 UTC, and these tools never return MIME or provider-owned signing material.
-- The worker hands the same rendered semantic message to every adapter. SMTP builds MIME at delivery time; Cloudflare Email Sending receives structured, unsigned fields and remains its own signing authority.
-- The same process also sends queued webhooks. Supply the same PAPERBOY_WEBHOOK_ENCRYPTION_KEY to every web and worker process that configures or delivers webhooks; without it, webhook rows remain queued.
+- Jobs hand the same rendered semantic message to every adapter. SMTP builds MIME at delivery time; Cloudflare Email Sending receives structured, unsigned fields and remains its own signing authority.
+- The same process also sends queued webhooks. Supply the same PAPERBOY_WEBHOOK_ENCRYPTION_KEY to every web and job process that configures or delivers webhooks; without it, webhook rows remain queued.
 `;
 
 const webhookDocument = `# PaperBoy signed webhooks
@@ -362,7 +365,7 @@ const feedbackDocument = `# PaperBoy bounce and complaint ingestion
 - Prefer header-only reports. Raw reports are untrusted and may contain original content; pass them only through the authenticated tool transport, never a prompt, URL, log, or command argument.
 - A 5.x.x failed DSN is a hard bounce and creates a bounced event plus a bounced suppression. A 4.x.x delayed or failed DSN is a soft bounce and creates an event without suppression. An ARF complaint creates a complained event plus a complained suppression.
 - Exact report replays are idempotent. Future single, batch, broadcast, HTTP, and MCP sends re-check suppressions and return recipient_suppressed without queueing mail.
-- The Postfix pipe uses pnpm feedback:ingest with a protected API key file. It reads raw RFC 822 bytes from stdin and never sends mail to test an address.
+- The Postfix pipe uses bun run feedback:ingest with a protected API key file. It reads raw RFC 822 bytes from stdin and never sends mail to test an address.
 - Cloudflare Email Sending owns its cf-bounce return path and provider suppression pipeline. Do not replace it. PaperBoy feedback ingestion remains available for reports routed to PaperBoy, while Cloudflare SMTP delivery continues through the same provider-neutral message-event and webhook path.
 - Ingestion and MCP timestamps are RFC 3339 UTC. Convert only presentation with an explicit IANA timezone.
 `;
@@ -423,7 +426,7 @@ const outboundProviderDocument = `# PaperBoy outbound providers
 - Missing or invalid credentials fail closed before a live message enters the queue. Test API keys continue to use the isolated test sink.
 - SMTP_URL remains the operator-default SMTP secret. Cloudflare Email Service may use CLOUDFLARE_EMAIL_SMTP_URL or a Cloudflare SMTP_URL. Amazon SES supports AWS_SES_REGION with an IAM role, access-key pair, or explicitly enabled workload credential chain; every setting has a documented per-organization UUID-suffixed form.
 - Amazon SES is a live v2 delivery and event adapter. Azure remains selectable but unavailable until its adapter lands. Neither path silently falls back to SMTP.
-- SES SendEmail stores the returned SES message ID. SendBulkEmail supports up to 50 compatible entries. Both reserve recipient capacity through a shared PostgreSQL guard using 80% rate and 90% rolling-day headroom; capacity waits do not consume worker attempts. Configuration-set tags preserve each PaperBoy UUID, while signed SNS or API-key-authenticated EventBridge ingestion verifies both the tenant message and SES message ID before mutation.
+- SES SendEmail stores the returned SES message ID. SendBulkEmail supports up to 50 compatible entries. Both reserve recipient capacity through a shared PostgreSQL guard using 80% rate and 90% rolling-day headroom; capacity waits do not consume delivery attempts. Configuration-set tags preserve each PaperBoy UUID, while signed SNS or API-key-authenticated EventBridge ingestion verifies both the tenant message and SES message ID before mutation.
 - Provider event adapters map into the stable PaperBoy delivered, deferred, bounced, and complained event names. Permanent SES bounces and complaints update the shared organization suppression list; transient bounces and delays do not.
 - Settings and test timestamps are RFC 3339 UTC. Console presentation uses the fixed Australia/Sydney IANA timezone.
 `;
@@ -544,7 +547,7 @@ export function createPaperBoyMcpServer(
     [resourceDefinitions[2], DNS_OPERATOR_GUIDE],
     [resourceDefinitions[3], templateDocument],
     [resourceDefinitions[4], broadcastDocument],
-    [resourceDefinitions[5], workerDocument],
+    [resourceDefinitions[5], jobsDocument],
     [resourceDefinitions[6], webhookDocument],
     [resourceDefinitions[7], feedbackDocument],
     [resourceDefinitions[8], suppressionDocument],

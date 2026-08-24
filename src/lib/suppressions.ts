@@ -16,6 +16,7 @@ import {
   type SuppressionReason,
   type SuppressionRecord,
 } from "@/lib/suppression-core";
+import { isPostgresErrorCode } from "@/lib/postgres-errors";
 
 const SUPPRESSION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -38,9 +39,7 @@ export type SuppressionImportResult = {
 };
 
 function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  if ("code" in error && error.code === "23505") return true;
-  return "cause" in error && isUniqueViolation(error.cause);
+  return isPostgresErrorCode(error, "23505");
 }
 
 function requireSuppressionId(suppressionId: string): void {

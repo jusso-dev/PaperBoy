@@ -34,7 +34,7 @@ test(
         listContacts,
       },
       { generateApiKey },
-      { createBroadcast },
+      { createBroadcast, getBroadcast, processNextScheduledBroadcast },
       { prepareCloudflareEmailMessage },
       { EmailError },
       { queueEmail },
@@ -62,7 +62,7 @@ test(
     const generatedKey = generateApiKey("test");
     const signingKey = Buffer.alloc(32, 23);
     const fixedNow = new Date("2026-08-24T09:10:11.123Z");
-    const lock = await db.$client.connect();
+    const lock = await db.$client.reserve();
     const principal = {
       actorUserId: adminId,
       apiKeyId,
@@ -70,7 +70,7 @@ test(
       orgId: firstOrgId,
     };
 
-    await lock.query("SELECT pg_advisory_lock($1)", [190023]);
+    await lock`SELECT pg_advisory_lock(${190023})`;
     try {
       await db.insert(orgs).values([
         { id: firstOrgId, name: "First audience tenant" },
@@ -305,6 +305,47 @@ test(
       assert.equal(snapshot.contactId !== null, true);
       assert.equal(snapshot.data.name, "Grace Hopper");
       assert.match(snapshot.data.unsubscribe_url, /^https:\/\/paperboy\.example\/unsubscribe\?token=/);
+
+      const scheduledFor = new Date(fixedNow.getTime() + 60_000);
+      const scheduled = await createBroadcast(
+        {
+          payload: {
+            audience_id: weekly.id,
+            from: "news@example.com",
+            name: "Scheduled issue",
+            scheduled_for: scheduledFor.toISOString(),
+            template_id: templateId,
+          },
+          principal,
+        },
+        {
+          now: () => fixedNow,
+          queue: queueEmail,
+          unsubscribeUrl: (contactId) => createUnsubscribeUrl({
+            baseUrl: "https://paperboy.example",
+            contactId,
+            key: signingKey,
+          }),
+        },
+      );
+      assert.equal(scheduled.status, "scheduled");
+      assert.equal(scheduled.scheduledFor?.toISOString(), scheduledFor.toISOString());
+      assert.equal(scheduled.progress.pending, 1);
+
+      assert.equal(
+        await processNextScheduledBroadcast({
+          now: () => new Date(scheduledFor.getTime() + 1_000),
+          queue: queueEmail,
+        }),
+        true,
+      );
+      const completedScheduled = await getBroadcast({
+        actorUserId: adminId,
+        broadcastId: scheduled.id,
+        orgId: firstOrgId,
+      });
+      assert.equal(completedScheduled.status, "completed");
+      assert.equal(completedScheduled.progress.queued, 1);
     } finally {
       try {
         await db.delete(orgs).where(eq(orgs.id, firstOrgId));
@@ -312,9 +353,8 @@ test(
         await db.delete(users).where(eq(users.id, adminId));
         await db.delete(users).where(eq(users.id, memberId));
       } finally {
-        await lock.query("SELECT pg_advisory_unlock($1)", [190023]);
+        await lock`SELECT pg_advisory_unlock(${190023})`;
         lock.release();
-        await db.$client.end();
       }
     }
   },

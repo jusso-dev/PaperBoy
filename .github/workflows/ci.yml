@@ -34,6 +34,15 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:8.2-alpine@sha256:30abb90e62f14b737010746def3ba99cc79fe19dcdb3d37b41f21fc62e7da19d
+        ports:
+          - 6379/tcp
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
       mailpit:
         image: ghcr.io/axllent/mailpit:v1.31.0@sha256:c96991d9bef73594c246d89ca81411d4e916f03e76a7d2d72fa2ab5dd3c9ce24
         env:
@@ -56,53 +65,55 @@ jobs:
       - name: Scan repository for secrets
         run: ./scripts/run-gitleaks.sh git --redact --verbose .
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          node-version-file: .nvmrc
+          bun-version: 1.4.0
 
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Configure service endpoints
         env:
           MAILPIT_HTTP_PORT: ${{ job.services.mailpit.ports['8025'] }}
           MAILPIT_SMTP_PORT: ${{ job.services.mailpit.ports['1025'] }}
           POSTGRES_PORT: ${{ job.services.postgres.ports['5432'] }}
+          REDIS_PORT: ${{ job.services.redis.ports['6379'] }}
         run: |
           {
             echo "DATABASE_URL=postgres://paperboy:paperboy@127.0.0.1:${POSTGRES_PORT}/paperboy"
+            echo "PAPERBOY_INLINE_JOB_DISPATCH=false"
             echo "PAPERBOY_TEST_DATABASE_URL=postgres://paperboy:paperboy@127.0.0.1:${POSTGRES_PORT}/paperboy"
             echo "PAPERBOY_TEST_MAILPIT_URL=http://127.0.0.1:${MAILPIT_HTTP_PORT}"
+            echo "PAPERBOY_TEST_REDIS_URL=redis://127.0.0.1:${REDIS_PORT}"
             echo "PAPERBOY_TEST_SMTP_URL=smtp://127.0.0.1:${MAILPIT_SMTP_PORT}"
+            echo "REDIS_URL=redis://127.0.0.1:${REDIS_PORT}"
             echo "SMTP_URL=smtp://127.0.0.1:${MAILPIT_SMTP_PORT}"
             echo "SMTP_TLS_MODE=disabled"
           } >> "$GITHUB_ENV"
 
       - name: Lint OpenAPI
-        run: pnpm openapi:lint
+        run: bun run openapi:lint
 
       - name: Lint
-        run: pnpm lint
+        run: bun run lint
 
       - name: Typecheck
-        run: pnpm typecheck
+        run: bun run typecheck
 
       - name: Build TypeScript SDK
-        run: pnpm sdk:build
+        run: bun run sdk:build
 
       - name: Check Drizzle schema
-        run: pnpm db:check
+        run: bun run db:check
 
       - name: Migrate test database
-        run: pnpm db:migrate
+        run: bun run db:migrate
 
       - name: Test
-        run: pnpm test
+        run: bun run test
 
       - name: Build
-        run: pnpm build
+        run: bun run build
         env:
           BETTER_AUTH_SECRET: paperboy-ci-only-secret-32-characters
           BETTER_AUTH_URL: http://127.0.0.1:3000

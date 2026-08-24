@@ -25,6 +25,7 @@ export type WebhookClaim = {
 
 export type WebhookStore = {
   claim: (input: {
+    deliveryId?: string;
     leaseExpiresAt: Date;
     now: Date;
     workerId: string;
@@ -156,6 +157,7 @@ export async function postWebhook(input: {
 }
 
 export async function processNextWebhook(input: {
+  deliveryId?: string;
   encryptionKey?: Buffer;
   fetch?: typeof fetch;
   now?: () => Date;
@@ -165,6 +167,7 @@ export async function processNextWebhook(input: {
   const now = input.now ?? (() => new Date());
   const claimedAt = now();
   const claim = await input.store.claim({
+    ...(input.deliveryId ? { deliveryId: input.deliveryId } : {}),
     leaseExpiresAt: new Date(claimedAt.getTime() + DELIVERY_LEASE_MS),
     now: claimedAt,
     workerId: input.workerId,

@@ -36,7 +36,7 @@ test(
     const orgId = randomUUID();
     const apiKeyId = randomUUID();
     const userId = `open-tracking-user-${randomUUID()}`;
-    const integrationLock = await db.$client.connect();
+    const integrationLock = await db.$client.reserve();
     const principal = {
       actorUserId: userId,
       apiKeyId,
@@ -44,7 +44,7 @@ test(
       orgId,
     };
 
-    await integrationLock.query("SELECT pg_advisory_lock($1)", [190020]);
+    await integrationLock`SELECT pg_advisory_lock(${190020})`;
 
     try {
       await db.insert(orgs).values({ id: orgId, name: "Open tracking proof" });
@@ -203,9 +203,8 @@ test(
         await db.delete(orgs).where(eq(orgs.id, orgId));
         await db.delete(users).where(eq(users.id, userId));
       } finally {
-        await integrationLock.query("SELECT pg_advisory_unlock($1)", [190020]);
+        await integrationLock`SELECT pg_advisory_unlock(${190020})`;
         integrationLock.release();
-        await db.$client.end();
         if (previousSigningKey === undefined) {
           delete process.env.PAPERBOY_OPEN_TRACKING_SIGNING_KEY;
         } else {

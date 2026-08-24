@@ -1,11 +1,11 @@
 import {
   acceptInvitationAction,
   inviteMemberAction,
+  renameOrganizationAction,
   removeMemberAction,
   switchOrganizationAction,
   testOutboundProviderAction,
   updateDefaultOutboundProviderAction,
-  updateDomainOutboundProviderAction,
   updateOpenTrackingAction,
   updateRateLimitsAction,
 } from "./actions";
@@ -19,6 +19,10 @@ import {
 import { requireOrganization } from "@/lib/session";
 import { normalizeSendingDomain } from "@/lib/domain-core";
 import { getOpenTrackingSettings } from "@/lib/open-tracking";
+import {
+  openTrackingPublicUrl,
+  parseOpenTrackingSigningKey,
+} from "@/lib/open-tracking-core";
 import { getOutboundProviderSettings } from "@/lib/outbound-providers";
 import { getRateLimitSettings } from "@/lib/rate-limits";
 import { formatDateTime } from "@/lib/time";
@@ -41,6 +45,7 @@ const errorMessages: Record<string, string> = {
   cannot_remove_self: "You cannot remove your own membership.",
   forbidden: "Your role does not allow that action.",
   invalid_email: "Enter a valid email address.",
+  invalid_name: "Enter an organization name of at most 120 characters.",
   invalid_role: "Choose the admin or member role.",
   invalid_rate_limits:
     "Use whole-number limits, with the test limit higher than the live limit.",
@@ -68,6 +73,7 @@ const successMessages: Record<string, string> = {
   accepted: "Invitation accepted. The new organization is active.",
   invitation: "Invitation saved. The recipient can accept it in PaperBoy.",
   removed: "Member removed.",
+  renamed: "Organization renamed.",
   "rate-limits": "Organization rate limits saved.",
   "open-tracking": "Organization open-tracking setting saved.",
   "outbound-provider": "Organisation default outbound provider saved.",
@@ -109,6 +115,7 @@ export default async function OrganizationPage({
       }),
     ]);
   const canInvite = can(organization.role, "members.invite");
+  const canRename = can(organization.role, "organizations.rename");
   const canRemove = can(organization.role, "members.remove");
   const canManageRateLimits = can(organization.role, "rateLimits.manage");
   const canManageOpenTracking = can(
@@ -159,6 +166,13 @@ export default async function OrganizationPage({
     : status.saved
       ? successMessages[status.saved]
       : null;
+  let openTrackingOrigin: string | null = null;
+  try {
+    parseOpenTrackingSigningKey();
+    openTrackingOrigin = openTrackingPublicUrl().origin;
+  } catch {
+    openTrackingOrigin = null;
+  }
 
   return (
     <section>
@@ -228,6 +242,23 @@ export default async function OrganizationPage({
             </form>
           ) : null}
         </div>
+        {canRename ? (
+          <form action={renameOrganizationAction} className="rate-limit-form">
+            <div className="field">
+              <label htmlFor="organization-name">Organization name</label>
+              <input
+                defaultValue={organization.name}
+                id="organization-name"
+                maxLength={120}
+                name="name"
+                required
+              />
+            </div>
+            <button className="btn btn-primary" type="submit">
+              Save organization name
+            </button>
+          </form>
+        ) : null}
       </div>
 
       <div className="card">
@@ -393,66 +424,10 @@ export default async function OrganizationPage({
           </table>
         </div>
 
-        {outboundProviders.domains.length > 0 ? (
-          <div>
-            <h3>Domain overrides</h3>
-            <p>Leave a domain on organisation default unless it needs a different path.</p>
-            <div className="table-scroll">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Domain</th>
-                    <th>Route</th>
-                    {canManageOutboundProviders ? <th>Action</th> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {outboundProviders.domains.map((domain) => (
-                    <tr key={domain.id}>
-                      <td>{domain.name}</td>
-                      <td>
-                        {canManageOutboundProviders ? (
-                          <form
-                            action={updateDomainOutboundProviderAction}
-                            className="inline-form"
-                          >
-                            <input name="domainId" type="hidden" value={domain.id} />
-                            <select
-                              aria-label={`Outbound provider for ${domain.name}`}
-                              defaultValue={domain.overrideProvider ?? ""}
-                              name="provider"
-                            >
-                              <option value="">Organisation default</option>
-                              {outboundProviders.providers.map((provider) => (
-                                <option key={provider.id} value={provider.id}>
-                                  {provider.label}
-                                </option>
-                              ))}
-                            </select>
-                            <button className="btn btn-compact" type="submit">
-                              Save
-                            </button>
-                          </form>
-                        ) : (
-                          outboundProviders.providers.find(
-                            (provider) => provider.id === domain.effectiveProvider,
-                          )?.label ?? domain.effectiveProvider
-                        )}
-                      </td>
-                      {canManageOutboundProviders ? (
-                        <td>
-                          Effective: {outboundProviders.providers.find(
-                            (provider) => provider.id === domain.effectiveProvider,
-                          )?.label ?? domain.effectiveProvider}
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
+        <p className="field-help">
+          Sender-domain onboarding, DNS, SPF, and DKIM stay in the selected
+          provider. PaperBoy only reports identities returned by provider tests.
+        </p>
       </div>
 
       <div className="card">
@@ -469,11 +444,17 @@ export default async function OrganizationPage({
         <p>
           Current setting: <strong>{openTracking.enabled ? "On" : "Off"}</strong>
         </p>
+        <p>
+          Operator configuration:{" "}
+          <strong>{openTrackingOrigin ? "Ready" : "Unavailable"}</strong>
+          {openTrackingOrigin ? ` for ${openTrackingOrigin}` : "."}
+        </p>
         {canManageOpenTracking ? (
           <form action={updateOpenTrackingAction} className="rate-limit-form">
             <label htmlFor="openTrackingEnabled">
               <input
                 defaultChecked={openTracking.enabled}
+                disabled={!openTrackingOrigin}
                 id="openTrackingEnabled"
                 name="enabled"
                 type="checkbox"
@@ -484,9 +465,18 @@ export default async function OrganizationPage({
               Plain-text messages are never tracked. Existing queued messages
               keep the setting captured when they were created.
             </p>
-            <button className="btn btn-primary" type="submit">
+            <button
+              className="btn btn-primary"
+              disabled={!openTrackingOrigin}
+              type="submit"
+            >
               Save open tracking
             </button>
+            {!openTrackingOrigin ? (
+              <p className="field-help">
+                Public URL and signing key are deployment secrets managed in Coolify.
+              </p>
+            ) : null}
           </form>
         ) : (
           <p>Owners and admins manage open tracking.</p>

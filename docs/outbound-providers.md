@@ -20,7 +20,7 @@ Amazon SES is a live SES v2 delivery and event adapter. Azure remains a selectab
 
 ## Secrets and readiness
 
-Provider selection is stored in PostgreSQL. Credentials are not. The web, MCP, and worker processes resolve credentials only from operator-injected environment secrets. REST, console, MCP, delivery status, and logs expose readiness and credential scope (`organization` or `operator-default`), never a value or secret reference.
+Provider selection is stored in PostgreSQL. Credentials are not. The web, MCP, and job processes resolve credentials only from operator-injected environment secrets or the AWS workload role. REST, console, MCP, delivery status, and logs expose readiness and credential scope (`organization` or `operator-default`), never a value or secret reference.
 
 `SMTP_URL` remains the operator-default SMTP credential. A per-organisation SMTP secret overrides it with:
 
@@ -35,7 +35,7 @@ PAPERBOY_SMTP_TLS_MODE_<NORMALIZED_ORGANIZATION_UUID>
 PAPERBOY_BOUNCE_ADDRESS_<NORMALIZED_ORGANIZATION_UUID>
 ```
 
-Missing or malformed credentials fail before queue insertion with a clear 422. They do not consume a rate-limit slot. Removing credentials after queueing causes the worker to fail the already-snapshotted message explicitly; it does not reroute it.
+Missing or malformed credentials fail before queue insertion with a clear 422. They do not consume a rate-limit slot. Removing credentials after queueing causes the job to fail the already-snapshotted message explicitly; it does not reroute it.
 
 ## Cloudflare Email Service
 
@@ -59,9 +59,9 @@ Cloudflare SMTP submissions are rejected locally if the complete MIME message ex
 
 Amazon SES uses the regional SES v2 API. `SendEmail` receives a complete raw MIME message, so attachments, text/HTML alternatives, the stable PaperBoy header, and the stored semantic content remain identical to SMTP. PaperBoy supplies the selected configuration set plus a `paperboy_message_id` message tag and stores the `MessageId` returned by SES. SES Easy DKIM remains the signing authority; PaperBoy does not add a second DKIM signature on this path.
 
-The provider adapter exposes the real `SendBulkEmail` operation for compatible groups of 1–50 messages. Entries may have different recipients, subjects, and body values, but must share one sender, body-part shape, and attachment set because SES bulk content has one common template and attachment collection. Each entry keeps its own PaperBoy ID in replacement headers and tags. A partial SES bulk result fails closed and is not automatically replayed, avoiding duplicate submissions for entries SES already accepted. The current queue worker claims one row at a time and therefore uses recipient-specific `SendEmail`; callers that batch at the provider-contract layer receive each bulk entry's SES message ID in input order.
+The provider adapter exposes the real `SendBulkEmail` operation for compatible groups of 1–50 messages. Entries may have different recipients, subjects, and body values, but must share one sender, body-part shape, and attachment set because SES bulk content has one common template and attachment collection. Each entry keeps its own PaperBoy ID in replacement headers and tags. A partial SES bulk result fails closed and is not automatically replayed, avoiding duplicate submissions for entries SES already accepted. Current message jobs claim one row at a time and therefore use recipient-specific `SendEmail`; callers that batch at the provider-contract layer receive each bulk entry's SES message ID in input order.
 
-Every SES request passes through a PostgreSQL quota guard shared by all PaperBoy workers using the same database and credential scope. The adapter refreshes the regional `GetAccount` quota for at most 60 seconds, reserves recipients rather than API calls, schedules at 80% of `MaxSendRate`, and caps rolling 24-hour reservations at 90% of `Max24HourSend`. Capacity deferrals preserve the queue row and do not consume a delivery attempt. SES throttling is treated as a non-consuming transient deferral because SES can accept below its advertised maximum. This guard complements—not bypasses—SES account, identity, reputation, suppression, and recipient-level controls.
+Every SES request passes through a PostgreSQL quota guard shared by all PaperBoy job processes using the same database and credential scope. The adapter refreshes the regional `GetAccount` quota for at most 60 seconds, reserves recipients rather than API calls, schedules at 80% of `MaxSendRate`, and caps rolling 24-hour reservations at 90% of `Max24HourSend`. Capacity deferrals preserve the queue row and do not consume a delivery attempt. SES throttling is treated as a non-consuming transient deferral because SES can accept below its advertised maximum. This guard complements—not bypasses—SES account, identity, reputation, suppression, and recipient-level controls.
 
 Set the operator defaults in the deployment secret store:
 

@@ -23,6 +23,7 @@ import {
   acceptOrganizationInvitation,
   inviteOrganizationMember,
   OrganizationError,
+  renameOrganization,
   removeOrganizationMember,
   switchActiveOrganization,
 } from "@/lib/organizations";
@@ -120,6 +121,22 @@ export async function switchOrganizationAction(formData: FormData) {
   }
 
   redirect("/app/organization");
+}
+
+export async function renameOrganizationAction(formData: FormData) {
+  const { organization, session } = await requireOrganization();
+
+  try {
+    await renameOrganization({
+      actorUserId: session.user.id,
+      name: formData.get("name"),
+      orgId: organization.id,
+    });
+  } catch (error) {
+    redirect(errorLocation(error));
+  }
+
+  redirect("/app/organization?saved=renamed");
 }
 
 export async function removeMemberAction(formData: FormData) {

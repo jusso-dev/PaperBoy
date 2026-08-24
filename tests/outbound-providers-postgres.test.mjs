@@ -58,8 +58,8 @@ test(
       [organizationAwsSesVariable(orgId, "SECRET_ACCESS_KEY")]:
         "fixture-secret-access-key",
     };
-    const integrationLock = await db.$client.connect();
-    await integrationLock.query("SELECT pg_advisory_lock($1)", [190020]);
+    const integrationLock = await db.$client.reserve();
+    await integrationLock`SELECT pg_advisory_lock(${190020})`;
 
     try {
       await db.insert(orgs).values({ id: orgId, name: "Provider integration" });
@@ -272,9 +272,8 @@ test(
         await db.delete(orgs).where(eq(orgs.id, orgId));
         await db.delete(users).where(eq(users.id, userId));
       } finally {
-        await integrationLock.query("SELECT pg_advisory_unlock($1)", [190020]);
+        await integrationLock`SELECT pg_advisory_unlock(${190020})`;
         integrationLock.release();
-        await db.$client.end();
       }
     }
   },

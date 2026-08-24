@@ -43,7 +43,7 @@ test(
     const adminId = `suppression-admin-${randomUUID()}`;
     const memberId = `suppression-member-${randomUUID()}`;
     const generatedKey = generateApiKey("test");
-    const lock = await db.$client.connect();
+    const lock = await db.$client.reserve();
     const principal = {
       actorUserId: adminId,
       apiKeyId,
@@ -51,7 +51,7 @@ test(
       orgId: firstOrgId,
     };
 
-    await lock.query("SELECT pg_advisory_lock($1)", [190022]);
+    await lock`SELECT pg_advisory_lock(${190022})`;
 
     try {
       await db.insert(orgs).values([
@@ -260,9 +260,8 @@ test(
         await db.delete(users).where(eq(users.id, adminId));
         await db.delete(users).where(eq(users.id, memberId));
       } finally {
-        await lock.query("SELECT pg_advisory_unlock($1)", [190022]);
+        await lock`SELECT pg_advisory_unlock(${190022})`;
         lock.release();
-        await db.$client.end();
       }
     }
   },

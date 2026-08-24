@@ -47,9 +47,9 @@ test(
     const testKey = generateApiKey("test");
     const liveKeyIds = [randomUUID(), randomUUID()];
     const testKeyId = randomUUID();
-    const lock = await db.$client.connect();
+    const lock = await db.$client.reserve();
 
-    await lock.query("SELECT pg_advisory_lock($1)", [190024]);
+    await lock`SELECT pg_advisory_lock(${190024})`;
     try {
       await db.insert(orgs).values({ id: orgId, name: "Rate-limit tenant" });
       await db.insert(users).values({
@@ -319,9 +319,8 @@ test(
         await db.delete(orgs).where(eq(orgs.id, orgId));
         await db.delete(users).where(eq(users.id, userId));
       } finally {
-        await lock.query("SELECT pg_advisory_unlock($1)", [190024]);
+        await lock`SELECT pg_advisory_unlock(${190024})`;
         lock.release();
-        await db.$client.end();
       }
     }
   },

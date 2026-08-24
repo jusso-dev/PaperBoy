@@ -256,6 +256,7 @@ input[type='email'],
 input[type='password'],
 input[type='file'],
 input[type='date'],
+input[type='datetime-local'],
 textarea,
 select {
   background: var(--paper-raised);
@@ -432,6 +433,11 @@ select:focus-visible {
 .secret-uri {
   display: block;
   margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.inline-url {
+  font: inherit;
   overflow-wrap: anywhere;
 }
 
@@ -626,7 +632,7 @@ select:focus-visible {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(200px, 1fr) 150px auto;
+  grid-template-columns: minmax(200px, 1fr) auto;
   margin-top: 18px;
 }
 
