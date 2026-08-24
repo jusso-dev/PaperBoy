@@ -13,6 +13,17 @@ Self-hosted transactional email. A cheaper Resend you run on your own box.
 - First-class MCP server over the same domain services as HTTP and the console
 - CI on Linux self-hosted runners with isolated PostgreSQL and Mailpit service containers, UTC process time, read-only repository permissions, and no GitHub-hosted labels. Fork pull requests are skipped so untrusted code never reaches the runner; same-repository pull requests and `main` pushes run the full gate.
 
+## Container image
+
+After the full `main` CI gate passes, PaperBoy publishes a public ARM64 image as `ghcr.io/jusso-dev/paperboy:main`, `:latest`, and `:sha-<full commit SHA>`. Pulls require no registry credentials:
+
+```sh
+docker pull --platform linux/arm64 ghcr.io/jusso-dev/paperboy:main
+docker run --rm --platform linux/arm64 --env-file /path/to/protected.env -p 3000:3000 ghcr.io/jusso-dev/paperboy:main
+```
+
+The image runs the web and remote MCP server as a non-root user with `TZ=UTC`. Run the outbound worker from the same immutable image digest as a separately supervised process by overriding the command with `pnpm worker`; local MCP clients can use `pnpm mcp:stdio`. User-facing times still use each account's persisted IANA timezone.
+
 ## Security
 
 PaperBoy's repository-scoped [threat model](docs/threat-model.md) covers REST and first-class MCP authentication, tenant boundaries, UTC/IANA timezone handling, DKIM and webhook key storage, self-hosted SMTP, Cloudflare Email Service, attachments, and self-hosted CI. Its limits are explicit: a leaked bearer key remains usable until revoked, an incorrectly configured MTA can become an open relay, and Cloudflare/provider acceptance is not proof of final delivery.
