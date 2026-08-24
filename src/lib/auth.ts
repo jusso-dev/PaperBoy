@@ -9,6 +9,7 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { ensureDefaultOrganization } from "@/lib/organizations";
 import { configuredPasskeys } from "@/lib/passkey-configuration";
+import { publicSignUpEnabled } from "@/lib/signup-policy";
 import {
   defaultApplicationTimeZone,
   effectiveUserTimeZone,
@@ -35,6 +36,7 @@ export const auth = betterAuth({
     usePlural: true,
   }),
   emailAndPassword: {
+    disableSignUp: !publicSignUpEnabled(),
     enabled: true,
   },
   databaseHooks: {

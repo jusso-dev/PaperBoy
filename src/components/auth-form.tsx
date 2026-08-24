@@ -27,7 +27,13 @@ const copy = {
   },
 } as const;
 
-export function AuthForm({ mode }: { mode: AuthMode }) {
+export function AuthForm({
+  allowSignUp = false,
+  mode,
+}: {
+  allowSignUp?: boolean;
+  mode: AuthMode;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -173,9 +179,11 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         </>
       ) : null}
 
-      <p className="auth-switch">
-        {labels.prompt} <Link href={labels.linkHref}>{labels.linkLabel}</Link>
-      </p>
+      {mode === "sign-up" || allowSignUp ? (
+        <p className="auth-switch">
+          {labels.prompt} <Link href={labels.linkHref}>{labels.linkLabel}</Link>
+        </p>
+      ) : null}
     </section>
   );
 }
