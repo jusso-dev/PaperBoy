@@ -176,3 +176,5 @@ jobs:
           manifest="$(docker buildx imagetools inspect "${IMAGE_NAME}:sha-${GITHUB_SHA}")"
           printf '%s\n' "$manifest"
           grep -q 'Platform:.*linux/arm64' <<< "$manifest"
+          docker run --rm --platform linux/arm64 --entrypoint curl \
+            "${IMAGE_NAME}:sha-${GITHUB_SHA}" --fail --version

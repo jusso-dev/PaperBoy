@@ -30,6 +30,10 @@ RUN --mount=type=cache,id=paperboy-bun-production,target=/root/.bun/install/cach
 
 FROM base AS runtime
 
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV HOSTNAME=0.0.0.0 \
     NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production \
