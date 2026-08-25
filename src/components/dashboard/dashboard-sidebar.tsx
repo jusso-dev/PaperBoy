@@ -26,6 +26,7 @@ const navItems: DashboardNavItem[] = [
   { href: "/app/broadcasts", icon: "broadcasts", label: "Broadcasts" },
   { href: "/app/suppressions", icon: "suppressions", label: "Suppressions" },
   { href: "/app/api-keys", icon: "keys", label: "API Keys" },
+  { href: "/app/docs", icon: "docs", label: "API docs" },
   { href: "/app/settings", icon: "settings", label: "Settings" },
 ];
 

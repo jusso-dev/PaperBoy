@@ -308,6 +308,7 @@ input[type='password'],
 input[type='file'],
 input[type='date'],
 input[type='datetime-local'],
+input[type='search'],
 textarea,
 select {
   background: var(--paper-raised);
@@ -3836,6 +3837,115 @@ body:has(.broadcast-workspace) {
 
   .broadcast-render-frame {
     padding: 12px;
+  }
+}
+
+.openapi-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.openapi-reference {
+  margin-top: 16px;
+}
+
+.openapi-operation-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.openapi-operation-list details {
+  background: color-mix(in srgb, var(--paper-light) 70%, white);
+  border: 1px solid color-mix(in srgb, var(--postal-blue) 22%, var(--line));
+  border-radius: 3px;
+}
+
+.openapi-operation-list summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 10px 14px;
+  grid-template-columns: 72px minmax(0, 1fr);
+  padding: 10px 12px;
+}
+
+.openapi-operation-list summary strong {
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 500;
+  grid-column: 2;
+}
+
+.openapi-operation-list code {
+  overflow-wrap: anywhere;
+}
+
+.openapi-method {
+  align-self: start;
+  background: color-mix(in srgb, var(--postal-blue) 14%, var(--paper-light));
+  border: 1px solid color-mix(in srgb, var(--postal-blue) 35%, var(--line));
+  border-radius: 3px;
+  color: var(--postal-blue-dark);
+  font-family: var(--font-mono), "Courier New", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 6px;
+  text-align: center;
+}
+
+.openapi-method[data-method="POST"],
+.openapi-method[data-method="PUT"] {
+  background: color-mix(in srgb, var(--postal-blue) 22%, var(--paper-light));
+}
+
+.openapi-method[data-method="PATCH"] {
+  background: color-mix(in srgb, #b45309 14%, var(--paper-light));
+  border-color: color-mix(in srgb, #b45309 35%, var(--line));
+  color: #7c3a0c;
+}
+
+.openapi-method[data-method="DELETE"] {
+  background: color-mix(in srgb, #9f1239 12%, var(--paper-light));
+  border-color: color-mix(in srgb, #9f1239 30%, var(--line));
+  color: #9f1239;
+}
+
+.openapi-operation-list details p,
+.openapi-operation-list details dl {
+  border-top: 1px solid var(--line);
+  margin: 0;
+  padding: 12px;
+}
+
+.openapi-operation-list details dl {
+  display: grid;
+  gap: 8px;
+}
+
+.openapi-operation-list details dl div {
+  display: grid;
+  gap: 4px 12px;
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
+.openapi-operation-list dt {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .openapi-operation-list summary {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .openapi-operation-list summary strong {
+    grid-column: 1 / -1;
   }
 }
 

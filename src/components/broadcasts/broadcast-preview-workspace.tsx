@@ -82,6 +82,7 @@ export function BroadcastPreviewWorkspace({
   const [htmlValue, setHtmlValue] = useState(html ?? "");
   const [fromValue, setFromValue] = useState(from);
   const [subjectValue, setSubjectValue] = useState(subject);
+  const previewDocument = templateBrowserPreviewDocument(htmlValue);
   const [bounds, setBounds] = useState<WindowBounds>({
     height: 800,
     width: 1200,
@@ -425,9 +426,10 @@ export function BroadcastPreviewWorkspace({
             <div className="broadcast-render-frame">
               {htmlValue.trim() ? (
                 <iframe
+                  key={previewDocument}
                   referrerPolicy="no-referrer"
                   sandbox=""
-                  srcDoc={templateBrowserPreviewDocument(htmlValue)}
+                  srcDoc={previewDocument}
                   title="Rendered broadcast HTML output"
                 />
               ) : (

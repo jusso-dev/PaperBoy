@@ -94,6 +94,11 @@ jobs:
       - name: Lint OpenAPI
         run: bun run openapi:lint
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Test Rust CLI
+        run: cargo test --locked -p paperboy
+
       - name: Lint
         run: bun run lint
 

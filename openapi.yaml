@@ -11,7 +11,8 @@ info:
     one live or test environment. Stored instants and HTTP timestamps are RFC
     3339 UTC. The queue is provider-neutral: self-hosted SMTP and Cloudflare
     Email Service and Amazon SES use the same messages, limits, suppressions,
-    and event model.
+    and event model. The signed-in console renders this contract at `/app/docs`.
+    The Rust CLI in `crates/paperboy` calls the same bearer-key routes.
 servers:
   - url: /
     description: Same origin as the PaperBoy deployment
@@ -28,12 +29,23 @@ tags:
     description: Select and test organization and sending-domain delivery routes.
   - name: Webhooks
     description: Configure the organization's signed event destination.
+  - name: Rate limits
+    description: Read and override organization live and test send caps.
+  - name: Templates
+    description: Store and preview organization email templates.
+  - name: Audiences
+    description: Manage permission-based audiences and contacts.
+  - name: Broadcasts
+    description: Snapshot an audience and queue one stored template.
+  - name: Suppressions
+    description: Block future sends to bounced, complained, or opted-out addresses.
 x-paperboy-mcp:
   description: >-
     MCP is a peer interface over the same tenant-bound services. Protocol
     timestamps remain UTC and organization context always comes from the key.
   equivalents:
     sendEmail: paperboy_send_email
+    sendEmailBatch: paperboy_send_email_batch
     getEmail: paperboy_get_delivery_status
     listEmailEvents: paperboy_list_message_events
     getOpenTracking: paperboy_get_open_tracking
@@ -44,6 +56,38 @@ x-paperboy-mcp:
     ingestOutboundProviderEvent: paperboy_ingest_outbound_provider_event
     getWebhook: paperboy_get_webhook
     configureWebhook: paperboy_configure_webhook
+    getRateLimits: paperboy_get_rate_limits
+    updateRateLimits: paperboy_update_rate_limits
+    listTemplates: paperboy_list_templates
+    createTemplate: paperboy_create_template
+    getTemplate: paperboy_get_template
+    updateTemplate: paperboy_update_template
+    deleteTemplate: paperboy_delete_template
+    previewTemplate: paperboy_preview_template
+    listAudiences: paperboy_list_audiences
+    createAudience: paperboy_create_audience
+    getAudience: paperboy_get_audience
+    updateAudience: paperboy_update_audience
+    deleteAudience: paperboy_delete_audience
+    listContacts: paperboy_list_contacts
+    createContact: paperboy_create_contact
+    getContact: paperboy_get_contact
+    updateContact: paperboy_update_contact
+    deleteContact: paperboy_delete_contact
+    importContacts: paperboy_import_contacts
+    listBroadcasts: paperboy_list_broadcasts
+    createBroadcast: paperboy_create_broadcast
+    getBroadcast: paperboy_get_broadcast
+    updateBroadcast: paperboy_update_broadcast
+    pauseBroadcast: paperboy_pause_broadcast
+    resumeBroadcast: paperboy_resume_broadcast
+    cancelBroadcast: paperboy_cancel_broadcast
+    listSuppressions: paperboy_list_suppressions
+    createSuppression: paperboy_create_suppression
+    getSuppression: paperboy_get_suppression
+    updateSuppression: paperboy_update_suppression
+    deleteSuppression: paperboy_delete_suppression
+    importSuppressions: paperboy_import_suppressions
 paths:
   /api/v1/emails:
     post:
@@ -533,6 +577,1046 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /api/v1/emails/batch:
+    post:
+      operationId: sendEmailBatch
+      tags: [Emails]
+      summary: Queue one to 100 emails
+      description: >-
+        Accepts a JSON array of 1 to 100 send objects. Each item is validated
+        independently. A fully valid batch returns 200. Mixed success returns
+        207 and keeps accepted neighbors. An entirely rate-limited batch returns
+        429. Attachments and Idempotency-Key are not supported on this route.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              maxItems: 100
+              items:
+                $ref: '#/components/schemas/SendEmailInput'
+      responses:
+        '200':
+          description: Every item was queued.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailBatchEnvelope'
+        '207':
+          description: Some items failed. Accepted neighbors remain queued.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailBatchEnvelope'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          description: Every item hit the organization UTC-minute cap.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Retry-After:
+              description: Whole seconds until the shared organization window resets.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailBatchEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/rate-limits:
+    get:
+      operationId: getRateLimits
+      tags: [Rate limits]
+      summary: Read organization send-rate limits
+      description: >-
+        Returns operator defaults, nullable organization overrides, and the
+        effective live and test caps. Tenant context comes from the key.
+      responses:
+        '200':
+          description: Current defaults, overrides, and effective limits.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    patch:
+      operationId: updateRateLimits
+      tags: [Rate limits]
+      summary: Override organization send-rate limits
+      description: >-
+        Owners and admins set or clear live and test overrides. Pass a field as
+        null to restore the operator default. The effective test cap must remain
+        higher than live.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateLimitUpdateInput'
+      responses:
+        '200':
+          description: Saved defaults, overrides, and effective limits.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitSettings'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/v1/templates:
+    get:
+      operationId: listTemplates
+      tags: [Templates]
+      summary: List templates
+      responses:
+        '200':
+          description: Organization templates.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      operationId: createTemplate
+      tags: [Templates]
+      summary: Create one template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateInput'
+      responses:
+        '201':
+          description: Stored template.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Another template already uses that name.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/templates/{templateId}:
+    parameters:
+      - $ref: '#/components/parameters/TemplateId'
+    get:
+      operationId: getTemplate
+      tags: [Templates]
+      summary: Get one template
+      responses:
+        '200':
+          description: Stored template.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateTemplate
+      tags: [Templates]
+      summary: Update one template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateInput'
+      responses:
+        '200':
+          description: Updated template.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another template already uses that name.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteTemplate
+      tags: [Templates]
+      summary: Delete one template
+      responses:
+        '200':
+          description: Template deleted.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/templates/{templateId}/preview:
+    parameters:
+      - $ref: '#/components/parameters/TemplateId'
+    post:
+      operationId: previewTemplate
+      tags: [Templates]
+      summary: Render one template without sending
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplatePreviewInput'
+      responses:
+        '200':
+          description: Rendered subject, bodies, and missing required variables.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplatePreview'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/audiences:
+    get:
+      operationId: listAudiences
+      tags: [Audiences]
+      summary: List audiences
+      responses:
+        '200':
+          description: Organization audiences.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudienceListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      operationId: createAudience
+      tags: [Audiences]
+      summary: Create one audience
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudienceInput'
+      responses:
+        '201':
+          description: Stored audience.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Audience'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Another audience already uses that name.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/audiences/{audienceId}:
+    parameters:
+      - $ref: '#/components/parameters/AudienceId'
+    get:
+      operationId: getAudience
+      tags: [Audiences]
+      summary: Get one audience
+      responses:
+        '200':
+          description: Stored audience.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Audience'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateAudience
+      tags: [Audiences]
+      summary: Rename one audience
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudienceInput'
+      responses:
+        '200':
+          description: Updated audience.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Audience'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another audience already uses that name.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteAudience
+      tags: [Audiences]
+      summary: Delete one audience
+      responses:
+        '200':
+          description: Audience deleted.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/audiences/{audienceId}/contacts:
+    parameters:
+      - $ref: '#/components/parameters/AudienceId'
+    get:
+      operationId: listContacts
+      tags: [Audiences]
+      summary: List audience contacts
+      responses:
+        '200':
+          description: Contacts in the audience.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      operationId: createContact
+      tags: [Audiences]
+      summary: Add one contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactInput'
+      responses:
+        '201':
+          description: Stored contact.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: That email is already in the audience.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/audiences/{audienceId}/contacts/{contactId}:
+    parameters:
+      - $ref: '#/components/parameters/AudienceId'
+      - $ref: '#/components/parameters/ContactId'
+    get:
+      operationId: getContact
+      tags: [Audiences]
+      summary: Get one contact
+      responses:
+        '200':
+          description: Stored contact.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateContact
+      tags: [Audiences]
+      summary: Update one contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactInput'
+      responses:
+        '200':
+          description: Updated contact.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteContact
+      tags: [Audiences]
+      summary: Delete one contact
+      responses:
+        '200':
+          description: Contact deleted.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/audiences/{audienceId}/contacts/import:
+    parameters:
+      - $ref: '#/components/parameters/AudienceId'
+    post:
+      operationId: importContacts
+      tags: [Audiences]
+      summary: Import contacts from CSV
+      description: >-
+        UTF-8 CSV with an email header and optional name. Bounded to 1 MiB.
+        The complete file validates before mutation.
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Import counts.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsvImportResult'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: CSV exceeds 1 MiB.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/broadcasts:
+    get:
+      operationId: listBroadcasts
+      tags: [Broadcasts]
+      summary: List broadcasts
+      responses:
+        '200':
+          description: Organization broadcasts and progress counts.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroadcastListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      operationId: createBroadcast
+      tags: [Broadcasts]
+      summary: Create one broadcast
+      description: >-
+        Snapshots one stored template and the audience's active contacts, then
+        queues immediately or at scheduled_for. Responses never include contact
+        addresses or rendered bodies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BroadcastCreateInput'
+      responses:
+        '201':
+          description: Created broadcast.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroadcastEnvelope'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/v1/broadcasts/{broadcastId}:
+    parameters:
+      - $ref: '#/components/parameters/BroadcastId'
+    get:
+      operationId: getBroadcast
+      tags: [Broadcasts]
+      summary: Get one broadcast
+      responses:
+        '200':
+          description: Broadcast progress and envelope metadata.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroadcastEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateBroadcast
+      tags: [Broadcasts]
+      summary: Update a scheduled broadcast
+      description: >-
+        Only a still-scheduled broadcast can change audience, template, subject,
+        HTML, sender, or schedule. Changing audience or template replaces the
+        frozen snapshot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BroadcastUpdateInput'
+      responses:
+        '200':
+          description: Updated scheduled broadcast.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroadcastEnvelope'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/broadcasts/{broadcastId}/pause:
+    parameters:
+      - $ref: '#/components/parameters/BroadcastId'
+    post:
+      operationId: pauseBroadcast
+      tags: [Broadcasts]
+      summary: Pause a running broadcast
+      responses:
+        '200':
+          description: Broadcast paused after the current recipient.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroadcastEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/broadcasts/{broadcastId}/resume:
+    parameters:
+      - $ref: '#/components/parameters/BroadcastId'
+    post:
+      operationId: resumeBroadcast
+      tags: [Broadcasts]
+      summary: Resume a paused broadcast
+      responses:
+        '200':
+          description: Broadcast resumed.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroadcastEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/broadcasts/{broadcastId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/BroadcastId'
+    post:
+      operationId: cancelBroadcast
+      tags: [Broadcasts]
+      summary: Cancel a broadcast
+      description: Pending recipients are marked cancelled and cannot be claimed.
+      responses:
+        '200':
+          description: Broadcast cancelled.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroadcastEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/suppressions:
+    get:
+      operationId: listSuppressions
+      tags: [Suppressions]
+      summary: List suppressions
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: reason
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SuppressionReason'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: Matching suppressions.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuppressionListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      operationId: createSuppression
+      tags: [Suppressions]
+      summary: Create one suppression
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuppressionInput'
+      responses:
+        '201':
+          description: Stored suppression.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Suppression'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/suppressions/{suppressionId}:
+    parameters:
+      - $ref: '#/components/parameters/SuppressionId'
+    get:
+      operationId: getSuppression
+      tags: [Suppressions]
+      summary: Get one suppression
+      responses:
+        '200':
+          description: Stored suppression.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Suppression'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateSuppression
+      tags: [Suppressions]
+      summary: Update one suppression
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuppressionUpdateInput'
+      responses:
+        '200':
+          description: Updated suppression.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Suppression'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteSuppression
+      tags: [Suppressions]
+      summary: Delete one suppression
+      responses:
+        '200':
+          description: Suppression deleted.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/suppressions/import:
+    post:
+      operationId: importSuppressions
+      tags: [Suppressions]
+      summary: Import suppressions from CSV
+      description: >-
+        UTF-8 CSV bounded to 1 MiB and 5,000 rows. The complete file validates
+        before mutation. Duplicate emails keep the strongest reason.
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Import counts.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsvImportResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          description: CSV exceeds 1 MiB or 5,000 rows.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
 webhooks:
   messageEvent:
     post:
@@ -594,6 +1678,41 @@ components:
       in: path
       required: true
       description: PaperBoy message UUID.
+      schema:
+        type: string
+        format: uuid
+    TemplateId:
+      name: templateId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AudienceId:
+      name: audienceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ContactId:
+      name: contactId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BroadcastId:
+      name: broadcastId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SuppressionId:
+      name: suppressionId
+      in: path
+      required: true
       schema:
         type: string
         format: uuid
@@ -1270,6 +2389,423 @@ components:
             - email.bounced
             - email.complained
             - email.opened
+    EmailBatchEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailBatchItem'
+    EmailBatchItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        error:
+          type: object
+          additionalProperties: true
+    RateLimitSettings:
+      type: object
+      additionalProperties: false
+      required: [live, protocol_time_zone, test, updated_at]
+      properties:
+        live:
+          $ref: '#/components/schemas/RateLimitLane'
+        protocol_time_zone:
+          type: string
+          const: UTC
+        test:
+          $ref: '#/components/schemas/RateLimitLane'
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    RateLimitLane:
+      type: object
+      additionalProperties: false
+      required: [default_limit_per_minute, limit_per_minute, override_limit_per_minute]
+      properties:
+        default_limit_per_minute:
+          type: integer
+          minimum: 1
+        limit_per_minute:
+          type: integer
+          minimum: 1
+        override_limit_per_minute:
+          type: [integer, 'null']
+          minimum: 1
+    RateLimitUpdateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        live_limit_per_minute:
+          type: [integer, 'null']
+          minimum: 1
+        test_limit_per_minute:
+          type: [integer, 'null']
+          minimum: 1
+    Template:
+      type: object
+      additionalProperties: false
+      required: [created_at, html, id, name, required_variables, subject, text, updated_at]
+      properties:
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        html:
+          type: [string, 'null']
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        required_variables:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        text:
+          type: [string, 'null']
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    TemplateListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Template'
+    TemplateInput:
+      type: object
+      additionalProperties: false
+      required: [name, subject]
+      properties:
+        html:
+          type: [string, 'null']
+        name:
+          type: string
+        required_variables:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        text:
+          type: [string, 'null']
+    TemplatePreviewInput:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          additionalProperties: true
+    TemplatePreview:
+      type: object
+      additionalProperties: false
+      required: [html, missing_variables, subject, template_id, text]
+      properties:
+        html:
+          type: [string, 'null']
+        missing_variables:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        template_id:
+          type: string
+          format: uuid
+        text:
+          type: [string, 'null']
+    Audience:
+      type: object
+      additionalProperties: false
+      required: [active_contact_count, contact_count, created_at, id, name, updated_at]
+      properties:
+        active_contact_count:
+          type: integer
+          minimum: 0
+        contact_count:
+          type: integer
+          minimum: 0
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    AudienceListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, protocol_time_zone]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Audience'
+        protocol_time_zone:
+          type: string
+          const: UTC
+    AudienceInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+    Contact:
+      type: object
+      additionalProperties: false
+      required: [audience_id, created_at, email, id, name, unsubscribed_at, updated_at]
+      properties:
+        audience_id:
+          type: string
+          format: uuid
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        email:
+          type: string
+          format: email
+        id:
+          type: string
+          format: uuid
+        name:
+          type: [string, 'null']
+        unsubscribed_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    ContactListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, protocol_time_zone]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contact'
+        protocol_time_zone:
+          type: string
+          const: UTC
+    ContactInput:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: [string, 'null']
+    BroadcastProgress:
+      type: object
+      additionalProperties: false
+      required: [cancelled, failed, pending, processing, queued, suppressed, total]
+      properties:
+        cancelled:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        pending:
+          type: integer
+          minimum: 0
+        processing:
+          type: integer
+          minimum: 0
+        queued:
+          type: integer
+          minimum: 0
+        suppressed:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+    Broadcast:
+      type: object
+      additionalProperties: false
+      required:
+        - cancelled_at
+        - completed_at
+        - created_at
+        - environment
+        - from
+        - id
+        - name
+        - paused_at
+        - progress
+        - scheduled_at
+        - source_audience_id
+        - source_template_id
+        - status
+        - subject
+        - template_name
+        - updated_at
+      properties:
+        cancelled_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        completed_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        environment:
+          type: string
+          enum: [live, test]
+        from:
+          type: string
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        paused_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        progress:
+          $ref: '#/components/schemas/BroadcastProgress'
+        scheduled_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        source_audience_id:
+          type: [string, 'null']
+          format: uuid
+        source_template_id:
+          type: [string, 'null']
+          format: uuid
+        status:
+          type: string
+          enum: [scheduled, running, paused, completed, cancelled]
+        subject:
+          type: string
+        template_name:
+          type: string
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    BroadcastEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Broadcast'
+    BroadcastListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Broadcast'
+    BroadcastCreateInput:
+      type: object
+      additionalProperties: false
+      required: [audience_id, from, name, template_id]
+      properties:
+        audience_id:
+          type: string
+          format: uuid
+        from:
+          type: string
+        name:
+          type: string
+        scheduled_for:
+          $ref: '#/components/schemas/UtcDateTime'
+        template_id:
+          type: string
+          format: uuid
+    BroadcastUpdateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        audience_id:
+          type: string
+          format: uuid
+        from:
+          type: string
+        html:
+          type: [string, 'null']
+        name:
+          type: string
+        scheduled_for:
+          $ref: '#/components/schemas/UtcDateTime'
+        subject:
+          type: string
+        template_id:
+          type: string
+          format: uuid
+    SuppressionReason:
+      type: string
+      enum: [manual, unsubscribed, bounced, complained]
+    Suppression:
+      type: object
+      additionalProperties: false
+      required: [created_at, email, id, reason, updated_at]
+      properties:
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        email:
+          type: string
+          format: email
+        id:
+          type: string
+          format: uuid
+        reason:
+          $ref: '#/components/schemas/SuppressionReason'
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    SuppressionListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, protocol_time_zone]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Suppression'
+        protocol_time_zone:
+          type: string
+          const: UTC
+    SuppressionInput:
+      type: object
+      additionalProperties: false
+      required: [email, reason]
+      properties:
+        email:
+          type: string
+          format: email
+        reason:
+          $ref: '#/components/schemas/SuppressionReason'
+    SuppressionUpdateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+        reason:
+          $ref: '#/components/schemas/SuppressionReason'
+    CsvImportResult:
+      type: object
+      additionalProperties: true
+    DeletedResource:
+      type: object
+      additionalProperties: false
+      required: [deleted, id]
+      properties:
+        deleted:
+          type: boolean
+          const: true
+        id:
+          type: string
+          format: uuid
     UtcDateTime:
       type: string
       format: date-time

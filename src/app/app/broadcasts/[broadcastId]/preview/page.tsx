@@ -49,6 +49,7 @@ export default async function BroadcastPreviewPage({
 
   return (
     <BroadcastPreviewWorkspace
+      key={broadcast.id}
       audienceName={audience?.name ?? `${broadcast.progress.total} recipients`}
       audiences={audiences.map((item) => ({
         activeContactCount: item.activeContactCount,

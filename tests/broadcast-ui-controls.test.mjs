@@ -30,7 +30,10 @@ test("broadcast UI exposes editing, cancellation, and status filtering", async (
   assert.match(preview, /name="html"/);
   assert.match(preview, /setHtmlValue/);
   assert.match(preview, /templateBrowserPreviewDocument\(htmlValue\)/);
+  assert.match(preview, /key=\{previewDocument\}/);
+  assert.match(preview, /srcDoc=\{previewDocument\}/);
   assert.match(preview, /NaturalLanguageScheduleField/);
+  assert.match(previewPage, /key=\{broadcast\.id\}/);
   assert.match(previewPage, /broadcast\.status === "scheduled"/);
   assert.match(previewPage, /canSend=\{canSend\}/);
   assert.match(actions, /html: formData.get\("html"\)/);

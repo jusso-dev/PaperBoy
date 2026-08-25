@@ -1,0 +1,13 @@
+[package]
+name = "paperboy"
+version = "0.1.0"
+edition = "2021"
+description = "Command-line client for the PaperBoy HTTP API"
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive", "env"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde_json = "1"

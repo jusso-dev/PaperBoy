@@ -183,11 +183,15 @@ The queue stores semantic `from`, `to`, subject, HTML/text, tags, and private at
 
 Message and event instants are PostgreSQL `timestamptz` values. REST and MCP expose them as RFC 3339 UTC; console presentation uses fixed `Australia/Sydney` time.
 
-### OpenAPI and TypeScript SDK
+### OpenAPI, console docs, CLI, and TypeScript SDK
 
-[`openapi.yaml`](openapi.yaml) is the linted OpenAPI 3.1 contract for single-message send/detail/events, outbound-provider selection and testing, organization open tracking, its public signed pixel, webhook configuration, and raw-body signature verification. It also records each private operation's first-class MCP equivalent. Validate it with `bun run openapi:lint`.
+[`openapi.yaml`](openapi.yaml) is the linted OpenAPI 3.1 contract for emails, batch send, templates, audiences, broadcasts, suppressions, rate limits, outbound-provider selection and testing, organization open tracking, its public signed pixel, webhook configuration, and raw-body signature verification. It also records each private operation's first-class MCP equivalent. Validate it with `bun run openapi:lint`.
 
-The handwritten [`@paperboy/sdk`](packages/sdk/README.md) exposes `send()` and `get(id)` over the same HTTP surface using platform `fetch` and no runtime dependencies. Build JavaScript and declarations with `bun run sdk:build`; generated `packages/sdk/dist` output is ignored and must not be committed. SDK and MCP timestamps remain UTC, with explicit IANA timezones applied only by presentation clients. Self-hosted SMTP and Cloudflare Email Service consume the same provider-neutral queued message; Cloudflare remains responsible for its provider-owned DKIM/ARC signatures.
+The signed-in console renders that contract at `/app/docs`. The same document is served at `/openapi.yaml`.
+
+The Rust CLI in [`crates/paperboy`](crates/paperboy) calls the bearer-key routes. Build it with `cargo build --release -p paperboy` and see [CLI usage](docs/cli.md). Keep `PAPERBOY_API_KEY` in the process environment.
+
+The handwritten [`@paperboy/sdk`](packages/sdk/README.md) exposes `send()` and `get(id)` over the same HTTP surface using platform `fetch` and no runtime dependencies. Build JavaScript and declarations with `bun run sdk:build`; generated `packages/sdk/dist` output is ignored and must not be committed. SDK, CLI, and MCP timestamps remain UTC, with explicit IANA timezones applied only by presentation clients. Self-hosted SMTP and Cloudflare Email Service consume the same provider-neutral queued message; Cloudflare remains responsible for its provider-owned DKIM/ARC signatures.
 
 ## BullMQ jobs
 
