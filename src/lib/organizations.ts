@@ -380,7 +380,16 @@ export async function inviteOrganizationMember(input: {
           updatedAt: new Date(),
         },
       })
-      .returning({ id: orgInvites.id });
+      .returning({
+        createdAt: orgInvites.createdAt,
+        email: orgInvites.email,
+        id: orgInvites.id,
+        role: orgInvites.role,
+      });
+
+    if (!invitation) {
+      throw new OrganizationError("INVITATION_NOT_FOUND");
+    }
 
     return invitation;
   });

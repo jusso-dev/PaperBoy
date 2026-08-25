@@ -45,6 +45,12 @@ import {
   type PaperBoyMcpFeedbackServices,
 } from "@/mcp/feedback-tools";
 import {
+  PAPERBOY_INVITATION_MCP_TOOL_DEFINITIONS,
+  PAPERBOY_INVITATION_MCP_TOOL_NAMES,
+  registerPaperBoyInvitationTools,
+  type PaperBoyMcpInvitationServices,
+} from "@/mcp/invitation-tools";
+import {
   PAPERBOY_RATE_LIMIT_MCP_TOOL_DEFINITIONS,
   PAPERBOY_RATE_LIMIT_MCP_TOOL_NAMES,
   registerPaperBoyRateLimitTools,
@@ -95,6 +101,7 @@ export const PAPERBOY_MCP_TOOL_NAMES = [
   ...PAPERBOY_FEEDBACK_MCP_TOOL_NAMES,
   ...PAPERBOY_SUPPRESSION_MCP_TOOL_NAMES,
   ...PAPERBOY_WEBHOOK_MCP_TOOL_NAMES,
+  ...PAPERBOY_INVITATION_MCP_TOOL_NAMES,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_NAMES,
   ...PAPERBOY_BROADCAST_MCP_TOOL_NAMES,
   ...PAPERBOY_DOMAIN_MCP_TOOL_NAMES,
@@ -125,6 +132,7 @@ type PaperBoyMcpDependencies = {
   emails: PaperBoyMcpEmailServices;
   feedback: PaperBoyMcpFeedbackServices;
   findOrganization: (orgId: string) => Promise<OrganizationRecord | null>;
+  invitations: PaperBoyMcpInvitationServices;
   now?: () => Date;
   openTracking: PaperBoyMcpOpenTrackingServices;
   outboundProviders: PaperBoyMcpOutboundProviderServices;
@@ -201,6 +209,7 @@ const toolDefinitions = [
   ...PAPERBOY_FEEDBACK_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_SUPPRESSION_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_WEBHOOK_MCP_TOOL_DEFINITIONS,
+  ...PAPERBOY_INVITATION_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_TEMPLATE_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS,
   ...PAPERBOY_DOMAIN_MCP_TOOL_DEFINITIONS,
@@ -277,6 +286,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - paperboy_list_delivery_statuses accepts optional status, domainId, createdAtFrom, createdAtBefore, and limit filters. Date bounds are RFC 3339 UTC instants; tenant and environment always come from the key.
 - paperboy_list_message_events returns the same tenant- and environment-scoped ordered timeline as GET /api/v1/emails/:id/events. Delivery status and event tools omit recipients, content, event data, provider payloads, and raw MIME. Owner-only reconstructed MIME remains an explicit console download.
 - paperboy_get_webhook and paperboy_configure_webhook manage one organization webhook without accepting an organization ID. A new signing secret is returned only on first creation and is never returned by reads.
+- paperboy_list_invitations and paperboy_invite_member manage pending organization membership invitations without accepting an organization ID. Invite queues the same live email as the console and returns the queued message ID, not the email body.
 - paperboy_ingest_feedback accepts a bounded Base64 DSN or ARF, correlates only within the authenticated organization, and never sends a test message.
 - Suppression CRUD and CSV import use the same organization blocklist checked before HTTP, MCP, batch, broadcast, SMTP, or Cloudflare delivery can be queued.
 - Broadcast creation accepts an audience ID, snapshots active contacts, and adds a PaperBoy-signed unsubscribe URL before the provider-neutral queue.
@@ -645,6 +655,13 @@ export function createPaperBoyMcpServer(
     now,
     server,
     services: dependencies.webhooks,
+  });
+
+  registerPaperBoyInvitationTools({
+    authorize: dependencies.authorize,
+    now,
+    server,
+    services: dependencies.invitations,
   });
 
   registerPaperBoyTemplateTools({

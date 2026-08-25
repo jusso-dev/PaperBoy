@@ -14,6 +14,7 @@ import { paperBoyMcpDomainServices } from "@/mcp/domain-services";
 import { paperBoyMcpDeliveryServices } from "@/mcp/delivery-services";
 import { paperBoyMcpEmailServices } from "@/mcp/email-services";
 import { paperBoyMcpFeedbackServices } from "@/mcp/feedback-services";
+import { paperBoyMcpInvitationServices } from "@/mcp/invitation-services";
 import { paperBoyMcpOpenTrackingServices } from "@/mcp/open-tracking-services";
 import { paperBoyMcpOutboundProviderServices } from "@/mcp/outbound-provider-services";
 import { paperBoyMcpRateLimitServices } from "@/mcp/rate-limit-services";
@@ -73,6 +74,7 @@ export const paperBoyMcpHttpHandler = createMcpHandler(
       emails: paperBoyMcpEmailServices,
       feedback: paperBoyMcpFeedbackServices,
       findOrganization: findOrganizationById,
+      invitations: paperBoyMcpInvitationServices,
       openTracking: paperBoyMcpOpenTrackingServices,
       outboundProviders: paperBoyMcpOutboundProviderServices,
       rateLimits: paperBoyMcpRateLimitServices,

@@ -105,8 +105,15 @@ test("organization invite UI queues a live email instead of saving silently", as
   assert.doesNotMatch(page, /No email is sent in v1/);
   assert.match(page, /Send invitation/);
   assert.match(page, /href="\/app\/logs"/);
-  assert.match(actions, /queueOrganizationInviteEmail/);
-  assert.match(actions, /queue: queueEmail/);
+  assert.match(actions, /inviteAndEmailOrganizationMember/);
+  assert.match(actions, /queuedId/);
+
+  const shared = await readFile(
+    new URL("../src/lib/organization-invites.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(shared, /queueOrganizationInviteEmail/);
+  assert.match(shared, /listOrganizationInvitationsForActor/);
 });
 
 test("invite email cannot queue without a ready sender", async () => {

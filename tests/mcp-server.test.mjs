@@ -104,6 +104,12 @@ const firstWebhook = {
   updatedAt: fixedNow,
   url: "https://hooks.example.com/paperboy",
 };
+const firstInvitation = {
+  createdAt: fixedNow,
+  email: "reader@example.net",
+  id: "bcbcbcbc-bcbc-4bcb-8bcb-bcbcbcbcbcbc",
+  role: "member",
+};
 const firstFeedback = {
   classification: "hard_bounce",
   createdAt: fixedNow,
@@ -386,6 +392,18 @@ function webhookServices(overrides = {}) {
   };
 }
 
+function invitationServices(overrides = {}) {
+  return {
+    invite: async () => ({
+      emailError: null,
+      invitation: firstInvitation,
+      queuedId: firstMessage.id,
+    }),
+    list: async () => [firstInvitation],
+    ...overrides,
+  };
+}
+
 async function withClient(dependencies, run) {
   const server = createPaperBoyMcpServer({
     now: () => fixedNow,
@@ -418,6 +436,7 @@ function dependencies(overrides = {}) {
     feedback: feedbackServices(),
     findOrganization: async (orgId) =>
       orgId === firstOrganization.id ? firstOrganization : null,
+    invitations: invitationServices(),
     openTracking: openTrackingServices(),
     outboundProviders: outboundProviderServices(),
     rateLimits: rateLimitServices(),
@@ -628,6 +647,20 @@ test("initializes and publishes versioned tool schemas", async () => {
         "signingSecret",
         "webhook",
       ],
+      paperboy_invite_member: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "emailed",
+        "invitation",
+        "messageId",
+      ],
+      paperboy_list_invitations: [
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+        "invitations",
+      ],
       paperboy_preview_template: [
         "html",
         "missingVariables",
@@ -788,6 +821,8 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_templates: [],
       paperboy_list_suppressions: ["limit", "query", "reason"],
       paperboy_configure_webhook: ["url"],
+      paperboy_invite_member: ["email", "role"],
+      paperboy_list_invitations: [],
       paperboy_preview_template: ["data", "templateId"],
       paperboy_pause_broadcast: ["broadcastId"],
       paperboy_resume_broadcast: ["broadcastId"],
@@ -855,6 +890,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_rate_limits: [],
       paperboy_update_open_tracking: ["enabled"],
       paperboy_update_outbound_providers: [],
+      paperboy_invite_member: ["email"],
     };
     const annotationSnapshots = {
       paperboy_create_audience: { destructive: false, readOnly: false },
@@ -901,6 +937,8 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_list_templates: { destructive: false, readOnly: true },
       paperboy_list_suppressions: { destructive: false, readOnly: true },
       paperboy_configure_webhook: { destructive: false, readOnly: false },
+      paperboy_invite_member: { destructive: false, readOnly: false },
+      paperboy_list_invitations: { destructive: false, readOnly: true },
       paperboy_preview_template: { destructive: false, readOnly: true },
       paperboy_pause_broadcast: { destructive: false, readOnly: false },
       paperboy_resume_broadcast: { destructive: false, readOnly: false },
@@ -1028,6 +1066,7 @@ test("discovers transports, tools, and authenticated documentation", async () =>
     });
     assert.match(configuration.contents[0].text, /Streamable HTTP/);
     assert.match(configuration.contents[0].text, /Revocation denies/);
+    assert.match(configuration.contents[0].text, /paperboy_invite_member/);
 
     const dnsGuide = await client.readResource({
       uri: PAPERBOY_MCP_RESOURCE_URIS[2],
@@ -1622,6 +1661,76 @@ test("delivery status is first-class, filtered, tenant-bound, UTC, and content-f
         ],
         ["get", firstPrincipal, firstDelivery.id],
         ["listEvents", firstPrincipal, firstDelivery.id],
+      ]);
+    },
+  );
+});
+
+test("invitation tools list pending invites and queue the live invite email", async () => {
+  const calls = [];
+
+  await withClient(
+    dependencies({
+      invitations: invitationServices({
+        invite: async (principal, payload) => {
+          calls.push(["invite", principal, payload]);
+          return {
+            emailError: null,
+            invitation: firstInvitation,
+            queuedId: firstMessage.id,
+          };
+        },
+        list: async (principal) => {
+          calls.push(["list", principal]);
+          return [firstInvitation];
+        },
+      }),
+    }),
+    async (client) => {
+      const listed = await client.callTool({
+        arguments: {},
+        name: "paperboy_list_invitations",
+      });
+      const invited = await client.callTool({
+        arguments: { email: firstInvitation.email },
+        name: "paperboy_invite_member",
+      });
+
+      assert.deepEqual(listed.structuredContent, {
+        invitations: [
+          {
+            createdAt: fixedNow.toISOString(),
+            email: firstInvitation.email,
+            id: firstInvitation.id,
+            role: firstInvitation.role,
+          },
+        ],
+        observedAt: fixedNow.toISOString(),
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+      });
+      assert.deepEqual(invited.structuredContent, {
+        emailed: true,
+        invitation: {
+          createdAt: fixedNow.toISOString(),
+          email: firstInvitation.email,
+          id: firstInvitation.id,
+          role: firstInvitation.role,
+        },
+        messageId: firstMessage.id,
+        observedAt: fixedNow.toISOString(),
+        protocolTimeZone: "UTC",
+        schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+      });
+      assert.equal(JSON.stringify(listed).includes("<p>"), false);
+      assert.equal(JSON.stringify(invited).includes("You've been invited"), false);
+      assert.deepEqual(calls, [
+        ["list", firstPrincipal],
+        [
+          "invite",
+          firstPrincipal,
+          { email: firstInvitation.email, role: "member" },
+        ],
       ]);
     },
   );
