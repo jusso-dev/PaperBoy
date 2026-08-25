@@ -7,9 +7,12 @@ import { nextCookies } from "better-auth/next-js";
 import { twoFactor } from "better-auth/plugins";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { ensureDefaultOrganization } from "@/lib/organizations";
+import {
+  acceptPendingInvitationsForEmail,
+  canCreateAccountForEmail,
+  ensureDefaultOrganization,
+} from "@/lib/organizations";
 import { configuredPasskeys } from "@/lib/passkey-configuration";
-import { publicSignUpEnabled } from "@/lib/signup-policy";
 import {
   defaultApplicationTimeZone,
   effectiveUserTimeZone,
@@ -36,12 +39,19 @@ export const auth = betterAuth({
     usePlural: true,
   }),
   emailAndPassword: {
-    disableSignUp: !publicSignUpEnabled(),
+    disableSignUp: false,
     enabled: true,
   },
   databaseHooks: {
     user: {
       create: {
+        before: async (user) => {
+          if (await canCreateAccountForEmail(user.email)) {
+            return { data: user };
+          }
+
+          return false;
+        },
         after: async (user, context) => {
           try {
             await ensureDefaultOrganization({
@@ -53,6 +63,10 @@ export const auth = betterAuth({
                   : null,
               id: user.id,
               name: user.name,
+            });
+            await acceptPendingInvitationsForEmail({
+              email: user.email,
+              userId: user.id,
             });
           } catch (error) {
             if (context) {

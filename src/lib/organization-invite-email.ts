@@ -1,3 +1,5 @@
+import { organizationInvitePath } from "@/lib/organization-invite-access";
+
 export class OrganizationInviteEmailError extends Error {
   readonly code: "ACCEPT_URL_UNAVAILABLE" | "SENDER_UNAVAILABLE";
 
@@ -9,6 +11,7 @@ export class OrganizationInviteEmailError extends Error {
 }
 
 export function organizationInviteAcceptUrl(
+  invitationId: string,
   raw = process.env.PAPERBOY_PUBLIC_URL ?? process.env.BETTER_AUTH_URL,
 ): string {
   if (!raw) {
@@ -16,7 +19,10 @@ export function organizationInviteAcceptUrl(
   }
 
   try {
-    return new URL("/app/organization", raw.endsWith("/") ? raw : `${raw}/`).href;
+    return new URL(
+      organizationInvitePath(invitationId),
+      raw.endsWith("/") ? raw : `${raw}/`,
+    ).href;
   } catch {
     throw new OrganizationInviteEmailError("ACCEPT_URL_UNAVAILABLE");
   }
@@ -51,15 +57,15 @@ export function organizationInviteMessage(input: {
   const text = [
     `You've been invited to join ${input.orgName} on PaperBoy as ${input.role}.`,
     "",
-    "Sign in with this email address, then accept the invitation:",
+    "Open this link with this email address to accept the invitation:",
     input.acceptUrl,
     "",
-    "If you do not have a PaperBoy account yet, create one with this same address first.",
+    "If you do not have a PaperBoy account yet, create one from that link with this same address.",
   ].join("\n");
 
   return {
     from: input.from,
-    html: `<p>You've been invited to join <strong>${escapeHtml(input.orgName)}</strong> on PaperBoy as ${escapeHtml(input.role)}.</p><p>Sign in with this email address, then <a href="${escapeHtml(input.acceptUrl)}">accept the invitation</a>.</p><p>If you do not have a PaperBoy account yet, create one with this same address first.</p>`,
+    html: `<p>You've been invited to join <strong>${escapeHtml(input.orgName)}</strong> on PaperBoy as ${escapeHtml(input.role)}.</p><p><a href="${escapeHtml(input.acceptUrl)}">Accept the invitation</a> with this email address.</p><p>If you do not have a PaperBoy account yet, create one from that link with this same address.</p>`,
     subject,
     tags: [
       { name: "invitation_id", value: input.invitationId },
@@ -80,7 +86,7 @@ export async function queueOrganizationInviteEmail(
     role: string;
   },
   dependencies: {
-    acceptUrl: () => string;
+    acceptUrl: (invitationId: string) => string;
     queue: (value: {
       payload: ReturnType<typeof organizationInviteMessage>;
       principal: {
@@ -103,7 +109,7 @@ export async function queueOrganizationInviteEmail(
 
   return dependencies.queue({
     payload: organizationInviteMessage({
-      acceptUrl: dependencies.acceptUrl(),
+      acceptUrl: dependencies.acceptUrl(input.invitationId),
       from: organizationInviteFromAddress(domain),
       invitationId: input.invitationId,
       orgName: input.orgName,

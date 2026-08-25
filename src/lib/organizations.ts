@@ -13,6 +13,8 @@ import {
   requirePermission,
   type OrgRole,
 } from "@/lib/authorization";
+import { isOrganizationInvitationId } from "@/lib/organization-invite-access";
+import { publicSignUpEnabled } from "@/lib/signup-policy";
 
 type UserOrganizationSeed = {
   id: string;
@@ -309,6 +311,57 @@ export async function listPendingInvitationsForUser(email: string) {
     .orderBy(asc(orgs.name));
 }
 
+export async function findOrganizationInvitationById(invitationId: string) {
+  if (!isOrganizationInvitationId(invitationId)) {
+    return null;
+  }
+
+  const [invitation] = await db
+    .select({
+      acceptedAt: orgInvites.acceptedAt,
+      email: orgInvites.email,
+      id: orgInvites.id,
+      orgId: orgs.id,
+      orgName: orgs.name,
+      revokedAt: orgInvites.revokedAt,
+      role: orgInvites.role,
+    })
+    .from(orgInvites)
+    .innerJoin(orgs, eq(orgs.id, orgInvites.orgId))
+    .where(eq(orgInvites.id, invitationId))
+    .limit(1);
+
+  return invitation ?? null;
+}
+
+export async function canCreateAccountForEmail(email: unknown): Promise<boolean> {
+  if (publicSignUpEnabled()) {
+    return true;
+  }
+
+  const normalized = normalizeInviteEmail(email);
+  if (!normalized) {
+    return false;
+  }
+
+  const pending = await listPendingInvitationsForUser(normalized);
+  return pending.length > 0;
+}
+
+export async function acceptPendingInvitationsForEmail(input: {
+  email: string;
+  userId: string;
+}) {
+  const pending = await listPendingInvitationsForUser(input.email);
+  for (const invitation of pending) {
+    await acceptOrganizationInvitation({
+      email: input.email,
+      invitationId: invitation.id,
+      userId: input.userId,
+    });
+  }
+}
+
 export async function inviteOrganizationMember(input: {
   actorUserId: string;
   email: unknown;
@@ -413,11 +466,13 @@ export async function acceptOrganizationInvitation(input: {
       .where(eq(orgInvites.id, input.invitationId))
       .for("update");
 
+    const email = normalizeInviteEmail(input.email);
     if (
       !invitation ||
       invitation.acceptedAt ||
       invitation.revokedAt ||
-      invitation.email !== input.email.toLowerCase() ||
+      !email ||
+      invitation.email !== email ||
       !isOrgRole(invitation.role) ||
       invitation.role === "owner"
     ) {

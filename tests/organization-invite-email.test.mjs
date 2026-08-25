@@ -30,7 +30,7 @@ test("invite email prefers a verified domain that matches the recipient", () => 
 
 test("invite message is a live PaperBoy letter the recipient can accept", () => {
   const message = organizationInviteMessage({
-    acceptUrl: "https://paperboy.example/app/organization",
+    acceptUrl: `https://paperboy.example/invite/${invitationId}`,
     from: organizationInviteFromAddress("rangeros.com.au"),
     invitationId,
     orgName: "RangerOS",
@@ -41,7 +41,7 @@ test("invite message is a live PaperBoy letter the recipient can accept", () => 
   assert.equal(message.from, "PaperBoy <invites@rangeros.com.au>");
   assert.equal(message.to, "justin@yumait.com.au");
   assert.equal(message.subject, "You're invited to RangerOS");
-  assert.match(message.text, /https:\/\/paperboy\.example\/app\/organization/);
+  assert.match(message.text, new RegExp(`/invite/${invitationId}`));
   assert.match(message.html, /RangerOS/);
   assert.deepEqual(message.tags, [
     { name: "invitation_id", value: invitationId },
@@ -49,13 +49,13 @@ test("invite message is a live PaperBoy letter the recipient can accept", () => 
   ]);
 });
 
-test("invite accept URL stays on the PaperBoy organization page", () => {
+test("invite accept URL is a public invitation link", () => {
   assert.equal(
-    organizationInviteAcceptUrl("https://paperboy.example"),
-    "https://paperboy.example/app/organization",
+    organizationInviteAcceptUrl(invitationId, "https://paperboy.example"),
+    `https://paperboy.example/invite/${invitationId}`,
   );
   assert.throws(
-    () => organizationInviteAcceptUrl(""),
+    () => organizationInviteAcceptUrl(invitationId, ""),
     (error) =>
       error instanceof OrganizationInviteEmailError &&
       error.code === "ACCEPT_URL_UNAVAILABLE",
@@ -74,7 +74,7 @@ test("queueing an invite email uses a ready sender and live principal", async ()
       role: "member",
     },
     {
-      acceptUrl: () => "https://paperboy.example/app/organization",
+      acceptUrl: (id) => `https://paperboy.example/invite/${id}`,
       queue: async (input) => {
         queued.push(input);
         return { id: "message-1" };
@@ -86,6 +86,10 @@ test("queueing an invite email uses a ready sender and live principal", async ()
   assert.equal(result.id, "message-1");
   assert.equal(queued.length, 1);
   assert.equal(queued[0].payload.from, "PaperBoy <invites@rangeros.com.au>");
+  assert.equal(
+    queued[0].payload.text.includes(`/invite/${invitationId}`),
+    true,
+  );
   assert.equal(queued[0].principal.environment, "live");
   assert.equal(queued[0].principal.orgId, orgId);
 });
@@ -129,7 +133,7 @@ test("invite email cannot queue without a ready sender", async () => {
           role: "member",
         },
         {
-          acceptUrl: () => "https://paperboy.example/app/organization",
+          acceptUrl: (id) => `https://paperboy.example/invite/${id}`,
           queue: async () => ({ id: "message-1" }),
           readyDomains: async () => [],
         },

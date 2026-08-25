@@ -28,10 +28,22 @@ const copy = {
 
 export function AuthForm({
   allowSignUp = false,
+  callbackURL = "/app",
+  defaultEmail = "",
+  intro,
+  lockEmail = false,
   mode,
+  switchHref,
+  title,
 }: {
   allowSignUp?: boolean;
+  callbackURL?: string;
+  defaultEmail?: string;
+  intro?: string;
+  lockEmail?: boolean;
   mode: AuthMode;
+  switchHref?: string;
+  title?: string;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -48,9 +60,9 @@ export function AuthForm({
 
     const result =
       mode === "sign-in"
-        ? await authClient.signIn.email({ callbackURL: "/app", email, password })
+        ? await authClient.signIn.email({ callbackURL, email, password })
         : await authClient.signUp.email({
-            callbackURL: "/app",
+            callbackURL,
             email,
             password,
             name: String(formData.get("name")),
@@ -77,7 +89,7 @@ export function AuthForm({
       return;
     }
 
-    window.location.replace("/app");
+    window.location.replace(callbackURL);
   }
 
   async function handlePasskeySignIn() {
@@ -92,16 +104,16 @@ export function AuthForm({
       setIsPending(false);
       return;
     }
-    window.location.replace("/app");
+    window.location.replace(callbackURL);
   }
 
   return (
     <section className="auth-card" aria-labelledby="auth-title">
       <p className="auth-kicker">Console access</p>
-      <h1 id="auth-title">{labels.title}</h1>
+      <h1 id="auth-title">{title ?? labels.title}</h1>
       <p className="auth-intro">
-        Your sending domains, API keys, and delivery logs stay behind this
-        desk.
+        {intro ??
+          "Your sending domains, API keys, and delivery logs stay behind this desk."}
       </p>
 
       <form onSubmit={handleSubmit}>
@@ -122,8 +134,10 @@ export function AuthForm({
           <label htmlFor="email">Email</label>
           <input
             autoComplete={mode === "sign-in" ? "username webauthn" : "email"}
+            defaultValue={defaultEmail}
             id="email"
             name="email"
+            readOnly={lockEmail}
             required
             type="email"
           />
@@ -178,7 +192,8 @@ export function AuthForm({
 
       {mode === "sign-up" || allowSignUp ? (
         <p className="auth-switch">
-          {labels.prompt} <Link href={labels.linkHref}>{labels.linkLabel}</Link>
+          {labels.prompt}{" "}
+          <Link href={switchHref ?? labels.linkHref}>{labels.linkLabel}</Link>
         </p>
       ) : null}
     </section>
