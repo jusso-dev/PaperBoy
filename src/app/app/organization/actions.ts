@@ -1,7 +1,17 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AuthorizationError } from "@/lib/authorization";
+import { listDomains } from "@/lib/domains";
+import { queueEmail } from "@/lib/messages";
+import {
+  OrganizationInviteEmailError,
+  organizationInviteAcceptUrl,
+  queueOrganizationInviteEmail,
+} from "@/lib/organization-invite-email";
+import { getOutboundProviderSettings } from "@/lib/outbound-providers";
+import { readySenderDomains } from "@/lib/provider-sender-identities";
 import {
   OpenTrackingConfigurationError,
   OpenTrackingSettingsError,
@@ -77,19 +87,72 @@ function errorLocation(error: unknown): string {
 
 export async function inviteMemberAction(formData: FormData) {
   const { organization, session } = await requireOrganization();
+  const email = formData.get("email");
+  const role = formData.get("role");
+  let invitation: { id: string };
 
   try {
-    await inviteOrganizationMember({
+    invitation = await inviteOrganizationMember({
       actorUserId: session.user.id,
-      email: formData.get("email"),
+      email,
       orgId: organization.id,
-      role: formData.get("role"),
+      role,
     });
   } catch (error) {
     redirect(errorLocation(error));
   }
 
-  redirect("/app/organization?saved=invitation");
+  let queuedId: string | null = null;
+  let emailError: string | null = null;
+
+  try {
+    const message = await queueOrganizationInviteEmail(
+      {
+        actorUserId: session.user.id,
+        email: String(email).trim().toLowerCase(),
+        invitationId: invitation.id,
+        orgId: organization.id,
+        orgName: organization.name,
+        role: String(role),
+      },
+      {
+        acceptUrl: organizationInviteAcceptUrl,
+        queue: queueEmail,
+        readyDomains: async () => {
+          const [domains, outbound] = await Promise.all([
+            listDomains({
+              actorUserId: session.user.id,
+              orgId: organization.id,
+            }),
+            getOutboundProviderSettings({
+              actorUserId: session.user.id,
+              orgId: organization.id,
+            }),
+          ]);
+          return readySenderDomains({
+            defaultProvider: outbound.defaultProvider,
+            domains,
+            orgId: organization.id,
+            providerDomains: outbound.domains,
+          });
+        },
+      },
+    );
+    queuedId = message.id;
+  } catch (error) {
+    emailError =
+      error instanceof OrganizationInviteEmailError
+        ? error.code.toLowerCase()
+        : "invite_email";
+  }
+
+  revalidatePath("/app");
+  revalidatePath("/app/logs");
+  revalidatePath("/app/organization");
+  const query = new URLSearchParams({ saved: "invitation" });
+  if (queuedId) query.set("queued", queuedId);
+  if (emailError) query.set("error", emailError);
+  redirect(`/app/organization?${query.toString()}`);
 }
 
 export async function acceptInvitationAction(formData: FormData) {

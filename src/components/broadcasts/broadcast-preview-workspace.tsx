@@ -96,7 +96,7 @@ export function BroadcastPreviewWorkspace({
     "source",
     "preview",
   ]);
-  const initialized = useRef(false);
+  const userMovedWindows = useRef(false);
   const [testState, testAction, testPending] = useActionState(
     sendBroadcastTestEmailAction,
     INITIAL_TEST_STATE,
@@ -114,8 +114,7 @@ export function BroadcastPreviewWorkspace({
       const next = { height: box.height, width: box.width };
       setBounds(next);
       setRects((current) => {
-        if (!initialized.current) {
-          initialized.current = true;
+        if (!userMovedWindows.current) {
           return defaultBroadcastWindowLayout(next);
         }
         return {
@@ -256,9 +255,10 @@ export function BroadcastPreviewWorkspace({
           <WorkspaceWindow
             bounds={bounds}
             label="Envelope"
-            onChange={(rect) =>
-              setRects((current) => ({ ...current, envelope: rect }))
-            }
+            onChange={(rect) => {
+              userMovedWindows.current = true;
+              setRects((current) => ({ ...current, envelope: rect }));
+            }}
             onFocus={() => focusWindow("envelope")}
             rect={rects.envelope}
             title="Dispatch"
@@ -381,9 +381,10 @@ export function BroadcastPreviewWorkspace({
             actions={<CopyBroadcastHtml html={source} />}
             bounds={bounds}
             label={canEdit ? "HTML" : "HTML source"}
-            onChange={(rect) =>
-              setRects((current) => ({ ...current, source: rect }))
-            }
+            onChange={(rect) => {
+              userMovedWindows.current = true;
+              setRects((current) => ({ ...current, source: rect }));
+            }}
             onFocus={() => focusWindow("source")}
             rect={rects.source}
             title="Letter source"
@@ -415,9 +416,10 @@ export function BroadcastPreviewWorkspace({
           <WorkspaceWindow
             bounds={bounds}
             label="HTML output"
-            onChange={(rect) =>
-              setRects((current) => ({ ...current, preview: rect }))
-            }
+            onChange={(rect) => {
+              userMovedWindows.current = true;
+              setRects((current) => ({ ...current, preview: rect }));
+            }}
             onFocus={() => focusWindow("preview")}
             rect={rects.preview}
             title="Browser preview"

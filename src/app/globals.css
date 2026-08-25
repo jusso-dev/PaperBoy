@@ -1260,10 +1260,12 @@ body:has(.broadcast-workspace) {
   display: grid;
   font-family: var(--font-mono), "Courier New", monospace;
   grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
   inset: 0;
   max-width: none;
   overflow: hidden;
   position: fixed;
+  width: 100%;
   z-index: 100;
 }
 
@@ -3009,7 +3011,7 @@ body:has(.broadcast-workspace) {
   max-width: 1600px;
 }
 
-.dashboard-main > section:not(.dashboard-overview) {
+.dashboard-main > section:not(.dashboard-overview):not(.broadcast-workspace) {
   max-width: 1080px;
 }
 

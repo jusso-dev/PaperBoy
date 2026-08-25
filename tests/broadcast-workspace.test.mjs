@@ -23,6 +23,11 @@ test("broadcast workspace owns the viewport and uses PaperBoy postal styling", a
 
   assert.match(css, /body:has\(\.broadcast-workspace\)[\s\S]*overflow: hidden/);
   assert.match(css, /\.broadcast-workspace \{[\s\S]*inset: 0/);
+  assert.match(css, /\.broadcast-workspace \{[\s\S]*width: 100%/);
+  assert.match(
+    css,
+    /\.dashboard-main > section:not\(\.dashboard-overview\):not\(\.broadcast-workspace\)/,
+  );
   assert.match(css, /\/\* PaperBoy broadcast dispatch desk\. \*\//);
   assert.doesNotMatch(css, /\/\* Resend-style broadcast inspection workspace\. \*\//);
   assert.match(component, />PaperBoy<\/Link>/);
@@ -32,6 +37,7 @@ test("broadcast workspace owns the viewport and uses PaperBoy postal styling", a
   assert.match(css, /\.broadcast-workspace-header \{[\s\S]*grid-template-areas:/);
   assert.match(css, /\.broadcast-workspace-title \{[\s\S]*overflow: hidden/);
   assert.match(component, /sendBroadcastTestEmailAction/);
+  assert.match(component, /userMovedWindows/);
   assert.match(component, /WorkspaceWindow/);
   assert.match(component, /Signed unsubscribe link included/);
   assert.doesNotMatch(component, /href="\/app\/send"/);

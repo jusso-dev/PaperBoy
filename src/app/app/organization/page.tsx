@@ -9,6 +9,7 @@ import {
   updateOpenTrackingAction,
   updateRateLimitsAction,
 } from "./actions";
+import Link from "next/link";
 import { can, isOrgRole } from "@/lib/authorization";
 import {
   listOrganizationInvitations,
@@ -35,6 +36,7 @@ type OrganizationPageProps = {
     providerMode?: string;
     providerRegion?: string;
     providerSending?: string;
+    queued?: string;
     saved?: string;
   }>;
 };
@@ -52,6 +54,12 @@ const errorMessages: Record<string, string> = {
   invalid_open_tracking: "Choose whether open tracking is enabled.",
   invalid_provider_settings: "Choose a supported outbound provider.",
   invitation_not_found: "That invitation is no longer available.",
+  accept_url_unavailable:
+    "The invitation was saved, but PaperBoy has no public URL to put in the email.",
+  invite_email:
+    "The invitation was saved, but the invite email could not be queued. Check Delivery.",
+  sender_unavailable:
+    "The invitation was saved, but no verified sending domain is ready for the invite email.",
   membership_required: "That organization membership is no longer available.",
   open_tracking_configuration:
     "The operator must configure the public URL and dedicated open-tracking signing key before tracking can be enabled.",
@@ -71,7 +79,7 @@ const errorMessages: Record<string, string> = {
 
 const successMessages: Record<string, string> = {
   accepted: "Invitation accepted. The new organization is active.",
-  invitation: "Invitation saved. The recipient can accept it in PaperBoy.",
+  invitation: "Invitation emailed. It appears on Delivery and Overview.",
   removed: "Member removed.",
   renamed: "Organization renamed.",
   "rate-limits": "Organization rate limits saved.",
@@ -545,9 +553,17 @@ export default async function OrganizationPage({
         {canInvite ? (
           <>
             <p>
-              No email is sent in v1. The recipient sees the invitation after
-              signing in with this address.
+              PaperBoy queues a live invite email from a verified sender
+              identity. Open it on{" "}
+              <Link href="/app/logs">Delivery</Link> like any other send. The
+              recipient signs in with this address and accepts it here.
             </p>
+            {status.queued ? (
+              <p className="form-success" role="status">
+                Invite email {status.queued} is on{" "}
+                <Link href="/app/logs">Delivery</Link>.
+              </p>
+            ) : null}
             <form action={inviteMemberAction} className="invite-form">
               <div className="field">
                 <label htmlFor="invite-email">Email</label>
@@ -567,7 +583,7 @@ export default async function OrganizationPage({
                 </select>
               </div>
               <button className="btn btn-primary" type="submit">
-                Save invitation
+                Send invitation
               </button>
             </form>
           </>
