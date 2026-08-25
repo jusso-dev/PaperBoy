@@ -749,6 +749,7 @@ export async function updateScheduledBroadcast(
               templateText: templateBodies.text,
             }
           : {}),
+        ...(definition.subject ? { templateSubject: definition.subject } : {}),
         updatedAt: now,
       })
       .where(eq(broadcasts.id, input.broadcastId));

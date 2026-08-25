@@ -90,11 +90,22 @@ test("scheduled broadcast update accepts partial snapshot and schedule changes",
   const parsed = parseUpdateBroadcastInput({
     audience_id: audienceId,
     scheduled_for: "2026-09-24T22:00:00.000Z",
+    subject: "Updated subject",
   });
 
   assert.equal(parsed.audienceId, audienceId);
   assert.equal(parsed.scheduledFor?.toISOString(), "2026-09-24T22:00:00.000Z");
   assert.equal(parsed.templateId, undefined);
+  assert.equal(parsed.subject, "Updated subject");
+});
+
+test("scheduled broadcast update rejects unsafe subjects", () => {
+  assert.throws(
+    () => parseUpdateBroadcastInput({ subject: "Hello\r\nBcc: reader@example.net" }),
+    (error) =>
+      error instanceof BroadcastError &&
+      error.issues.some((issue) => issue.field === "subject"),
+  );
 });
 
 test("scheduled broadcast update rejects empty or unsupported changes", () => {

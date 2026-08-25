@@ -170,6 +170,7 @@ export function serializeBroadcast(record: BroadcastRecord) {
     source_template_id: record.sourceTemplateId,
     status: record.status,
     template_name: record.templateName,
+    subject: record.templateSubject,
     updated_at: record.updatedAt.toISOString(),
   };
 }

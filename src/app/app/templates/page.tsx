@@ -271,7 +271,7 @@ export default async function TemplatesPage({
                   <summary>Delete template</summary>
                   <form action={deleteTemplateAction}>
                     <input name="templateId" type="hidden" value={template.id} />
-                    <label>
+                    <label className="confirmation-control">
                       <input name="confirm" required type="checkbox" value="yes" />{" "}
                       Permanently delete {template.name}
                     </label>

@@ -10,7 +10,9 @@ import {
   createBroadcast,
   pauseBroadcast,
   resumeBroadcast,
+  updateScheduledBroadcast,
 } from "@/lib/broadcasts";
+import { parseNaturalLanguageSchedule } from "@/lib/natural-language-schedule";
 import { requireOrganization } from "@/lib/session";
 import { TemplateError } from "@/lib/template-core";
 import { parseLocalDateTime } from "@/lib/time";
@@ -129,4 +131,43 @@ export async function resumeBroadcastAction(formData: FormData) {
 
 export async function cancelBroadcastAction(formData: FormData) {
   return control(String(formData.get("broadcastId") ?? ""), "cancel");
+}
+
+export async function updateBroadcastAction(formData: FormData) {
+  const { organization, session } = await requireOrganization();
+  const broadcastId = String(formData.get("broadcastId") ?? "");
+  const schedule = parseNaturalLanguageSchedule(
+    formData.get("scheduleText"),
+    new Date(),
+    session.user.timezone,
+  );
+  if (!schedule.date) {
+    redirect(
+      `/app/broadcasts/${encodeURIComponent(broadcastId)}/preview?error=invalid-schedule`,
+    );
+  }
+
+  try {
+    await updateScheduledBroadcast({
+      actorUserId: session.user.id,
+      broadcastId,
+      orgId: organization.id,
+      payload: {
+        audience_id: formData.get("audienceId"),
+        from: formData.get("from"),
+        scheduled_for: schedule.date.toISOString(),
+        subject: formData.get("subject"),
+      },
+    });
+  } catch (error) {
+    redirect(
+      `/app/broadcasts/${encodeURIComponent(broadcastId)}/preview?error=${errorCode(error)}`,
+    );
+  }
+
+  revalidatePath("/app/broadcasts");
+  revalidatePath(`/app/broadcasts/${broadcastId}/preview`);
+  redirect(
+    `/app/broadcasts/${encodeURIComponent(broadcastId)}/preview?success=updated`,
+  );
 }

@@ -19,6 +19,7 @@
         "@radix-ui/react-tooltip": "^1.2.16",
         "better-auth": "1.7.1",
         "bullmq": "6.2.0",
+        "chrono-node": "2.10.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "drizzle-orm": "0.45.2",
@@ -728,6 +729,8 @@
     "caniuse-lite": ["caniuse-lite@1.0.30001809", "", {}, "sha512-xxWVywk6a6Arlk+hymeycyn/VgqEfLDxupvhH/xiY5SJ/18kmi9o6MiO320DCUzypORHLtvh0I4i04tUhCNHNQ=="],
 
     "chalk": ["chalk@4.1.2", "", { "dependencies": { "ansi-styles": "4.3.0", "supports-color": "7.2.0" } }, "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA=="],
+
+    "chrono-node": ["chrono-node@2.10.0", "", {}, "sha512-5fJ4zr5W/5DEf+8FMPMXF2qk9L5dc1rAP9Pw009iMlKAghPgx5o7aUcnjEMe6PTwqiqTa5yzmfSm05EHuwr31Q=="],
 
     "class-variance-authority": ["class-variance-authority@0.7.1", "", { "dependencies": { "clsx": "^2.1.1" } }, "sha512-Ka+9Trutv7G8M6WT6SeiRWz792K5qEqIGEGzXKhAE6xOWAY6pPH8U+9IY3oCMv6kqTmLsv7Xh/2w2RigkePMsg=="],
 

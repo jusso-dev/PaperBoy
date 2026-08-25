@@ -131,7 +131,7 @@ export default async function AudiencesPage({ searchParams }: Props) {
                       </form>
                       <form action={deleteAudienceAction} className="audience-delete-form">
                         <input name="audienceId" type="hidden" value={selected.id} />
-                        <label><input name="confirm" required type="checkbox" value="yes" /> Delete this audience and all contacts</label>
+                        <label className="confirmation-control"><input name="confirm" required type="checkbox" value="yes" /> Delete this audience and all contacts</label>
                         <button className="btn btn-danger btn-compact" type="submit">Delete audience</button>
                       </form>
                     </>
@@ -182,7 +182,7 @@ export default async function AudiencesPage({ searchParams }: Props) {
                     {canManage && unsubscribedCount > 0 ? (
                       <form action={deleteUnsubscribedContactsAction} className="audience-bulk-delete-form">
                         <input name="audienceId" type="hidden" value={selected.id} />
-                        <label>
+                        <label className="confirmation-control">
                           <input name="confirm" required type="checkbox" value="yes" />
                           Confirm removal
                         </label>
@@ -215,17 +215,19 @@ export default async function AudiencesPage({ searchParams }: Props) {
                             <td>{formatDateTime(contact.updatedAt, session.user.timezone)}</td>
                             {canManage ? (
                               <td>
-                                <form action={updateContactAction} id={`contact-${contact.id}`}>
-                                  <input name="audienceId" type="hidden" value={selected.id} />
-                                  <input name="contactId" type="hidden" value={contact.id} />
-                                  <button className="btn btn-compact" type="submit">Save</button>
-                                </form>
-                                <form action={deleteContactAction} className="contact-delete-form">
-                                  <input name="audienceId" type="hidden" value={selected.id} />
-                                  <input name="contactId" type="hidden" value={contact.id} />
-                                  <label><input name="confirm" required type="checkbox" value="yes" /> Delete</label>
-                                  <button className="btn btn-danger btn-compact" type="submit">Remove</button>
-                                </form>
+                                <div className="table-manage-actions">
+                                  <form action={updateContactAction} id={`contact-${contact.id}`}>
+                                    <input name="audienceId" type="hidden" value={selected.id} />
+                                    <input name="contactId" type="hidden" value={contact.id} />
+                                    <button className="btn btn-compact" type="submit">Save</button>
+                                  </form>
+                                  <form action={deleteContactAction} className="contact-delete-form">
+                                    <input name="audienceId" type="hidden" value={selected.id} />
+                                    <input name="contactId" type="hidden" value={contact.id} />
+                                    <label className="confirmation-control"><input name="confirm" required type="checkbox" value="yes" /> Confirm removal</label>
+                                    <button className="btn btn-danger btn-compact" type="submit">Remove</button>
+                                  </form>
+                                </div>
                               </td>
                             ) : null}
                           </tr>

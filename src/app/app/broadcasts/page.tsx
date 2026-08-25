@@ -14,9 +14,10 @@ import { readySenderDomains } from "@/lib/provider-sender-identities";
 import { requireOrganization } from "@/lib/session";
 import { listTemplates } from "@/lib/templates";
 import { formatDateTime } from "@/lib/time";
+import { BROADCAST_STATUSES, type BroadcastStatus } from "@/lib/broadcast-core";
 
 type BroadcastsPageProps = {
-  searchParams: Promise<{ error?: string; success?: string }>;
+  searchParams: Promise<{ error?: string; status?: string; success?: string }>;
 };
 
 const errorMessages: Record<string, string> = {
@@ -38,6 +39,7 @@ const successMessages: Record<string, string> = {
   pause: "Broadcast paused after its current recipient.",
   resume: "Broadcast resumed.",
   scheduled: "Broadcast scheduled.",
+  updated: "Scheduled broadcast updated.",
 };
 
 export default async function BroadcastsPage({
@@ -95,6 +97,12 @@ export default async function BroadcastsPage({
       readyDomains = [];
     }
   }
+  const selectedStatus = BROADCAST_STATUSES.includes(status.status as BroadcastStatus)
+    ? (status.status as BroadcastStatus)
+    : "all";
+  const visibleRecords = selectedStatus === "all"
+    ? records
+    : records.filter((record) => record.status === selectedStatus);
 
   return (
     <section>
@@ -190,7 +198,7 @@ export default async function BroadcastsPage({
                 Schedule interpreted as <code>{session.user.timezone}</code>.
               </p>
             </fieldset>
-            <label>
+            <label className="confirmation-control">
               <input name="consentConfirmed" required type="checkbox" value="yes" />{" "}
               Recipients consented, and template identifies sender with current contact details.
             </label>
@@ -204,6 +212,27 @@ export default async function BroadcastsPage({
         )}
       </div>
 
+      {canRead && records.length > 0 ? (
+        <form className="broadcast-filter" method="get">
+          <div className="field">
+            <label htmlFor="broadcast-status-filter">Filter by status</label>
+            <select
+              defaultValue={selectedStatus}
+              id="broadcast-status-filter"
+              name="status"
+            >
+              <option value="all">All statuses</option>
+              {BROADCAST_STATUSES.map((broadcastStatus) => (
+                <option key={broadcastStatus} value={broadcastStatus}>
+                  {broadcastStatus.charAt(0).toUpperCase() + broadcastStatus.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button className="btn btn-compact" type="submit">Apply filter</button>
+        </form>
+      ) : null}
+
       {!canRead ? (
         <p className="empty-state">Your role cannot read broadcasts.</p>
       ) : records.length === 0 ? (
@@ -211,9 +240,13 @@ export default async function BroadcastsPage({
           No broadcasts yet. Create one above, use <code>POST /api/v1/broadcasts</code>,
           or use the MCP broadcast tool.
         </p>
+      ) : visibleRecords.length === 0 ? (
+        <p className="empty-state">
+          No {selectedStatus} broadcasts. <Link href="/app/broadcasts">Clear filter</Link>.
+        </p>
       ) : (
         <div className="broadcast-list">
-          {records.map((record) => {
+          {visibleRecords.map((record) => {
             const complete =
               record.progress.queued +
               record.progress.suppressed +

@@ -247,8 +247,12 @@ h3 {
   display: inline-block;
   font-family: inherit;
   font-size: 15px;
+  line-height: 1.2;
+  min-height: 38px;
   padding: 8px 18px;
   text-decoration: none;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 .btn:hover {
@@ -280,6 +284,7 @@ h3 {
 .btn-compact {
   box-shadow: 1px 1px 0 rgba(26, 26, 26, 0.2);
   font-size: 13px;
+  min-height: 30px;
   padding: 4px 10px;
 }
 
@@ -313,6 +318,22 @@ select {
   font-size: 15px;
   padding: 8px 10px;
   width: 100%;
+}
+
+input[type='checkbox'] {
+  accent-color: var(--postal-blue);
+  flex: none;
+  height: 16px;
+  margin: 0;
+  width: 16px;
+}
+
+.confirmation-control {
+  align-items: center;
+  display: inline-flex;
+  font-size: 12px;
+  gap: 7px;
+  line-height: 1.4;
 }
 
 input[type='file'] {
@@ -768,7 +789,7 @@ select:focus-visible {
 }
 
 .suppression-table td:last-child {
-  min-width: 210px;
+  min-width: 330px;
 }
 
 .suppression-delete-form {
@@ -776,11 +797,22 @@ select:focus-visible {
   display: flex;
   font-size: 12px;
   gap: 8px;
-  margin-top: 10px;
+  margin: 0;
 }
 
 .suppression-delete-form label {
   white-space: nowrap;
+}
+
+.table-manage-actions {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.table-manage-actions form {
+  flex: none;
 }
 
 /* ---- Sending domains ------------------------------------------------- */
@@ -1518,6 +1550,8 @@ body:has(.broadcast-workspace) {
   background-image: radial-gradient(rgba(29, 41, 40, 0.026) 0.6px, transparent 0.7px);
   background-size: 5px 5px;
   border-bottom: 1px solid var(--line);
+  max-height: min(62dvh, 620px);
+  overflow-y: auto;
   padding: 24px clamp(24px, 4vw, 52px) 0;
 }
 
@@ -1563,6 +1597,93 @@ body:has(.broadcast-workspace) {
   font-size: 12px;
   font-weight: 600;
   margin-top: 7px;
+}
+
+.broadcast-edit-message {
+  margin: 0 0 14px;
+}
+
+.broadcast-edit-form {
+  display: grid;
+  gap: 12px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-bottom: 18px;
+}
+
+.broadcast-edit-form .field {
+  margin: 0;
+}
+
+.broadcast-edit-form label {
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.broadcast-edit-form input,
+.broadcast-edit-form select {
+  background: color-mix(in srgb, var(--paper-light) 75%, var(--paper));
+  border-color: color-mix(in srgb, var(--postal-blue) 44%, var(--line));
+  font-size: 12px;
+  min-height: 38px;
+}
+
+.broadcast-natural-schedule,
+.broadcast-edit-subject,
+.broadcast-edit-footer {
+  grid-column: 1 / -1;
+}
+
+.broadcast-natural-schedule p {
+  font-size: 10px;
+  margin: 5px 0 0;
+}
+
+.broadcast-edit-footer {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+
+.broadcast-edit-footer p {
+  color: var(--ink-muted);
+  font-size: 10px;
+  margin: 0;
+}
+
+.broadcast-edit-footer .btn {
+  width: auto;
+}
+
+.broadcast-preview-cancel {
+  border-top: 1px solid var(--line);
+  padding: 12px 0 16px;
+}
+
+.broadcast-preview-cancel .btn {
+  width: auto;
+}
+
+.broadcast-filter {
+  align-items: end;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin: 18px 0 12px;
+}
+
+.broadcast-filter .field {
+  margin: 0;
+  min-width: 220px;
+}
+
+.broadcast-filter .btn {
+  width: auto;
 }
 
 .broadcast-envelope-details {
@@ -1645,6 +1766,89 @@ body:has(.broadcast-workspace) {
   width: 28px;
 }
 
+@media (max-width: 1100px) {
+  .broadcast-workspace-body {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .broadcast-source-panel {
+    display: none;
+  }
+
+  .broadcast-render-panel {
+    border-left: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .broadcast-workspace {
+    grid-template-rows: 64px minmax(0, 1fr);
+  }
+
+  .broadcast-workspace-header {
+    gap: 8px;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    padding: 8px 10px 0 8px;
+  }
+
+  .broadcast-workspace-title > span,
+  .broadcast-workspace-title > a:not(.broadcast-workspace-brand) {
+    display: none;
+  }
+
+  .broadcast-workspace-title strong {
+    max-width: 34vw;
+  }
+
+  .broadcast-workspace-test {
+    display: none;
+  }
+
+  .broadcast-workspace-body {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .broadcast-render-summary {
+    max-height: 68dvh;
+    padding: 16px 14px 0;
+  }
+
+  .broadcast-edit-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .broadcast-edit-form > * {
+    grid-column: 1;
+  }
+
+  .broadcast-edit-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .broadcast-edit-footer .btn,
+  .broadcast-preview-cancel .btn {
+    width: 100%;
+  }
+
+  .broadcast-render-frame {
+    padding: 12px;
+  }
+
+  .broadcast-filter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .broadcast-filter .field {
+    min-width: 0;
+  }
+
+  .broadcast-filter .btn {
+    width: 100%;
+  }
+}
+
 /* ---- Audiences ------------------------------------------------------- */
 
 .audience-create-form,
@@ -1713,8 +1917,7 @@ body:has(.broadcast-workspace) {
 }
 
 .audience-heading,
-.audience-delete-form,
-.contact-delete-form {
+.audience-delete-form {
   align-items: center;
   display: flex;
   gap: 12px;
@@ -1760,10 +1963,15 @@ body:has(.broadcast-workspace) {
   margin-top: 16px;
 }
 
-.audience-delete-form,
-.contact-delete-form {
+.audience-delete-form {
   border-top: 1px solid var(--rule);
   padding-top: 10px;
+}
+
+.contact-delete-form {
+  align-items: center;
+  display: flex;
+  gap: 8px;
 }
 
 .contact-import-form {
@@ -1773,6 +1981,11 @@ body:has(.broadcast-workspace) {
 
 .contact-table {
   min-width: 900px;
+}
+
+.contact-table th:last-child,
+.contact-table td:last-child {
+  min-width: 310px;
 }
 
 /* ---- Delivery worker ------------------------------------------------- */
@@ -2181,8 +2394,7 @@ body:has(.broadcast-workspace) {
   .audience-heading,
   .audience-contacts-heading,
   .audience-bulk-delete-form,
-  .audience-delete-form,
-  .contact-delete-form {
+  .audience-delete-form {
     align-items: stretch;
     flex-direction: column;
   }

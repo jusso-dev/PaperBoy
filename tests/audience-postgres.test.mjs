@@ -428,6 +428,7 @@ test(
             audience_id: uncapped.id,
             name: "All readers",
             scheduled_for: movedSchedule.toISOString(),
+            subject: "All readers update",
           },
         },
         {
@@ -444,6 +445,7 @@ test(
       assert.equal(updatedUnrestricted.progress.pending, 125);
       assert.equal(updatedUnrestricted.scheduledFor?.toISOString(), movedSchedule.toISOString());
       assert.equal(updatedUnrestricted.sourceAudienceId, uncapped.id);
+      assert.equal(updatedUnrestricted.templateSubject, "All readers update");
 
       await db.insert(broadcasts).values(
         Array.from({ length: 55 }, (_, index) => ({

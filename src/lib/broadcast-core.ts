@@ -1,4 +1,5 @@
 import { normalizeEmailAddress } from "@/lib/email-core";
+import { MAX_TEMPLATE_SUBJECT_LENGTH } from "@/lib/template-core";
 
 export const MAX_BROADCAST_NAME_LENGTH = 120;
 
@@ -51,7 +52,9 @@ export type CreateBroadcastInput = {
   templateId: string;
 };
 
-export type UpdateBroadcastInput = Partial<CreateBroadcastInput>;
+export type UpdateBroadcastInput = Partial<CreateBroadcastInput> & {
+  subject?: string;
+};
 
 const CREATE_FIELDS = new Set([
   "audience_id",
@@ -60,6 +63,7 @@ const CREATE_FIELDS = new Set([
   "scheduled_for",
   "template_id",
 ]);
+const UPDATE_FIELDS = new Set([...CREATE_FIELDS, "subject"]);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RFC3339_PATTERN =
@@ -165,7 +169,7 @@ export function parseUpdateBroadcastInput(value: unknown): UpdateBroadcastInput 
 
   const issues: BroadcastValidationIssue[] = [];
   const unsupported = Object.keys(value).filter(
-    (field) => !CREATE_FIELDS.has(field),
+    (field) => !UPDATE_FIELDS.has(field),
   );
   unsupported.forEach((field) => {
     issues.push({ field, message: "This field is not supported." });
@@ -197,6 +201,22 @@ export function parseUpdateBroadcastInput(value: unknown): UpdateBroadcastInput 
       });
     } else {
       result.from = from;
+    }
+  }
+
+  if (Object.hasOwn(value, "subject")) {
+    const subject = typeof value.subject === "string" ? value.subject : "";
+    if (
+      !subject.trim() ||
+      subject.length > MAX_TEMPLATE_SUBJECT_LENGTH ||
+      /[\r\n]/.test(subject)
+    ) {
+      issues.push({
+        field: "subject",
+        message: `Enter a single-line subject of at most ${MAX_TEMPLATE_SUBJECT_LENGTH} characters.`,
+      });
+    } else {
+      result.subject = subject;
     }
   }
 

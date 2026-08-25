@@ -451,7 +451,7 @@ export default async function OrganizationPage({
         </p>
         {canManageOpenTracking ? (
           <form action={updateOpenTrackingAction} className="rate-limit-form">
-            <label htmlFor="openTrackingEnabled">
+            <label className="confirmation-control" htmlFor="openTrackingEnabled">
               <input
                 defaultChecked={openTracking.enabled}
                 disabled={!openTrackingOrigin}

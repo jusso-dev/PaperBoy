@@ -3,33 +3,57 @@ import {
   ArrowLeft,
   Code2,
   FileText,
-  Info,
   Mail,
   Pencil,
   Send,
 } from "lucide-react";
 import { CopyBroadcastHtml } from "@/components/broadcasts/copy-broadcast-html";
+import { NaturalLanguageScheduleField } from "@/components/broadcasts/natural-language-schedule-field";
+import {
+  cancelBroadcastAction,
+  updateBroadcastAction,
+} from "@/app/app/broadcasts/actions";
 import { templateBrowserPreviewDocument } from "@/lib/template-browser-preview";
 
 type BroadcastPreviewWorkspaceProps = {
   audienceName: string;
+  audiences: Array<{ activeContactCount: number; id: string; name: string }>;
+  broadcastId: string;
+  canCancel: boolean;
+  canEdit: boolean;
+  error?: string;
   from: string;
   html: string | null;
   name: string;
   scheduledLabel: string;
+  scheduleInput: string;
+  sourceAudienceId: string | null;
   status: string;
   subject: string;
+  success?: string;
+  referenceTime: string;
+  timeZone: string;
   userInitial: string;
 };
 
 export function BroadcastPreviewWorkspace({
   audienceName,
+  audiences,
+  broadcastId,
+  canCancel,
+  canEdit,
+  error,
   from,
   html,
   name,
+  referenceTime,
   scheduledLabel,
+  scheduleInput,
+  sourceAudienceId,
   status,
   subject,
+  success,
+  timeZone,
   userInitial,
 }: BroadcastPreviewWorkspaceProps) {
   const source = html ?? "<!-- This broadcast has no HTML body. -->";
@@ -93,24 +117,111 @@ export function BroadcastPreviewWorkspace({
 
         <section className="broadcast-render-panel">
           <div className="broadcast-render-summary">
-            {status === "scheduled" ? (
+            {canEdit ? (
               <div className="broadcast-locked-note">
-                <Info aria-hidden="true" strokeWidth={1.8} />
+                <Pencil aria-hidden="true" strokeWidth={1.8} />
                 <div>
-                  <strong>Dispatch locked</strong>
-                  <p>This letter is scheduled to leave {scheduledLabel}.</p>
-                  <Link href="/app/broadcasts">Return to broadcast desk</Link>
+                  <strong>Scheduled dispatch</strong>
+                  <p>Edit envelope details before this letter leaves {scheduledLabel}.</p>
                 </div>
               </div>
             ) : null}
 
-            <dl className="broadcast-envelope-details">
-              <div><dt>From</dt><dd>{from}</dd></div>
-              <div><dt>Audience</dt><dd><span>{audienceName}</span></dd></div>
-              <div><dt>Opt-out</dt><dd className="broadcast-envelope-muted">Signed unsubscribe link included</dd></div>
-              <div><dt>When</dt><dd>{scheduledLabel}</dd></div>
-              <div><dt>Subject</dt><dd>{subject}</dd></div>
-            </dl>
+            {error ? (
+              <p className="form-error broadcast-edit-message" role="alert">
+                {error === "invalid-schedule"
+                  ? "Type one unambiguous future date and time."
+                  : "Broadcast changes could not be saved."}
+              </p>
+            ) : null}
+            {success === "updated" ? (
+              <p className="form-success broadcast-edit-message" role="status">
+                Scheduled broadcast updated.
+              </p>
+            ) : null}
+
+            {canEdit ? (
+              <>
+                <form action={updateBroadcastAction} className="broadcast-edit-form">
+                  <input name="broadcastId" type="hidden" value={broadcastId} />
+                  <div className="field">
+                    <label htmlFor="broadcast-edit-from">From</label>
+                    <input
+                      autoCapitalize="none"
+                      defaultValue={from}
+                      id="broadcast-edit-from"
+                      inputMode="email"
+                      name="from"
+                      required
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="broadcast-edit-audience">Audience</label>
+                    <select
+                      defaultValue={sourceAudienceId ?? ""}
+                      id="broadcast-edit-audience"
+                      name="audienceId"
+                      required
+                    >
+                      {audiences.map((audience) => (
+                        <option key={audience.id} value={audience.id}>
+                          {audience.name} · {audience.activeContactCount} active
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <NaturalLanguageScheduleField
+                    defaultValue={scheduleInput}
+                    inputId="broadcast-edit-schedule"
+                    referenceTime={referenceTime}
+                    timeZone={timeZone}
+                  />
+                  <div className="field broadcast-edit-subject">
+                    <label htmlFor="broadcast-edit-subject">Subject</label>
+                    <input
+                      defaultValue={subject}
+                      id="broadcast-edit-subject"
+                      maxLength={998}
+                      name="subject"
+                      required
+                    />
+                  </div>
+                  <div className="broadcast-edit-footer">
+                    <p>Signed unsubscribe link stays attached.</p>
+                    <button className="btn btn-primary btn-compact" type="submit">
+                      Save changes
+                    </button>
+                  </div>
+                </form>
+                {canCancel ? (
+                  <form action={cancelBroadcastAction} className="broadcast-preview-cancel">
+                    <input name="broadcastId" type="hidden" value={broadcastId} />
+                    <button className="btn btn-danger btn-compact" type="submit">
+                      Cancel broadcast
+                    </button>
+                  </form>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <dl className="broadcast-envelope-details">
+                  <div><dt>From</dt><dd>{from}</dd></div>
+                  <div><dt>Audience</dt><dd><span>{audienceName}</span></dd></div>
+                  <div><dt>Opt-out</dt><dd className="broadcast-envelope-muted">Signed unsubscribe link included</dd></div>
+                  <div><dt>When</dt><dd>{scheduledLabel}</dd></div>
+                  <div><dt>Subject</dt><dd>{subject}</dd></div>
+                </dl>
+                {canCancel ? (
+                  <form action={cancelBroadcastAction} className="broadcast-preview-cancel">
+                    <input name="broadcastId" type="hidden" value={broadcastId} />
+                    <button className="btn btn-danger btn-compact" type="submit">
+                      Cancel broadcast
+                    </button>
+                  </form>
+                ) : null}
+              </>
+            )}
           </div>
 
           <div className="broadcast-render-frame">

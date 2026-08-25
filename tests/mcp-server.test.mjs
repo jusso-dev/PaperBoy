@@ -169,6 +169,7 @@ const firstBroadcast = {
   sourceTemplateId: firstTemplate.id,
   status: "completed",
   templateName: firstTemplate.name,
+  templateSubject: firstTemplate.subject,
   updatedAt: fixedNow,
 };
 const firstRateLimits = {
@@ -796,6 +797,7 @@ test("initializes and publishes versioned tool schemas", async () => {
         "from",
         "name",
         "scheduledFor",
+        "subject",
         "templateId",
       ],
       paperboy_rotate_domain_dkim: ["domainId"],
@@ -1483,17 +1485,20 @@ test("broadcasts are first-class tenant-bound MCP operations with UTC progress",
           audienceId: firstAudience.id,
           broadcastId: firstBroadcast.id,
           scheduledFor: "2026-09-24T22:00:00.000Z",
+          subject: "Updated subject",
         },
         name: "paperboy_update_broadcast",
       });
 
+      const { templateSubject: _templateSubject, ...publicBroadcast } = firstBroadcast;
       assert.deepEqual(listed.structuredContent, {
         broadcasts: [
           {
-            ...firstBroadcast,
+            ...publicBroadcast,
             cancelledAt: null,
             completedAt: fixedNow.toISOString(),
             createdAt: fixedNow.toISOString(),
+            subject: firstBroadcast.templateSubject,
             updatedAt: fixedNow.toISOString(),
           },
         ],
@@ -1517,6 +1522,7 @@ test("broadcasts are first-class tenant-bound MCP operations with UTC progress",
           {
             audienceId: firstAudience.id,
             scheduledFor: "2026-09-24T22:00:00.000Z",
+            subject: "Updated subject",
           },
         ],
       ]);

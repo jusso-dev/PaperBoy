@@ -9,7 +9,10 @@ import {
 } from "@/lib/broadcast-core";
 import type { BroadcastRecord } from "@/lib/broadcasts";
 import { protocolTimestamp } from "@/lib/time";
-import { TemplateError } from "@/lib/template-core";
+import {
+  MAX_TEMPLATE_SUBJECT_LENGTH,
+  TemplateError,
+} from "@/lib/template-core";
 import { UnsubscribeConfigurationError } from "@/lib/unsubscribe-core";
 import { PAPERBOY_MCP_SCHEMA_VERSION } from "@/mcp/contract";
 
@@ -130,6 +133,13 @@ const updateBroadcastInputSchema = z
     from: z.string().min(3).max(320).optional(),
     name: z.string().min(1).max(MAX_BROADCAST_NAME_LENGTH).optional(),
     scheduledFor: z.iso.datetime({ offset: true }).optional(),
+    subject: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_TEMPLATE_SUBJECT_LENGTH)
+      .regex(/^[^\r\n]*$/)
+      .optional(),
     templateId: z.string().uuid().optional(),
   })
   .strict()
@@ -163,6 +173,7 @@ const broadcastSchema = z.object({
   sourceAudienceId: z.string().uuid().nullable(),
   sourceTemplateId: z.string().uuid().nullable(),
   status: z.enum(["scheduled", "running", "paused", "completed", "cancelled"]),
+  subject: z.string(),
   templateName: z.string(),
   updatedAt: z.iso.datetime({ offset: true }),
 });
@@ -204,6 +215,7 @@ function serialize(record: BroadcastRecord) {
     sourceAudienceId: record.sourceAudienceId,
     sourceTemplateId: record.sourceTemplateId,
     status: record.status,
+    subject: record.templateSubject,
     templateName: record.templateName,
     updatedAt: protocolTimestamp(record.updatedAt),
   };
