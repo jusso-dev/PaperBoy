@@ -34,6 +34,7 @@ export default async function BroadcastPreviewPage({
     : null;
   const canControl = can(organization.role, "broadcasts.control");
   const canEdit = canControl && broadcast.status === "scheduled";
+  const canSend = can(organization.role, "messages.send");
   const audiences = canEdit
     ? await listAudiences({
         actorUserId: session.user.id,
@@ -57,6 +58,7 @@ export default async function BroadcastPreviewPage({
       broadcastId={broadcast.id}
       canCancel={canControl && ["scheduled", "running", "paused"].includes(broadcast.status)}
       canEdit={canEdit}
+      canSend={canSend}
       error={status.error}
       from={broadcast.from}
       html={broadcast.templateHtml}
@@ -73,7 +75,9 @@ export default async function BroadcastPreviewPage({
         : ""}
       referenceTime={new Date().toISOString()}
       sourceAudienceId={broadcast.sourceAudienceId}
+      text={broadcast.templateText ?? ""}
       timeZone={session.user.timezone}
+      userEmail={session.user.email}
       userInitial={(session.user.name || session.user.email).trim().charAt(0).toUpperCase()}
     />
   );

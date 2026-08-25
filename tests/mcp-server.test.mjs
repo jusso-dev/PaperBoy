@@ -795,6 +795,7 @@ test("initializes and publishes versioned tool schemas", async () => {
         "audienceId",
         "broadcastId",
         "from",
+        "html",
         "name",
         "scheduledFor",
         "subject",

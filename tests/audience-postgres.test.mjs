@@ -426,6 +426,7 @@ test(
           orgId: firstOrgId,
           payload: {
             audience_id: uncapped.id,
+            html: "<p>Updated letter body</p>",
             name: "All readers",
             scheduled_for: movedSchedule.toISOString(),
             subject: "All readers update",
@@ -446,6 +447,7 @@ test(
       assert.equal(updatedUnrestricted.scheduledFor?.toISOString(), movedSchedule.toISOString());
       assert.equal(updatedUnrestricted.sourceAudienceId, uncapped.id);
       assert.equal(updatedUnrestricted.templateSubject, "All readers update");
+      assert.match(updatedUnrestricted.templateHtml ?? "", /Updated letter body/);
 
       await db.insert(broadcasts).values(
         Array.from({ length: 55 }, (_, index) => ({

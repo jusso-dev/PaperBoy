@@ -750,6 +750,14 @@ export async function updateScheduledBroadcast(
             }
           : {}),
         ...(definition.subject ? { templateSubject: definition.subject } : {}),
+        ...(definition.html !== undefined
+          ? {
+              templateHtml: withUnsubscribeFooter({
+                html: definition.html,
+                text: templateBodies?.text ?? current.templateText,
+              }).html,
+            }
+          : {}),
         updatedAt: now,
       })
       .where(eq(broadcasts.id, input.broadcastId));

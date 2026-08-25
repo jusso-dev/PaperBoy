@@ -1,5 +1,10 @@
 import { normalizeEmailAddress } from "@/lib/email-core";
-import { MAX_TEMPLATE_SUBJECT_LENGTH } from "@/lib/template-core";
+import {
+  MAX_TEMPLATE_BODY_LENGTH,
+  MAX_TEMPLATE_SUBJECT_LENGTH,
+  previewTemplate,
+  TemplateError,
+} from "@/lib/template-core";
 
 export const MAX_BROADCAST_NAME_LENGTH = 120;
 
@@ -53,6 +58,7 @@ export type CreateBroadcastInput = {
 };
 
 export type UpdateBroadcastInput = Partial<CreateBroadcastInput> & {
+  html?: string | null;
   subject?: string;
 };
 
@@ -63,7 +69,7 @@ const CREATE_FIELDS = new Set([
   "scheduled_for",
   "template_id",
 ]);
-const UPDATE_FIELDS = new Set([...CREATE_FIELDS, "subject"]);
+const UPDATE_FIELDS = new Set([...CREATE_FIELDS, "html", "subject"]);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RFC3339_PATTERN =
@@ -217,6 +223,48 @@ export function parseUpdateBroadcastInput(value: unknown): UpdateBroadcastInput 
       });
     } else {
       result.subject = subject;
+    }
+  }
+
+  if (Object.hasOwn(value, "html")) {
+    if (value.html === null || value.html === "") {
+      result.html = null;
+    } else if (typeof value.html !== "string") {
+      issues.push({ field: "html", message: "Must be a string or null." });
+    } else if (
+      value.html.trim().length === 0 ||
+      value.html.length > MAX_TEMPLATE_BODY_LENGTH
+    ) {
+      issues.push({
+        field: "html",
+        message: "Must be non-empty and no larger than 2 MiB.",
+      });
+    } else {
+      try {
+        previewTemplate(
+          { html: value.html, subject: "Broadcast", text: null },
+          {},
+        );
+        result.html = value.html;
+      } catch (error) {
+        if (error instanceof TemplateError) {
+          const htmlIssues = error.issues.filter(
+            (issue) => issue.field === "html" || issue.field === "body",
+          );
+          if (htmlIssues.length > 0) {
+            htmlIssues.forEach((issue) => {
+              issues.push({ field: "html", message: issue.message });
+            });
+          } else {
+            issues.push({
+              field: "html",
+              message: "Enter valid email HTML.",
+            });
+          }
+        } else {
+          throw error;
+        }
+      }
     }
   }
 

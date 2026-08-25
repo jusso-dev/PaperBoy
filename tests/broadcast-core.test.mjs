@@ -99,6 +99,23 @@ test("scheduled broadcast update accepts partial snapshot and schedule changes",
   assert.equal(parsed.subject, "Updated subject");
 });
 
+test("scheduled broadcast update accepts HTML body edits", () => {
+  const parsed = parseUpdateBroadcastInput({
+    html: "<p>Hello {{name}}</p>",
+  });
+
+  assert.equal(parsed.html, "<p>Hello {{name}}</p>");
+});
+
+test("scheduled broadcast update rejects invalid HTML template syntax", () => {
+  assert.throws(
+    () => parseUpdateBroadcastInput({ html: "<p>Hello {{{name}}}</p>" }),
+    (error) =>
+      error instanceof BroadcastError &&
+      error.issues.some((issue) => issue.field === "html"),
+  );
+});
+
 test("scheduled broadcast update rejects unsafe subjects", () => {
   assert.throws(
     () => parseUpdateBroadcastInput({ subject: "Hello\r\nBcc: reader@example.net" }),

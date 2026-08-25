@@ -6,13 +6,31 @@ import { AuthorizationError } from "@/lib/authorization";
 import { AudienceError } from "@/lib/audience-core";
 import { BroadcastError } from "@/lib/broadcast-core";
 import {
+  queueBroadcastTestEmail,
+  type BroadcastTestSendState,
+} from "@/lib/broadcast-test-send";
+import {
   cancelBroadcast,
   createBroadcast,
+  getBroadcast,
   pauseBroadcast,
   resumeBroadcast,
   updateScheduledBroadcast,
 } from "@/lib/broadcasts";
+import { requireConsoleSendPermission } from "@/lib/console-send";
+import { DomainError } from "@/lib/domains";
+import { EmailError } from "@/lib/email-core";
+import { OpenTrackingConfigurationError } from "@/lib/open-tracking-core";
+import {
+  OutboundProviderConfigurationError,
+  providerConfigurationErrorMessage,
+} from "@/lib/outbound-provider-configuration";
 import { parseNaturalLanguageSchedule } from "@/lib/natural-language-schedule";
+import {
+  RateLimitConfigurationError,
+  RateLimitError,
+} from "@/lib/rate-limit-core";
+import { queueEmail } from "@/lib/messages";
 import { requireOrganization } from "@/lib/session";
 import { TemplateError } from "@/lib/template-core";
 import { parseLocalDateTime } from "@/lib/time";
@@ -155,6 +173,9 @@ export async function updateBroadcastAction(formData: FormData) {
       payload: {
         audience_id: formData.get("audienceId"),
         from: formData.get("from"),
+        ...(typeof formData.get("html") === "string"
+          ? { html: formData.get("html") }
+          : {}),
         scheduled_for: schedule.date.toISOString(),
         subject: formData.get("subject"),
       },
@@ -170,4 +191,90 @@ export async function updateBroadcastAction(formData: FormData) {
   redirect(
     `/app/broadcasts/${encodeURIComponent(broadcastId)}/preview?success=updated`,
   );
+}
+
+function testSendErrorMessage(error: unknown): string {
+  if (error instanceof AuthorizationError) {
+    return "Your role does not allow live test sends.";
+  }
+
+  if (error instanceof DomainError) {
+    if (error.code === "MEMBERSHIP_REQUIRED") {
+      return "Your organisation membership is no longer available.";
+    }
+    if (error.code === "DOMAIN_NOT_FOUND") {
+      return "The broadcast from-address domain is not in this organisation.";
+    }
+    if (error.code === "DOMAIN_NOT_VERIFIED") {
+      return "The broadcast from-address domain is not ready for live sending.";
+    }
+    return "The broadcast from-address is not valid for live sending.";
+  }
+
+  if (error instanceof EmailError) {
+    return error.issues[0]?.message ?? "Check the recipient and message fields.";
+  }
+
+  if (error instanceof BroadcastError) {
+    return error.code === "BROADCAST_NOT_FOUND"
+      ? "No broadcast with that ID exists in this organisation."
+      : error.issues[0]?.message ?? "This broadcast cannot be tested.";
+  }
+
+  if (error instanceof TemplateError) {
+    return (
+      error.issues[0]?.message ??
+      "Broadcast HTML could not be rendered for this test."
+    );
+  }
+
+  if (error instanceof RateLimitError) {
+    return `The live send limit has been reached. Try again in ${error.retryAfterSeconds} seconds.`;
+  }
+
+  if (error instanceof RateLimitConfigurationError) {
+    return "The operator must correct the live and test rate-limit configuration.";
+  }
+
+  if (error instanceof OpenTrackingConfigurationError) {
+    return "The operator must configure the public URL and open-tracking signing key.";
+  }
+
+  if (error instanceof OutboundProviderConfigurationError) {
+    return providerConfigurationErrorMessage(error);
+  }
+
+  throw error;
+}
+
+export async function sendBroadcastTestEmailAction(
+  _previous: BroadcastTestSendState,
+  formData: FormData,
+): Promise<BroadcastTestSendState> {
+  const { organization, session } = await requireOrganization();
+  const broadcastId = String(formData.get("broadcastId") ?? "");
+
+  try {
+    const message = await queueBroadcastTestEmail(
+      {
+        actorUserId: session.user.id,
+        broadcastId,
+        from: formData.get("from"),
+        html: formData.get("html"),
+        orgId: organization.id,
+        subject: formData.get("subject"),
+        text: formData.get("text"),
+        to: formData.get("to"),
+      },
+      {
+        authorize: requireConsoleSendPermission,
+        loadBroadcast: getBroadcast,
+        queue: queueEmail,
+      },
+    );
+    revalidatePath("/app/logs");
+    return { error: null, queuedId: message.id };
+  } catch (error) {
+    return { error: testSendErrorMessage(error), queuedId: null };
+  }
 }

@@ -10,6 +10,7 @@ import {
 import type { BroadcastRecord } from "@/lib/broadcasts";
 import { protocolTimestamp } from "@/lib/time";
 import {
+  MAX_TEMPLATE_BODY_LENGTH,
   MAX_TEMPLATE_SUBJECT_LENGTH,
   TemplateError,
 } from "@/lib/template-core";
@@ -131,6 +132,7 @@ const updateBroadcastInputSchema = z
     audienceId: z.string().uuid().optional(),
     broadcastId: z.string().uuid(),
     from: z.string().min(3).max(320).optional(),
+    html: z.string().max(MAX_TEMPLATE_BODY_LENGTH).nullable().optional(),
     name: z.string().min(1).max(MAX_BROADCAST_NAME_LENGTH).optional(),
     scheduledFor: z.iso.datetime({ offset: true }).optional(),
     subject: z

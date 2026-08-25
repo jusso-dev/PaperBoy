@@ -8,7 +8,7 @@ import {
 import { DomainError } from "@/lib/domains";
 import { queueEmail, type QueuedMessageRecord } from "@/lib/messages";
 
-async function requireConsoleSendPermission(input: {
+export async function requireConsoleSendPermission(input: {
   actorUserId: string;
   orgId: string;
 }): Promise<void> {

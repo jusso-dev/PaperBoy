@@ -20,7 +20,15 @@ test("broadcast workspace owns the viewport and uses PaperBoy postal styling", a
   assert.match(css, /\/\* PaperBoy broadcast dispatch desk\. \*\//);
   assert.doesNotMatch(css, /\/\* Resend-style broadcast inspection workspace\. \*\//);
   assert.match(component, />PaperBoy<\/Link>/);
-  assert.match(component, />Frozen HTML<\/h1>/);
+  assert.match(component, /HTML output/);
+  assert.match(component, /broadcast-html-editor/);
+  assert.match(component, /sendBroadcastTestEmailAction/);
+  assert.match(component, /WorkspaceWindow/);
   assert.match(component, /Signed unsubscribe link included/);
+  assert.doesNotMatch(component, /href="\/app\/send"/);
+  assert.doesNotMatch(component, /Frozen HTML/);
   assert.doesNotMatch(component, /Reply-To/);
+  assert.match(css, /\.broadcast-window \{/);
+  assert.match(css, /cursor: nwse-resize/);
+  assert.match(css, /\.broadcast-html-editor \{/);
 });
