@@ -73,7 +73,7 @@ export default async function AudiencesPage({ searchParams }: Props) {
           <form action={createAudienceAction} className="audience-create-form">
             <div className="field">
               <label htmlFor="audience-name">Name</label>
-              <input id="audience-name" maxLength={120} name="name" placeholder="Weekly readers" required />
+              <input id="audience-name" maxLength={120} name="name" placeholder="Weekly readers" required type="text" />
             </div>
             <button className="btn btn-primary" type="submit">Create audience</button>
           </form>
@@ -208,7 +208,13 @@ export default async function AudiencesPage({ searchParams }: Props) {
                   </div>
                 </div>
               </>
-            ) : <p className="empty-state">Create an audience to add contacts.</p>}
+            ) : (
+              <div className="card audience-empty-notice">
+                <p className="empty-state-kicker">Return to sender</p>
+                <h2>No audiences yet</h2>
+                <p>Create an audience above, then add or import permission-based contacts.</p>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import type { TemplatePreviewState } from "./actions";
+import { templateBrowserPreviewDocument } from "@/lib/template-browser-preview";
 
 type TemplatePreviewFormProps = {
   action: (
@@ -11,10 +12,6 @@ type TemplatePreviewFormProps = {
   initialData: string;
   initialState: TemplatePreviewState;
 };
-
-function previewDocument(html: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><meta name="referrer" content="no-referrer"></head><body>${html}</body></html>`;
-}
 
 export function TemplatePreviewForm({
   action,
@@ -79,7 +76,7 @@ export function TemplatePreviewForm({
             <iframe
               referrerPolicy="no-referrer"
               sandbox=""
-              srcDoc={previewDocument(state.html)}
+              srcDoc={templateBrowserPreviewDocument(state.html)}
               title="Rendered email HTML preview"
             />
             <details>

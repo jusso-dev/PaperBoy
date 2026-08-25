@@ -4,6 +4,7 @@ import {
   updateTemplateAction,
 } from "./actions";
 import Link from "next/link";
+import { TemplateHtmlEditor } from "@/components/templates/template-html-editor";
 import { can } from "@/lib/authorization";
 import { requireOrganization } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
@@ -111,16 +112,10 @@ export default async function TemplatesPage({
                 One referenced dotted path per line. Other variables remain optional.
               </p>
             </div>
-            <div className="field">
-              <label htmlFor="template-html">HTML</label>
-              <textarea
-                id="template-html"
-                maxLength={2 * 1024 * 1024}
-                name="html"
-                placeholder="<p>Hello {{reader.name}}</p>"
-                rows={7}
-              />
-            </div>
+            <TemplateHtmlEditor
+              id="template-html"
+              placeholder="<p>Hello {{reader.name}}</p>"
+            />
             <div className="field">
               <label htmlFor="template-text">Plain text</label>
               <textarea
@@ -220,16 +215,10 @@ export default async function TemplatesPage({
                       One referenced dotted path per line.
                     </p>
                   </div>
-                  <div className="field">
-                    <label htmlFor={`template-html-${template.id}`}>HTML</label>
-                    <textarea
-                      defaultValue={template.html ?? ""}
-                      id={`template-html-${template.id}`}
-                      maxLength={2 * 1024 * 1024}
-                      name="html"
-                      rows={7}
-                    />
-                  </div>
+                  <TemplateHtmlEditor
+                    defaultValue={template.html ?? ""}
+                    id={`template-html-${template.id}`}
+                  />
                   <div className="field">
                     <label htmlFor={`template-text-${template.id}`}>
                       Plain text

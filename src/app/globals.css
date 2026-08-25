@@ -945,6 +945,75 @@ select:focus-visible {
   grid-template-columns: minmax(180px, 0.6fr) minmax(280px, 1.4fr);
 }
 
+.template-html-workbench {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr);
+  margin-bottom: 14px;
+}
+
+.template-html-source {
+  margin-bottom: 0;
+}
+
+.template-html-source textarea {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  min-height: 300px;
+  resize: vertical;
+}
+
+.template-html-preview {
+  background: #fff;
+  border: 1px solid var(--rule-heavy);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 345px;
+}
+
+.template-html-preview > header {
+  align-items: center;
+  background: var(--paper-deep);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 9px 11px;
+}
+
+.template-html-preview > header div {
+  display: grid;
+  gap: 1px;
+}
+
+.template-html-preview > header strong {
+  font-family: var(--font-display), serif;
+  font-size: 15px;
+}
+
+.template-html-preview > header small {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.template-html-preview > header span {
+  background: color-mix(in srgb, var(--success) 15%, var(--paper-raised));
+  border: 1px solid color-mix(in srgb, var(--success) 55%, var(--line));
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 6px;
+  text-transform: uppercase;
+}
+
+.template-html-preview iframe {
+  background: #fff;
+  border: 0;
+  height: 100%;
+  min-height: 300px;
+  width: 100%;
+}
+
 .template-list {
   display: grid;
   gap: 20px;
@@ -1145,6 +1214,25 @@ select:focus-visible {
   display: grid;
   gap: 20px;
   grid-template-columns: minmax(190px, 0.32fr) minmax(0, 1fr);
+}
+
+.audience-empty-notice {
+  align-content: center;
+  display: grid;
+  min-height: 180px;
+}
+
+.audience-empty-notice h2 {
+  margin-bottom: 6px;
+}
+
+.empty-state-kicker {
+  color: var(--airmail-red);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 5px;
+  text-transform: uppercase;
 }
 
 .audience-picker ul {
@@ -1605,7 +1693,8 @@ select:focus-visible {
   .audience-create-form,
   .audience-update-form,
   .contact-create-form,
-  .audience-layout {
+  .audience-layout,
+  .template-html-workbench {
     grid-template-columns: 1fr;
   }
 
