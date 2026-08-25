@@ -28,6 +28,7 @@ test(
       {
         createAudience,
         createContact,
+        deleteUnsubscribedContacts,
         getAudience,
         importContacts,
         listAudiences,
@@ -173,6 +174,26 @@ test(
       assert.equal(replay.unchanged, 2);
       assert.equal((await getAudience({ actorUserId: memberId, audienceId: weekly.id, orgId: firstOrgId })).contactCount, 2);
       assert.equal((await listAudiences({ actorUserId: memberId, orgId: firstOrgId })).length, 2);
+      const uncapped = await createAudience({
+        actorUserId: adminId,
+        orgId: firstOrgId,
+        payload: { name: "Uncapped readers" },
+      });
+      const uncappedRows = Array.from(
+        { length: 125 },
+        (_, index) => `reader-${index}@uncapped.example`,
+      );
+      const uncappedImport = await importContacts({
+        actorUserId: adminId,
+        audienceId: uncapped.id,
+        csv: `email\n${uncappedRows.join("\n")}`,
+        orgId: firstOrgId,
+      });
+      assert.equal(uncappedImport.created, 125);
+      assert.equal(
+        (await getAudience({ actorUserId: adminId, audienceId: uncapped.id, orgId: firstOrgId })).contactCount,
+        125,
+      );
       await assert.rejects(
         () => getAudience({ actorUserId: adminId, audienceId: weekly.id, orgId: secondOrgId }),
         (error) => error instanceof AudienceError && error.code === "AUDIENCE_NOT_FOUND",
@@ -211,6 +232,27 @@ test(
         .from(emailSuppressions)
         .where(and(eq(emailSuppressions.orgId, firstOrgId), eq(emailSuppressions.email, reader.email)));
       assert.equal(suppression.reason, "unsubscribed");
+      const bulkDeleted = await deleteUnsubscribedContacts({
+        actorUserId: adminId,
+        audienceId: weekly.id,
+        orgId: firstOrgId,
+      });
+      assert.deepEqual(bulkDeleted, { deleted: 1 });
+      assert.deepEqual(
+        (await listContacts({ actorUserId: adminId, audienceId: weekly.id, orgId: firstOrgId }))
+          .map((contact) => contact.email),
+        ["active@example.net"],
+      );
+      assert.equal(
+        (await listContacts({ actorUserId: adminId, audienceId: product.id, orgId: firstOrgId }))[0]
+          .unsubscribedAt?.toISOString(),
+        fixedNow.toISOString(),
+      );
+      const [retainedSuppression] = await db
+        .select({ reason: emailSuppressions.reason })
+        .from(emailSuppressions)
+        .where(and(eq(emailSuppressions.orgId, firstOrgId), eq(emailSuppressions.email, reader.email)));
+      assert.equal(retainedSuppression.reason, "unsubscribed");
 
       await assert.rejects(
         () => queueEmail({

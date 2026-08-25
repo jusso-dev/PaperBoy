@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AudienceError,
-  MAX_AUDIENCE_CONTACTS,
   parseContactCsv,
   parseCreateAudienceInput,
   parseCreateContactInput,
@@ -61,15 +60,14 @@ test("contact CSV validates atomically, supports quotes, and deduplicates by nor
   }
 });
 
-test("contact CSV enforces the audience size boundary", () => {
+test("contact CSV has no fixed row-count cap", () => {
   const rows = Array.from(
-    { length: MAX_AUDIENCE_CONTACTS + 1 },
+    { length: 1_000 },
     (_, index) => `reader-${index}@example.net`,
   );
-  assert.throws(
-    () => parseContactCsv(`email\n${rows.join("\n")}`),
-    (error) => error instanceof AudienceError && error.code === "CSV_TOO_MANY_ROWS",
-  );
+  const parsed = parseContactCsv(`email\n${rows.join("\n")}`);
+  assert.equal(parsed.inputRows, 1_000);
+  assert.equal(parsed.rows.length, 1_000);
 });
 
 test("only an untampered PaperBoy unsubscribe token verifies", () => {

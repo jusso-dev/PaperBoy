@@ -4,6 +4,7 @@ import {
   createContactAction,
   deleteAudienceAction,
   deleteContactAction,
+  deleteUnsubscribedContactsAction,
   importContactsAction,
   updateAudienceAction,
   updateContactAction,
@@ -17,6 +18,7 @@ type Props = {
   searchParams: Promise<{
     audience?: string;
     created?: string;
+    deleted?: string;
     error?: string;
     saved?: string;
     unchanged?: string;
@@ -46,6 +48,7 @@ export default async function AudiencesPage({ searchParams }: Props) {
         orgId: organization.id,
       })
     : [];
+  const unsubscribedCount = contacts.filter((contact) => contact.unsubscribedAt).length;
   const saved =
     status.saved === "audience-created" ? "Audience created."
       : status.saved === "audience-updated" ? "Audience updated."
@@ -53,9 +56,11 @@ export default async function AudiencesPage({ searchParams }: Props) {
           : status.saved === "contact-created" ? "Contact added."
             : status.saved === "contact-updated" ? "Contact updated."
               : status.saved === "contact-deleted" ? "Contact deleted."
-                : status.saved === "contacts-imported"
-                  ? `CSV imported: ${count(status.created)} created, ${count(status.updated)} updated, ${count(status.unchanged)} unchanged.`
-                  : null;
+                : status.saved === "unsubscribed-deleted"
+                  ? `${count(status.deleted)} unsubscribed contact${count(status.deleted) === 1 ? "" : "s"} deleted.`
+                  : status.saved === "contacts-imported"
+                    ? `CSV imported: ${count(status.created)} created, ${count(status.updated)} updated, ${count(status.unchanged)} unchanged.`
+                    : null;
 
   return (
     <section>
@@ -160,7 +165,7 @@ export default async function AudiencesPage({ searchParams }: Props) {
                         <label htmlFor="contact-csv">CSV file</label>
                         <input accept=".csv,text/csv" id="contact-csv" name="csv" required type="file" />
                         <p className="field-help">
-                          UTF-8, at most 1 MiB and 100 rows. Header: <code>email</code> with optional <code>name</code>. Import only recipients who gave permission; PaperBoy has no purchased-list marketplace.
+                          UTF-8, at most 1 MiB per import. Header: <code>email</code> with optional <code>name</code>. PaperBoy has no audience or contact-count cap. Import only recipients who gave permission; PaperBoy has no purchased-list marketplace.
                         </p>
                       </div>
                       <button className="btn" type="submit">Import contacts</button>
@@ -169,7 +174,29 @@ export default async function AudiencesPage({ searchParams }: Props) {
                 ) : null}
 
                 <div className="card">
-                  <h2>Contacts</h2>
+                  <div className="audience-contacts-heading">
+                    <div>
+                      <h2>Contacts</h2>
+                      <p>{unsubscribedCount} unsubscribed</p>
+                    </div>
+                    {canManage && unsubscribedCount > 0 ? (
+                      <form action={deleteUnsubscribedContactsAction} className="audience-bulk-delete-form">
+                        <input name="audienceId" type="hidden" value={selected.id} />
+                        <label>
+                          <input name="confirm" required type="checkbox" value="yes" />
+                          Confirm removal
+                        </label>
+                        <button className="btn btn-danger btn-compact" type="submit">
+                          Delete all unsubscribed
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                  {canManage && unsubscribedCount > 0 ? (
+                    <p className="audience-bulk-delete-note">
+                      Removes unsubscribed contact rows from this audience. Organization suppression records remain, so those addresses stay opted out.
+                    </p>
+                  ) : null}
                   <div className="table-scroll">
                     <table className="table contact-table">
                       <thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Updated</th>{canManage ? <th>Manage</th> : null}</tr></thead>

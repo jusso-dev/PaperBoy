@@ -1,0 +1,2 @@
+ALTER TABLE "broadcast_recipients" DROP CONSTRAINT "broadcast_recipients_position_check";--> statement-breakpoint
+ALTER TABLE "broadcast_recipients" ADD CONSTRAINT "broadcast_recipients_position_check" CHECK ("broadcast_recipients"."position" >= 0);

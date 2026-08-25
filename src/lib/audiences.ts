@@ -1,9 +1,8 @@
-import { and, asc, count, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { audiences, contacts, orgMembers } from "@/db/schema";
 import {
   AudienceError,
-  MAX_AUDIENCE_CONTACTS,
   parseContactCsv,
   parseCreateAudienceInput,
   parseCreateContactInput,
@@ -148,8 +147,7 @@ export async function listAudiences(input: {
     .select(audienceSelection)
     .from(audiences)
     .where(eq(audiences.orgId, input.orgId))
-    .orderBy(desc(audiences.updatedAt), asc(audiences.name))
-    .limit(100);
+    .orderBy(desc(audiences.updatedAt), asc(audiences.name));
   return Promise.all(rows.map(audienceRecord));
 }
 
@@ -271,13 +269,6 @@ export async function createContact(input: {
         )
         .for("update");
       if (!audience) throw new AudienceError("AUDIENCE_NOT_FOUND");
-      const [size] = await tx
-        .select({ value: count() })
-        .from(contacts)
-        .where(eq(contacts.audienceId, input.audienceId));
-      if (Number(size?.value ?? 0) >= MAX_AUDIENCE_CONTACTS) {
-        throw new AudienceError("AUDIENCE_FULL");
-      }
       const [created] = await tx
         .insert(contacts)
         .values({
@@ -348,6 +339,35 @@ export async function deleteContact(input: {
   if (deleted.length !== 1) throw new AudienceError("CONTACT_NOT_FOUND");
 }
 
+export async function deleteUnsubscribedContacts(input: {
+  actorUserId: string;
+  audienceId: string;
+  orgId: string;
+}): Promise<{ deleted: number }> {
+  requireId(input.audienceId, "AUDIENCE_NOT_FOUND");
+  await requireOrganizationPermission({ ...input, permission: "audiences.manage" });
+  return db.transaction(async (tx) => {
+    const [audience] = await tx
+      .select({ id: audiences.id })
+      .from(audiences)
+      .where(
+        and(eq(audiences.id, input.audienceId), eq(audiences.orgId, input.orgId)),
+      )
+      .for("update");
+    if (!audience) throw new AudienceError("AUDIENCE_NOT_FOUND");
+    const deleted = await tx
+      .delete(contacts)
+      .where(
+        and(
+          eq(contacts.audienceId, input.audienceId),
+          isNotNull(contacts.unsubscribedAt),
+        ),
+      )
+      .returning({ id: contacts.id });
+    return { deleted: deleted.length };
+  });
+}
+
 export async function importContacts(input: {
   actorUserId: string;
   audienceId: string;
@@ -374,11 +394,6 @@ export async function importContacts(input: {
       .from(contacts)
       .where(eq(contacts.audienceId, input.audienceId));
     const existingByEmail = new Map(existing.map((contact) => [contact.email, contact]));
-    const additions = parsed.rows.filter((row) => !existingByEmail.has(row.email));
-    if (existing.length + additions.length > MAX_AUDIENCE_CONTACTS) {
-      throw new AudienceError("AUDIENCE_FULL");
-    }
-
     let created = 0;
     let updated = 0;
     let unchanged = 0;
@@ -426,8 +441,6 @@ export async function getActiveAudienceContacts(input: {
         isNull(contacts.unsubscribedAt),
       ),
     )
-    .orderBy(asc(contacts.createdAt), asc(contacts.id))
-    .limit(MAX_AUDIENCE_CONTACTS + 1);
-  if (rows.length > MAX_AUDIENCE_CONTACTS) throw new AudienceError("AUDIENCE_FULL");
+    .orderBy(asc(contacts.createdAt), asc(contacts.id));
   return rows.map((row, position) => ({ ...row, position }));
 }

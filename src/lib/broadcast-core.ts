@@ -1,8 +1,6 @@
 import { normalizeEmailAddress } from "@/lib/email-core";
-import { MAX_AUDIENCE_CONTACTS } from "@/lib/audience-core";
 
 export const MAX_BROADCAST_NAME_LENGTH = 120;
-export const MAX_BROADCAST_RECIPIENTS = MAX_AUDIENCE_CONTACTS;
 export const MAX_BROADCAST_SCHEDULE_AHEAD_MS = 366 * 24 * 60 * 60 * 1_000;
 
 export const BROADCAST_STATUSES = [

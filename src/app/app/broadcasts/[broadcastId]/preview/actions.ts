@@ -1,29 +1,32 @@
 "use server";
 
 import { AuthorizationError } from "@/lib/authorization";
+import { BroadcastError } from "@/lib/broadcast-core";
+import { getBroadcast } from "@/lib/broadcasts";
 import { requireOrganization } from "@/lib/session";
-import { TemplateError } from "@/lib/template-core";
+import { previewTemplate, TemplateError } from "@/lib/template-core";
 import type { TemplatePreviewState } from "@/lib/template-preview-state";
-import { previewStoredTemplate } from "@/lib/templates";
 
 function previewErrorMessage(error: unknown): string {
   if (error instanceof AuthorizationError) {
-    return "Your role does not allow template previews.";
+    return "Your role does not allow broadcast previews.";
+  }
+
+  if (error instanceof BroadcastError) {
+    return error.code === "BROADCAST_NOT_FOUND"
+      ? "That broadcast is no longer available."
+      : "Your role does not allow broadcast previews.";
   }
 
   if (error instanceof TemplateError) {
-    if (error.code === "TEMPLATE_NOT_FOUND") {
-      return "That template is no longer available.";
-    }
-
     return error.issues[0]?.message ?? "Check the sample JSON.";
   }
 
   throw error;
 }
 
-export async function previewTemplateAction(
-  templateId: string,
+export async function previewBroadcastAction(
+  broadcastId: string,
   previousState: TemplatePreviewState,
   formData: FormData,
 ): Promise<TemplatePreviewState> {
@@ -44,12 +47,20 @@ export async function previewTemplateAction(
   const { organization, session } = await requireOrganization();
 
   try {
-    const preview = await previewStoredTemplate({
+    const broadcast = await getBroadcast({
       actorUserId: session.user.id,
-      data,
+      broadcastId,
       orgId: organization.id,
-      templateId,
     });
+    const preview = previewTemplate(
+      {
+        html: broadcast.templateHtml,
+        requiredVariables: broadcast.templateRequiredVariables,
+        subject: broadcast.templateSubject,
+        text: broadcast.templateText,
+      },
+      data,
+    );
 
     return { ...preview, error: null };
   } catch (error) {

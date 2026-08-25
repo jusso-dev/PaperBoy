@@ -1,8 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import type { TemplatePreviewState } from "./actions";
 import { templateBrowserPreviewDocument } from "@/lib/template-browser-preview";
+import type { TemplatePreviewState } from "@/lib/template-preview-state";
 
 type TemplatePreviewFormProps = {
   action: (

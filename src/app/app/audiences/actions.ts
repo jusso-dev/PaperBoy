@@ -8,6 +8,7 @@ import {
   createContact,
   deleteAudience,
   deleteContact,
+  deleteUnsubscribedContacts,
   importContacts,
   updateAudience,
   updateContact,
@@ -22,12 +23,10 @@ function message(error: unknown): string {
   if (error instanceof AudienceError) {
     switch (error.code) {
       case "AUDIENCE_EXISTS": return "An audience with that name already exists.";
-      case "AUDIENCE_FULL": return "An audience can contain at most 100 contacts.";
       case "AUDIENCE_NOT_FOUND": return "That audience is no longer available.";
       case "CONTACT_EXISTS": return "That email address already belongs to this audience.";
       case "CONTACT_NOT_FOUND": return "That contact is no longer available.";
       case "CSV_TOO_LARGE": return "CSV files must not exceed 1 MiB.";
-      case "CSV_TOO_MANY_ROWS": return "CSV files must not exceed 100 data rows.";
       case "VALIDATION_ERROR": return error.issues[0]?.message ?? "Check the audience input.";
       default: return "That audience action is no longer available.";
     }
@@ -129,6 +128,24 @@ export async function deleteContactAction(formData: FormData) {
   } catch (error) { errorRedirect(error, audienceId); }
   revalidatePath("/app/audiences");
   redirect(destination(audienceId, { saved: "contact-deleted" }));
+}
+
+export async function deleteUnsubscribedContactsAction(formData: FormData) {
+  const audienceId = String(formData.get("audienceId") ?? "");
+  if (formData.get("confirm") !== "yes") {
+    redirect(destination(audienceId, { error: "Confirm unsubscribed contact deletion." }));
+  }
+  let result: Awaited<ReturnType<typeof deleteUnsubscribedContacts>>;
+  try {
+    result = await deleteUnsubscribedContacts({ ...(await context()), audienceId });
+  } catch (error) { errorRedirect(error, audienceId); }
+  revalidatePath("/app/audiences");
+  redirect(
+    destination(audienceId, {
+      deleted: String(result.deleted),
+      saved: "unsubscribed-deleted",
+    }),
+  );
 }
 
 export async function importContactsAction(formData: FormData) {

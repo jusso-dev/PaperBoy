@@ -63,7 +63,11 @@ export type BroadcastRecord = {
   sourceAudienceId: string | null;
   sourceTemplateId: string | null;
   status: BroadcastStatus;
+  templateHtml: string | null;
   templateName: string;
+  templateRequiredVariables: string[];
+  templateSubject: string;
+  templateText: string | null;
   updatedAt: Date;
 };
 
@@ -190,7 +194,11 @@ async function recordFromRow(
     sourceAudienceId: row.sourceAudienceId,
     sourceTemplateId: row.sourceTemplateId,
     status: row.status,
+    templateHtml: row.templateHtml,
     templateName: row.templateName,
+    templateRequiredVariables: row.templateRequiredVariables,
+    templateSubject: row.templateSubject,
+    templateText: row.templateText,
     updatedAt: row.updatedAt,
   };
 }

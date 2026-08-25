@@ -385,7 +385,8 @@ const audienceDocument = `# PaperBoy audiences and contacts
 
 - Audiences and contacts belong to the organization bound to the API key. Never pass an organization ID.
 - Current members can list and read. Owners and admins create, rename, delete, and import.
-- Each audience contains at most 100 contacts. CSV import accepts UTF-8 with an email header and optional name column, at most 1 MiB and 100 data rows. The complete file validates before mutation.
+- PaperBoy imposes no audience-count or contact-count cap. Each CSV import accepts UTF-8 with an email header and optional name column, at most 1 MiB. The complete file validates before mutation.
+- paperboy_delete_unsubscribed_contacts requires explicit confirmation, deletes unsubscribed contacts from one audience, and retains organization suppression records.
 - Import only contacts who gave the sender permission. PaperBoy does not provide a purchased-list marketplace.
 - paperboy_create_broadcast accepts audienceId, snapshots only active contacts, and appends a signed unsubscribe link when the template omitted one. Template data includes name, email, contact, and unsubscribe_url.
 - Opening an unsubscribe URL is read-only. The recipient must confirm; confirmation sets unsubscribed_at and creates an organization-wide unsubscribed suppression atomically.

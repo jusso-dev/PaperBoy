@@ -976,7 +976,7 @@ export const broadcastRecipients = pgTable(
     index("broadcast_recipients_contact_id_idx").on(table.contactId),
     check(
       "broadcast_recipients_position_check",
-      sql`${table.position} between 0 and 99`,
+      sql`${table.position} >= 0`,
     ),
     check(
       "broadcast_recipients_email_check",

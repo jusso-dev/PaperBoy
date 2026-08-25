@@ -216,9 +216,7 @@ function errorResult(error: unknown) {
     message =
       error.code === "AUDIENCE_NOT_FOUND"
         ? "No audience with that ID exists in this organization."
-        : error.code === "AUDIENCE_EMPTY"
-          ? "The audience has no active subscribed contacts."
-          : "The audience exceeds the 100-contact broadcast limit.";
+        : "The audience has no active subscribed contacts.";
   } else if (error instanceof UnsubscribeConfigurationError) {
     message = "The operator must configure PAPERBOY_UNSUBSCRIBE_SIGNING_KEY before sending broadcasts.";
   } else {

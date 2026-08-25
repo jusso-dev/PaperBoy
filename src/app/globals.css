@@ -1191,8 +1191,21 @@ select:focus-visible {
 
 .broadcast-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 16px;
+}
+
+.broadcast-preview-heading {
+  align-items: start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.broadcast-preview-schedule {
+  color: var(--ink-soft);
+  margin: 10px 0 20px;
 }
 
 /* ---- Audiences ------------------------------------------------------- */
@@ -1273,6 +1286,36 @@ select:focus-visible {
 
 .audience-heading h2 {
   margin-bottom: 0;
+}
+
+.audience-contacts-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.audience-contacts-heading h2,
+.audience-contacts-heading p {
+  margin-bottom: 0;
+}
+
+.audience-contacts-heading p,
+.audience-bulk-delete-note {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.audience-bulk-delete-form {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.audience-bulk-delete-note {
+  border-bottom: 1px solid var(--rule);
+  margin: 12px 0 0;
+  padding-bottom: 12px;
 }
 
 .audience-update-form,
@@ -1699,6 +1742,8 @@ select:focus-visible {
   }
 
   .audience-heading,
+  .audience-contacts-heading,
+  .audience-bulk-delete-form,
   .audience-delete-form,
   .contact-delete-form {
     align-items: stretch;

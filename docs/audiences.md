@@ -1,6 +1,6 @@
 # Audiences, contacts, and unsubscribe links
 
-PaperBoy stores organization-owned audiences containing up to 100 contacts. A contact has a normalized email address, an optional name, and an `unsubscribed_at` instant. Owners and admins manage the records; current members can read them. Tenant context comes only from the signed-in session or bearer key.
+PaperBoy stores organization-owned audiences without an application-level audience or contact-count cap. A contact has a normalized email address, an optional name, and an `unsubscribed_at` instant. Owners and admins manage the records; current members can read them. Tenant context comes only from the signed-in session or bearer key.
 
 PaperBoy supports permission-based lists. The console and documentation do not offer list purchasing, enrichment, scraping, or a contact marketplace. Operators are responsible for importing recipients who gave the sender permission.
 
@@ -12,9 +12,9 @@ PaperBoy supports permission-based lists. The console and documentation do not o
 - `GET`, `PATCH`, and `DELETE /api/v1/audiences/:audienceId/contacts/:contactId`
 - `POST /api/v1/audiences/:audienceId/contacts/import` with `Content-Type: text/csv`
 
-Cross-organization IDs remain hidden as 404. Audience names are case-insensitively unique per organization. Contact addresses are unique inside an audience. Deleting an audience cascades to its contacts and requires explicit console/MCP confirmation.
+Cross-organization IDs remain hidden as 404. Audience names are case-insensitively unique per organization. Contact addresses are unique inside an audience. Deleting an audience cascades to its contacts and requires explicit console/MCP confirmation. Console bulk deletion can remove every unsubscribed contact from one audience while retaining organization suppression records, so deleted addresses remain opted out.
 
-CSV must be valid UTF-8, at most 1 MiB, and contain at most 100 non-empty data rows. The first column is `email`; an optional second column is `name`.
+CSV must be valid UTF-8 and at most 1 MiB per import. The first column is `email`; an optional second column is `name`. Repeated imports can grow an audience without a PaperBoy contact-count cap.
 
 ```csv
 email,name
@@ -26,7 +26,7 @@ Quoted fields, commas inside quoted names, CRLF, LF, and a UTF-8 BOM are accepte
 
 ## Broadcast snapshots
 
-Broadcast creation accepts `audience_id`, not caller-supplied recipient records. PaperBoy checks that the audience belongs to the API key's organization, snapshots only contacts whose `unsubscribed_at` is null, and preserves contact IDs privately on the snapshot. A missing, empty, cross-tenant, or over-limit audience fails before any message is queued.
+Broadcast creation accepts `audience_id`, not caller-supplied recipient records. PaperBoy checks that the audience belongs to the API key's organization, snapshots only contacts whose `unsubscribed_at` is null, and preserves contact IDs privately on the snapshot. A missing, empty, or cross-tenant audience fails before any message is queued.
 
 Each recipient receives these template variables:
 
@@ -52,6 +52,7 @@ The first-class MCP tools are:
 
 - `paperboy_list_audiences`, `paperboy_get_audience`, `paperboy_create_audience`, `paperboy_update_audience`, `paperboy_delete_audience`
 - `paperboy_list_contacts`, `paperboy_get_contact`, `paperboy_create_contact`, `paperboy_update_contact`, `paperboy_delete_contact`, `paperboy_import_contacts`
+- `paperboy_delete_unsubscribed_contacts` removes all unsubscribed contacts from one audience after `confirm: true`; organization suppressions remain
 
 No tool accepts an organization ID. Reads require current membership; mutations re-check that the API key creator is an owner or admin. Destructive tools require `confirm: true`. The authenticated `paperboy://docs/audiences` resource carries this operating contract.
 

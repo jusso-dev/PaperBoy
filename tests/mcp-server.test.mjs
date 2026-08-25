@@ -238,6 +238,7 @@ function audienceServices(overrides = {}) {
     createContact: async () => firstContact,
     deleteAudience: async () => undefined,
     deleteContact: async () => undefined,
+    deleteUnsubscribedContacts: async () => ({ deleted: 1 }),
     getAudience: async () => firstAudience,
     getContact: async () => firstContact,
     importContacts: async () => ({
@@ -433,6 +434,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_create_contact: ["contact", "observedAt", "protocolTimeZone", "schemaVersion"],
       paperboy_delete_audience: ["deletedId", "observedAt", "protocolTimeZone", "schemaVersion"],
       paperboy_delete_contact: ["deletedId", "observedAt", "protocolTimeZone", "schemaVersion"],
+      paperboy_delete_unsubscribed_contacts: ["deleted", "observedAt", "protocolTimeZone", "schemaVersion"],
       paperboy_get_audience: ["audience", "observedAt", "protocolTimeZone", "schemaVersion"],
       paperboy_get_contact: ["contact", "observedAt", "protocolTimeZone", "schemaVersion"],
       paperboy_import_contacts: ["created", "importedAt", "inputRows", "unchanged", "uniqueRows", "updated", "observedAt", "protocolTimeZone", "schemaVersion"],
@@ -723,6 +725,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_create_contact: ["audienceId", "email", "name"],
       paperboy_delete_audience: ["audienceId", "confirm"],
       paperboy_delete_contact: ["audienceId", "contactId", "confirm"],
+      paperboy_delete_unsubscribed_contacts: ["audienceId", "confirm"],
       paperboy_get_audience: ["audienceId"],
       paperboy_get_contact: ["audienceId", "contactId"],
       paperboy_import_contacts: ["audienceId", "csv"],
@@ -839,6 +842,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_create_contact: { destructive: false, readOnly: false },
       paperboy_delete_audience: { destructive: true, readOnly: false },
       paperboy_delete_contact: { destructive: true, readOnly: false },
+      paperboy_delete_unsubscribed_contacts: { destructive: true, readOnly: false },
       paperboy_get_audience: { destructive: false, readOnly: true },
       paperboy_get_contact: { destructive: false, readOnly: true },
       paperboy_import_contacts: { destructive: false, readOnly: false },
@@ -1153,6 +1157,10 @@ test("audiences and contacts are first-class tenant-bound MCP operations", async
           calls.push(["importContacts", principal, audienceId, csv]);
           return audienceServices().importContacts();
         },
+        deleteUnsubscribedContacts: async (principal, audienceId) => {
+          calls.push(["deleteUnsubscribedContacts", principal, audienceId]);
+          return { deleted: 1 };
+        },
         listAudiences: async (principal) => {
           calls.push(["listAudiences", principal]);
           return [firstAudience];
@@ -1179,12 +1187,17 @@ test("audiences and contacts are first-class tenant-bound MCP operations", async
         },
         name: "paperboy_import_contacts",
       });
+      const deleted = await client.callTool({
+        arguments: { audienceId: firstAudience.id, confirm: true },
+        name: "paperboy_delete_unsubscribed_contacts",
+      });
 
       assert.equal(listed.structuredContent.audiences[0].name, firstAudience.name);
       assert.equal(listed.structuredContent.protocolTimeZone, "UTC");
       assert.equal(created.structuredContent.contact.email, firstContact.email);
       assert.equal(created.structuredContent.contact.unsubscribedAt, null);
       assert.equal(imported.structuredContent.importedAt, fixedNow.toISOString());
+      assert.equal(deleted.structuredContent.deleted, 1);
       assert.deepEqual(calls, [
         ["listAudiences", firstPrincipal],
         [
@@ -1199,6 +1212,7 @@ test("audiences and contacts are first-class tenant-bound MCP operations", async
           firstAudience.id,
           "email,name\nreader@example.net,Ada\n",
         ],
+        ["deleteUnsubscribedContacts", firstPrincipal, firstAudience.id],
       ]);
       assert.equal(JSON.stringify(calls).includes("organizationId"), false);
     },

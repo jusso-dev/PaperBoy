@@ -2,7 +2,6 @@ import { normalizeEmailAddress } from "@/lib/email-core";
 
 export const MAX_AUDIENCE_NAME_LENGTH = 120;
 export const MAX_CONTACT_NAME_LENGTH = 200;
-export const MAX_AUDIENCE_CONTACTS = 100;
 export const MAX_CONTACT_CSV_BYTES = 1024 * 1024;
 
 export type AudienceValidationIssue = {
@@ -13,12 +12,10 @@ export type AudienceValidationIssue = {
 export type AudienceErrorCode =
   | "AUDIENCE_EMPTY"
   | "AUDIENCE_EXISTS"
-  | "AUDIENCE_FULL"
   | "AUDIENCE_NOT_FOUND"
   | "CONTACT_EXISTS"
   | "CONTACT_NOT_FOUND"
   | "CSV_TOO_LARGE"
-  | "CSV_TOO_MANY_ROWS"
   | "MEMBERSHIP_REQUIRED"
   | "VALIDATION_ERROR";
 
@@ -280,10 +277,6 @@ export function parseContactCsv(value: string): ContactCsvImport {
       { field: "csv", message: "Include at least one contact row." },
     ]);
   }
-  if (dataRows.length > MAX_AUDIENCE_CONTACTS) {
-    throw new AudienceError("CSV_TOO_MANY_ROWS");
-  }
-
   const issues: AudienceValidationIssue[] = [];
   const deduplicated = new Map<string, ContactCsvRow>();
   dataRows.forEach((row, index) => {

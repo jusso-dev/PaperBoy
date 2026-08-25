@@ -59,12 +59,10 @@ function failure(error: unknown): Response {
     const responses: Partial<Record<typeof error.code, [string, string, number]>> = {
       AUDIENCE_EMPTY: ["audience_empty", "The audience has no active subscribed contacts.", 409],
       AUDIENCE_EXISTS: ["audience_exists", "An audience with that name already exists in this organization.", 409],
-      AUDIENCE_FULL: ["audience_full", "An audience can contain at most 100 contacts.", 409],
       AUDIENCE_NOT_FOUND: ["audience_not_found", "No audience with that ID exists in this organization.", 404],
       CONTACT_EXISTS: ["contact_exists", "That email address already belongs to this audience.", 409],
       CONTACT_NOT_FOUND: ["contact_not_found", "No contact with that ID exists in this audience.", 404],
       CSV_TOO_LARGE: ["csv_too_large", "Contact CSV files must not exceed 1 MiB.", 413],
-      CSV_TOO_MANY_ROWS: ["csv_too_many_rows", "Contact CSV files must not exceed 100 data rows.", 422],
       MEMBERSHIP_REQUIRED: ["membership_required", "Create a new API key from a current organization member.", 403],
     };
     const response = responses[error.code];

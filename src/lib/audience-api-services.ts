@@ -6,6 +6,7 @@ import {
   createContact,
   deleteAudience,
   deleteContact,
+  deleteUnsubscribedContacts,
   getAudience,
   getContact,
   importContacts,
@@ -24,11 +25,12 @@ function base(principal: ApiKeyPrincipal) {
   return { actorUserId: actorUserId(principal), orgId: principal.orgId };
 }
 
-export const audienceApiServices: AudienceHttpServices = {
+export const audienceApiServices = {
   createAudience: (principal, payload) => createAudience({ ...base(principal), payload }),
   createContact: (principal, audienceId, payload) => createContact({ ...base(principal), audienceId, payload }),
   deleteAudience: (principal, audienceId) => deleteAudience({ ...base(principal), audienceId }),
   deleteContact: (principal, audienceId, contactId) => deleteContact({ ...base(principal), audienceId, contactId }),
+  deleteUnsubscribedContacts: (principal, audienceId) => deleteUnsubscribedContacts({ ...base(principal), audienceId }),
   getAudience: (principal, audienceId) => getAudience({ ...base(principal), audienceId }),
   getContact: (principal, audienceId, contactId) => getContact({ ...base(principal), audienceId, contactId }),
   importContacts: (principal, audienceId, csv) => importContacts({ ...base(principal), audienceId, csv }),
@@ -36,4 +38,9 @@ export const audienceApiServices: AudienceHttpServices = {
   listContacts: (principal, audienceId) => listContacts({ ...base(principal), audienceId }),
   updateAudience: (principal, audienceId, payload) => updateAudience({ ...base(principal), audienceId, payload }),
   updateContact: (principal, audienceId, contactId, payload) => updateContact({ ...base(principal), audienceId, contactId, payload }),
+} satisfies AudienceHttpServices & {
+  deleteUnsubscribedContacts: (
+    principal: ApiKeyPrincipal,
+    audienceId: string,
+  ) => Promise<{ deleted: number }>;
 };

@@ -25,6 +25,7 @@ export const PAPERBOY_AUDIENCE_MCP_TOOL_NAMES = [
   "paperboy_update_contact",
   "paperboy_delete_contact",
   "paperboy_import_contacts",
+  "paperboy_delete_unsubscribed_contacts",
 ] as const;
 
 export const PAPERBOY_AUDIENCE_MCP_TOOL_DEFINITIONS = [
@@ -39,6 +40,7 @@ export const PAPERBOY_AUDIENCE_MCP_TOOL_DEFINITIONS = [
   ["Update one contact's email or name without clearing unsubscribe state.", true],
   ["Delete one contact after explicit confirmation.", true],
   ["Atomically import a bounded UTF-8 contact CSV into one audience.", true],
+  ["Delete every unsubscribed contact in one audience after explicit confirmation while retaining organization suppressions.", true],
 ].map(([description, mutating], index) => ({
   description: description as string,
   mutating: mutating as boolean,
@@ -51,6 +53,7 @@ export type PaperBoyMcpAudienceServices = {
   createContact: (principal: ApiKeyPrincipal, audienceId: string, payload: unknown) => Promise<ContactRecord>;
   deleteAudience: (principal: ApiKeyPrincipal, audienceId: string) => Promise<void>;
   deleteContact: (principal: ApiKeyPrincipal, audienceId: string, contactId: string) => Promise<void>;
+  deleteUnsubscribedContacts: (principal: ApiKeyPrincipal, audienceId: string) => Promise<{ deleted: number }>;
   getAudience: (principal: ApiKeyPrincipal, audienceId: string) => Promise<AudienceRecord>;
   getContact: (principal: ApiKeyPrincipal, audienceId: string, contactId: string) => Promise<ContactRecord>;
   importContacts: (principal: ApiKeyPrincipal, audienceId: string, csv: string) => Promise<ContactImportResult>;
@@ -81,6 +84,10 @@ const updateContactSchema = z.object({
 const deleteContactSchema = z.object({
   audienceId: z.string().uuid(),
   contactId: z.string().uuid(),
+  confirm: z.literal(true),
+}).strict();
+const deleteUnsubscribedContactsSchema = z.object({
+  audienceId: z.string().uuid(),
   confirm: z.literal(true),
 }).strict();
 const importContactsSchema = z.object({
@@ -115,6 +122,7 @@ const audiencesOutputSchema = z.object({ audiences: z.array(audienceSchema), ...
 const contactOutputSchema = z.object({ contact: contactSchema, ...metadataSchema });
 const contactsOutputSchema = z.object({ contacts: z.array(contactSchema), ...metadataSchema });
 const deleteOutputSchema = z.object({ deletedId: z.string().uuid(), ...metadataSchema });
+const bulkDeleteOutputSchema = z.object({ deleted: z.number().int().nonnegative(), ...metadataSchema });
 const importOutputSchema = z.object({
   created: z.number().int().nonnegative(),
   importedAt: z.iso.datetime({ offset: true }),
@@ -163,12 +171,10 @@ function errorResult(error: unknown) {
     const messages: Partial<Record<typeof error.code, string>> = {
       AUDIENCE_EMPTY: "The audience has no active subscribed contacts.",
       AUDIENCE_EXISTS: "An audience with that name already exists.",
-      AUDIENCE_FULL: "An audience can contain at most 100 contacts.",
       AUDIENCE_NOT_FOUND: "No audience with that ID exists in this organization.",
       CONTACT_EXISTS: "That email address already belongs to this audience.",
       CONTACT_NOT_FOUND: "No contact with that ID exists in this audience.",
       CSV_TOO_LARGE: "Contact CSV files must not exceed 1 MiB.",
-      CSV_TOO_MANY_ROWS: "Contact CSV files must not exceed 100 data rows.",
       MEMBERSHIP_REQUIRED: "Create a new API key from a current organization member.",
       VALIDATION_ERROR: error.issues[0]?.message ?? "Check the audience fields.",
     };
@@ -284,6 +290,14 @@ export function registerPaperBoyAudienceTools(input: {
         updated: result.updated,
         ...metadata(),
       });
+    } catch (error) { return errorResult(error); }
+  });
+
+  input.server.registerTool(PAPERBOY_AUDIENCE_MCP_TOOL_NAMES[11], { ...config(11, "Delete unsubscribed PaperBoy contacts", bulkDeleteOutputSchema, deleteAnnotations), inputSchema: deleteUnsubscribedContactsSchema }, async ({ audienceId }) => {
+    const principal = await input.authorize(); if (!principal) return unauthorizedResult();
+    try {
+      const result = await input.services.deleteUnsubscribedContacts(principal, audienceId);
+      return successResult({ deleted: result.deleted, ...metadata() });
     } catch (error) { return errorResult(error); }
   });
 }

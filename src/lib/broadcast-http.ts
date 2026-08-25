@@ -128,10 +128,6 @@ function failure(error: unknown): Response {
       code = "audience_empty";
       message = "The audience has no active subscribed contacts.";
       status = 409;
-    } else if (error.code === "AUDIENCE_FULL") {
-      code = "audience_too_large";
-      message = "The audience exceeds the 100-contact broadcast limit.";
-      status = 409;
     }
   } else if (error instanceof UnsubscribeConfigurationError) {
     code = "unsubscribe_unavailable";

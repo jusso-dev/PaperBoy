@@ -4,6 +4,7 @@ import {
   pauseBroadcastAction,
   resumeBroadcastAction,
 } from "./actions";
+import Link from "next/link";
 import { can } from "@/lib/authorization";
 import { listAudiences } from "@/lib/audiences";
 import { listBroadcasts } from "@/lib/broadcasts";
@@ -264,11 +265,18 @@ export default async function BroadcastsPage({
                   {formatDateTime(record.updatedAt, session.user.timezone)}
                 </p>
 
-                {canControl &&
-                (record.status === "scheduled" ||
-                  record.status === "running" ||
-                  record.status === "paused") ? (
-                  <div className="broadcast-actions">
+                <div className="broadcast-actions">
+                  <Link
+                    className="btn btn-compact"
+                    href={`/app/broadcasts/${record.id}/preview`}
+                  >
+                    Preview HTML
+                  </Link>
+                  {canControl &&
+                  (record.status === "scheduled" ||
+                    record.status === "running" ||
+                    record.status === "paused") ? (
+                    <>
                     {record.status === "running" ? (
                       <form action={pauseBroadcastAction}>
                         <input name="broadcastId" type="hidden" value={record.id} />
@@ -286,8 +294,9 @@ export default async function BroadcastsPage({
                         Cancel
                       </button>
                     </form>
-                  </div>
-                ) : null}
+                    </>
+                  ) : null}
+                </div>
               </article>
             );
           })}
