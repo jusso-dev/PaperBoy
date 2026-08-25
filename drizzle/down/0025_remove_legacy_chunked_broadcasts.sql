@@ -1,0 +1,1 @@
+-- Irreversible data cleanup: deleted legacy broadcast snapshots cannot be reconstructed.
