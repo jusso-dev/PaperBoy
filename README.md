@@ -4,6 +4,30 @@ Self-hosted transactional email. A cheaper Resend you run on your own box.
 
 ![PaperBoy banner](docs/banner.jpg)
 
+## Product tour
+
+PaperBoy uses a postal-stationery interface across the whole console, from live
+delivery reporting to provider operations. These screenshots use synthetic
+homelab demonstration data; no real recipients or credentials are shown.
+
+<p align="center">
+  <img src="docs/screenshots/overview-desktop.png" alt="PaperBoy overview with delivery metrics, activity chart, recent email, and sending-domain status" width="100%">
+</p>
+
+| Compose and delivery | Templates and audiences |
+| --- | --- |
+| <img src="docs/screenshots/send-email-desktop.png" alt="PaperBoy test email composer" width="100%"> | <img src="docs/screenshots/templates-desktop.png" alt="PaperBoy email template editor" width="100%"> |
+| <img src="docs/screenshots/delivery-desktop.png" alt="PaperBoy delivery log" width="100%"> | <img src="docs/screenshots/audiences-desktop.png" alt="PaperBoy audience and contact management" width="100%"> |
+
+| Broadcasts and domains | Operations and security |
+| --- | --- |
+| <img src="docs/screenshots/broadcasts-desktop.png" alt="PaperBoy broadcast scheduling console" width="100%"> | <img src="docs/screenshots/organization-desktop.png" alt="PaperBoy organization and provider operations" width="100%"> |
+| <img src="docs/screenshots/domains-desktop.png" alt="PaperBoy sending-domain readiness view" width="100%"> | <img src="docs/screenshots/settings-desktop.png" alt="PaperBoy account security, MFA, passkeys, and timezone settings" width="100%"> |
+
+| Mobile overview | Mobile navigation |
+| --- | --- |
+| <img src="docs/screenshots/overview-mobile.png" alt="PaperBoy mobile dashboard overview" width="390"> | <img src="docs/screenshots/navigation-mobile.png" alt="PaperBoy mobile postal navigation drawer" width="390"> |
+
 ## Stack (locked)
 
 - Next.js 16.3 App Router
