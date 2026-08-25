@@ -27,7 +27,7 @@ export function PostalStamp() {
       <text className="postal-stamp-text" textAnchor="middle">
         <textPath href="#stamp-top" startOffset="50%">PAPERBOY</textPath>
       </text>
-      <text className="postal-stamp-delivered" x="244" y="81" textAnchor="middle">DELIVERED</text>
+      <text className="postal-stamp-delivered" x="244" y="75" textAnchor="middle">DELIVERED</text>
     </svg>
   );
 }

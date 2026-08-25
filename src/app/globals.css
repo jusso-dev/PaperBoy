@@ -2057,11 +2057,40 @@ select:focus-visible {
 .dashboard-page-actions {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
 .dashboard-page-actions a {
   text-decoration: none;
+}
+
+.dashboard-page-actions .dashboard-help-button {
+  height: 32px;
+  width: 32px;
+}
+
+.dashboard-page-actions .dashboard-help-button svg {
+  height: 21px;
+  width: 21px;
+}
+
+.dashboard-page-actions .dashboard-docs-button,
+.dashboard-page-actions .dashboard-send-button {
+  box-shadow: 1px 2px 0 rgba(23, 74, 116, 0.14);
+  font-size: 13px;
+  height: 38px;
+  line-height: 1;
+  padding-inline: 14px;
+}
+
+.dashboard-page-actions .dashboard-send-button {
+  gap: 7px;
+  padding-inline: 16px;
+}
+
+.dashboard-page-actions .dashboard-send-button svg {
+  height: 17px;
+  width: 17px;
 }
 
 [data-slot="button"][data-variant="postal"] {
@@ -2179,7 +2208,8 @@ select:focus-visible {
 }
 
 .postal-stamp-delivered {
-  font-size: 7px;
+  font-size: 6px;
+  letter-spacing: 0.08em;
 }
 
 .date-range-control {
