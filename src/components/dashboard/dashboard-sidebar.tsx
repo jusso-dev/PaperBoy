@@ -20,7 +20,6 @@ type DashboardSidebarProps = {
 const navItems: DashboardNavItem[] = [
   { href: "/app", icon: "overview", label: "Overview" },
   { href: "/app/logs", icon: "emails", label: "Emails" },
-  { href: "/app/domains", icon: "domains", label: "Domains" },
   { href: "/app/templates", icon: "templates", label: "Templates" },
   { href: "/app/audiences", icon: "audiences", label: "Lists" },
   { href: "/app/broadcasts", icon: "broadcasts", label: "Broadcasts" },

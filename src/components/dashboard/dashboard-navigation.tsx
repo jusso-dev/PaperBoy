@@ -3,7 +3,6 @@
 import {
   BookOpenText,
   Clock3,
-  Globe2,
   House,
   KeyRound,
   LayoutTemplate,
@@ -22,7 +21,6 @@ const icons = {
   audiences: ListChecks,
   broadcasts: Radio,
   docs: BookOpenText,
-  domains: Globe2,
   emails: Mail,
   keys: KeyRound,
   overview: House,

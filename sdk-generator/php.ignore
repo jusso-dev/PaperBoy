@@ -1,0 +1,10 @@
+# OpenAPI Generator writes these; PaperBoy does not ship them.
+.git
+.github/
+.travis.yml
+git_push.sh
+docs/
+test/
+tests/
+*.md
+!README.md

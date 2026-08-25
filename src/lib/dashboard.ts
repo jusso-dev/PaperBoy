@@ -6,15 +6,18 @@ import {
   eq,
   gte,
   inArray,
-  isNotNull,
   lt,
-  max,
 } from "drizzle-orm";
 import { db } from "@/db";
 import { events, messages } from "@/db/schema";
-import { listDomains } from "@/lib/domains";
+import {
+  resolveDashboardEmailStatus,
+  type DashboardEmailStatus,
+} from "@/lib/dashboard-status";
 import { requireMessageRead } from "@/lib/message-statuses";
 import { normalizeTimeZone, startOfCalendarDate } from "@/lib/time";
+
+export type { DashboardEmailStatus } from "@/lib/dashboard-status";
 
 export const DASHBOARD_RANGES = [7, 14, 30] as const;
 export type DashboardRangeDays = (typeof DASHBOARD_RANGES)[number];
@@ -35,17 +38,6 @@ export type DashboardActivityPoint = {
   opened: number;
 };
 
-export type DashboardEmailStatus =
-  | "bounced"
-  | "complained"
-  | "deferred"
-  | "delivered"
-  | "failed"
-  | "opened"
-  | "queued"
-  | "sending"
-  | "sent";
-
 export type DashboardEmail = {
   createdAt: string;
   id: string;
@@ -54,20 +46,8 @@ export type DashboardEmail = {
   subject: string;
 };
 
-export type DashboardDomain = {
-  dkim: string;
-  dmarc: string;
-  dns: string;
-  id: string;
-  lastUsedAt: string | null;
-  name: string;
-  spf: string;
-  status: "active" | "pending";
-};
-
 export type PaperBoyDashboard = {
   activity: DashboardActivityPoint[];
-  domains: DashboardDomain[];
   metrics: DashboardMetric[];
   recentEmails: DashboardEmail[];
 };
@@ -127,27 +107,6 @@ function displayDate(dateKey: string, timeZone: string): string {
     month: "short",
     timeZone,
   }).format(rangeBoundary(dateKey, timeZone));
-}
-
-function preferredEventStatus(
-  current: DashboardEmailStatus | undefined,
-  candidate: DashboardEmailStatus,
-): DashboardEmailStatus {
-  const priority: Record<DashboardEmailStatus, number> = {
-    bounced: 11,
-    complained: 12,
-    deferred: 5,
-    delivered: 6,
-    failed: 10,
-    opened: 9,
-    queued: 1,
-    sending: 2,
-    sent: 4,
-  };
-
-  return !current || priority[candidate] > priority[current]
-    ? candidate
-    : current;
 }
 
 export function parseDashboardRange(value: string | undefined): DashboardRangeDays {
@@ -220,7 +179,7 @@ export async function getPaperBoyDashboard(input: {
     orgId: input.orgId,
   });
 
-  const [eventRows, recentRows, domainRows, domainLastUsedRows] = await Promise.all([
+  const [eventRows, recentRows] = await Promise.all([
     db
       .select({
         createdAt: events.createdAt,
@@ -248,20 +207,6 @@ export async function getPaperBoyDashboard(input: {
       .where(eq(messages.orgId, input.orgId))
       .orderBy(desc(messages.createdAt), desc(messages.id))
       .limit(5),
-    listDomains({
-      actorUserId: input.actorUserId,
-      orgId: input.orgId,
-    }),
-    db
-      .select({
-        domainId: messages.domainId,
-        lastUsedAt: max(messages.createdAt),
-      })
-      .from(messages)
-      .where(
-        and(eq(messages.orgId, input.orgId), isNotNull(messages.domainId)),
-      )
-      .groupBy(messages.domainId),
   ]);
 
   const currentKeys = Array.from({ length: input.rangeDays }, (_, index) =>
@@ -360,45 +305,29 @@ export async function getPaperBoyDashboard(input: {
         .where(inArray(events.messageId, recentIds))
         .orderBy(desc(events.createdAt), desc(events.sequence))
     : [];
-  const statusByMessage = new Map<string, DashboardEmailStatus>();
+  const eventTypesByMessage = new Map<string, string[]>();
 
   for (const event of recentEventRows) {
-    const candidate = event.type as DashboardEmailStatus;
-    statusByMessage.set(
-      event.messageId,
-      preferredEventStatus(statusByMessage.get(event.messageId), candidate),
-    );
-  }
+    const types = eventTypesByMessage.get(event.messageId);
 
-  const lastUsedByDomain = new Map(
-    domainLastUsedRows
-      .filter((row) => row.domainId)
-      .map((row) => [
-        row.domainId as string,
-        row.lastUsedAt ? new Date(row.lastUsedAt).toISOString() : null,
-      ]),
-  );
+    if (types) {
+      types.push(event.type);
+    } else {
+      eventTypesByMessage.set(event.messageId, [event.type]);
+    }
+  }
 
   return {
     activity,
-    domains: domainRows.map((domain) => ({
-      dkim: domain.dnsChecks.dkim,
-      dmarc: domain.dnsChecks.dmarc,
-      dns: domain.dnsChecks.ownership,
-      id: domain.id,
-      lastUsedAt: lastUsedByDomain.get(domain.id) ?? null,
-      name: domain.name,
-      spf: domain.dnsChecks.spf,
-      status: domain.status === "verified" ? "active" : "pending",
-    })),
     metrics,
     recentEmails: recentRows.map((message) => ({
       createdAt: message.createdAt.toISOString(),
       id: message.id,
       recipient: message.recipient[0] ?? "No recipient",
-      status:
-        statusByMessage.get(message.id) ??
-        (message.status as DashboardEmailStatus),
+      status: resolveDashboardEmailStatus(
+        message.status,
+        eventTypesByMessage.get(message.id) ?? [],
+      ),
       subject: message.subject,
     })),
   };

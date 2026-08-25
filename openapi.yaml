@@ -29,6 +29,8 @@ tags:
     description: Select and test organization and sending-domain delivery routes.
   - name: Webhooks
     description: Configure the organization's signed event destination.
+  - name: Webhook delivery
+    description: Signed event payload PaperBoy posts to a configured receiver. Not a client route.
   - name: Rate limits
     description: Read and override organization live and test send caps.
   - name: Templates
@@ -1621,7 +1623,7 @@ webhooks:
   messageEvent:
     post:
       operationId: receiveMessageEvent
-      tags: [Webhooks]
+      tags: [Webhook delivery]
       summary: Receive a signed message event
       description: >-
         PaperBoy posts this request to the configured endpoint. Verify the raw

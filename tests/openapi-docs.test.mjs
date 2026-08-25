@@ -16,10 +16,13 @@ test("console documents OpenAPI routes and ships the spec", async () => {
 
   assert.match(sidebar, /href: "\/app\/docs"/);
   assert.match(sidebar, /label: "API docs"/);
+  assert.doesNotMatch(sidebar, /href: "\/app\/domains"/);
+  assert.doesNotMatch(sidebar, /label: "Domains"/);
   assert.match(page, /OpenApiReference/);
   assert.match(page, /href="\/openapi.yaml"/);
   assert.match(route, /readOpenApiSpec/);
   assert.match(dockerfile, /openapi.yaml/);
   assert.match(readme, /crates\/paperboy/);
   assert.match(readme, /\/app\/docs/);
+  assert.match(readme, /sdks\//);
 });

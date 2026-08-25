@@ -3,7 +3,6 @@ import { DateRangeControl } from "@/components/dashboard/date-range-control";
 import { EmailActivityPanel } from "@/components/dashboard/email-activity-panel";
 import { MetricsGrid } from "@/components/dashboard/metrics-grid";
 import { RecentEmails } from "@/components/dashboard/recent-emails";
-import { SendingDomainsTable } from "@/components/dashboard/sending-domains-table";
 import { WelcomeNote } from "@/components/dashboard/welcome-note";
 import { PostalStamp } from "@/components/brand/postal-stamp";
 import {
@@ -55,8 +54,6 @@ export default async function Overview({ searchParams }: OverviewProps) {
         <EmailActivityPanel data={dashboard.activity} />
         <RecentEmails emails={dashboard.recentEmails} now={now} />
       </div>
-
-      <SendingDomainsTable domains={dashboard.domains} timeZone={session.user.timezone} />
     </section>
   );
 }

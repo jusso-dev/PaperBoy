@@ -12,6 +12,7 @@ import {
 import { useActionState, useEffect, useRef, useState } from "react";
 import { CopyBroadcastHtml } from "@/components/broadcasts/copy-broadcast-html";
 import { NaturalLanguageScheduleField } from "@/components/broadcasts/natural-language-schedule-field";
+import { SandboxedHtmlPreview } from "@/components/broadcasts/sandboxed-html-preview";
 import { WorkspaceWindow } from "@/components/broadcasts/workspace-window";
 import {
   cancelBroadcastAction,
@@ -172,12 +173,12 @@ export function BroadcastPreviewWorkspace({
         <div className="broadcast-workspace-title">
           <Mail aria-hidden="true" strokeWidth={1.7} />
           <Link className="broadcast-workspace-brand" href="/app">PaperBoy</Link>
-          <span aria-hidden="true">/</span>
-          <Link href="/app/broadcasts">Broadcasts</Link>
-          <span aria-hidden="true">/</span>
+          <span aria-hidden="true" className="broadcast-workspace-crumb">/</span>
+          <Link className="broadcast-workspace-crumb" href="/app/broadcasts">Broadcasts</Link>
+          <span aria-hidden="true" className="broadcast-workspace-crumb">/</span>
           <strong title={name}>{name}</strong>
-          <span className="broadcast-workspace-status" data-status={status}>{status}</span>
         </div>
+        <span className="broadcast-workspace-status" data-status={status}>{status}</span>
         <div className="broadcast-workspace-actions">
           <span aria-hidden="true" className="broadcast-workspace-avatar">
             {userInitial}
@@ -425,11 +426,8 @@ export function BroadcastPreviewWorkspace({
           >
             <div className="broadcast-render-frame">
               {htmlValue.trim() ? (
-                <iframe
-                  key={previewDocument}
-                  referrerPolicy="no-referrer"
-                  sandbox=""
-                  srcDoc={previewDocument}
+                <SandboxedHtmlPreview
+                  html={previewDocument}
                   title="Rendered broadcast HTML output"
                 />
               ) : (

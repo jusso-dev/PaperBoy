@@ -14,6 +14,7 @@
     "openapi:lint": "redocly lint openapi.yaml",
     "security:secrets": "./scripts/run-gitleaks.sh git --redact --verbose .",
     "sdk:build": "tsc -p packages/sdk/tsconfig.json",
+    "sdk:generate": "./scripts/generate-sdks.sh",
     "jobs": "bun src/jobs.ts",
     "test": "bun test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
