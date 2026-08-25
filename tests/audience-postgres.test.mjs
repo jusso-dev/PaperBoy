@@ -15,6 +15,7 @@ test(
       {
         apiKeys,
         audiences,
+        broadcasts,
         broadcastRecipients,
         contacts,
         emailSuppressions,
@@ -35,7 +36,13 @@ test(
         listContacts,
       },
       { generateApiKey },
-      { createBroadcast, getBroadcast, processNextScheduledBroadcast },
+      {
+        createBroadcast,
+        getBroadcast,
+        listBroadcasts,
+        processNextScheduledBroadcast,
+        updateScheduledBroadcast,
+      },
       { prepareCloudflareEmailMessage },
       { EmailError },
       { queueEmail },
@@ -388,6 +395,71 @@ test(
       });
       assert.equal(completedScheduled.status, "completed");
       assert.equal(completedScheduled.progress.queued, 1);
+
+      const unrestrictedSchedule = new Date("2028-01-15T04:00:00.000Z");
+      const unrestricted = await createBroadcast(
+        {
+          payload: {
+            audience_id: weekly.id,
+            from: "news@example.com",
+            name: "Unrestricted scheduled issue",
+            scheduled_for: unrestrictedSchedule.toISOString(),
+            template_id: templateId,
+          },
+          principal,
+        },
+        {
+          now: () => fixedNow,
+          unsubscribeUrl: (contactId) => createUnsubscribeUrl({
+            baseUrl: "https://paperboy.example",
+            contactId,
+            key: signingKey,
+          }),
+        },
+      );
+      assert.equal(unrestricted.progress.total, 1);
+      const movedSchedule = new Date("2029-02-20T03:30:00.000Z");
+      const updatedUnrestricted = await updateScheduledBroadcast(
+        {
+          actorUserId: adminId,
+          broadcastId: unrestricted.id,
+          orgId: firstOrgId,
+          payload: {
+            audience_id: uncapped.id,
+            name: "All readers",
+            scheduled_for: movedSchedule.toISOString(),
+          },
+        },
+        {
+          now: () => fixedNow,
+          unsubscribeUrl: (contactId) => createUnsubscribeUrl({
+            baseUrl: "https://paperboy.example",
+            contactId,
+            key: signingKey,
+          }),
+        },
+      );
+      assert.equal(updatedUnrestricted.name, "All readers");
+      assert.equal(updatedUnrestricted.progress.total, 125);
+      assert.equal(updatedUnrestricted.progress.pending, 125);
+      assert.equal(updatedUnrestricted.scheduledFor?.toISOString(), movedSchedule.toISOString());
+      assert.equal(updatedUnrestricted.sourceAudienceId, uncapped.id);
+
+      await db.insert(broadcasts).values(
+        Array.from({ length: 55 }, (_, index) => ({
+          createdByUserId: adminId,
+          environment: "test",
+          from: "news@example.com",
+          name: `List proof ${index}`,
+          orgId: firstOrgId,
+          sourceTemplateId: templateId,
+          templateName: "Audience welcome",
+          templateRequiredVariables: [],
+          templateSubject: "List proof",
+          templateText: "List proof",
+        })),
+      );
+      assert.equal((await listBroadcasts({ actorUserId: adminId, orgId: firstOrgId })).length, 58);
     } finally {
       try {
         await db.delete(orgs).where(eq(orgs.id, firstOrgId));

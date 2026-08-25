@@ -270,7 +270,7 @@ export default async function BroadcastsPage({
                     className="btn btn-compact"
                     href={`/app/broadcasts/${record.id}/preview`}
                   >
-                    Preview HTML
+                    Open broadcast
                   </Link>
                   {canControl &&
                   (record.status === "scheduled" ||

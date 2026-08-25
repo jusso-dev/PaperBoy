@@ -8,6 +8,7 @@ import {
   handleListBroadcastsRequest,
   handlePauseBroadcastRequest,
   handleResumeBroadcastRequest,
+  handleUpdateBroadcastRequest,
 } from "../src/lib/broadcast-http.ts";
 
 const fixedNow = new Date("2026-08-23T03:04:05.678Z");
@@ -59,6 +60,7 @@ function services(overrides = {}) {
     list: async () => [record],
     pause: async () => record,
     resume: async () => record,
+    update: async () => record,
     ...overrides,
   };
 }
@@ -128,6 +130,10 @@ test("broadcast REST list, get, and controls share one authenticated service", a
         calls.push(["resume", received, id]);
         return record;
       },
+      update: async (received, id, payload) => {
+        calls.push(["update", received, id, payload]);
+        return record;
+      },
     }),
   });
 
@@ -137,11 +143,16 @@ test("broadcast REST list, get, and controls share one authenticated service", a
     handlePauseBroadcastRequest(request("POST"), record.id, deps),
     handleResumeBroadcastRequest(request("POST"), record.id, deps),
     handleCancelBroadcastRequest(request("POST"), record.id, deps),
+    handleUpdateBroadcastRequest(
+      request("PATCH", JSON.stringify({ scheduled_for: "2026-09-24T22:00:00.000Z" })),
+      record.id,
+      deps,
+    ),
   ]);
 
   assert.deepEqual(
     responses.map((response) => response.status),
-    [200, 200, 200, 200, 200],
+    [200, 200, 200, 200, 200, 200],
   );
   assert.deepEqual(calls, [
     ["list", principal],
@@ -149,6 +160,12 @@ test("broadcast REST list, get, and controls share one authenticated service", a
     ["pause", principal, record.id],
     ["resume", principal, record.id],
     ["cancel", principal, record.id],
+    [
+      "update",
+      principal,
+      record.id,
+      { scheduled_for: "2026-09-24T22:00:00.000Z" },
+    ],
   ]);
 });
 

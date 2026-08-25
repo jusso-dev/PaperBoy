@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   BroadcastError,
   parseCreateBroadcastInput,
+  parseUpdateBroadcastInput,
 } from "../src/lib/broadcast-core.ts";
 
 const templateId = "88888888-8888-4888-8888-888888888888";
@@ -82,5 +83,31 @@ test("broadcast input has no tracking or arbitrary envelope fields", () => {
     (error) =>
       error instanceof BroadcastError &&
       error.issues.some((issue) => issue.field === "open_tracking"),
+  );
+});
+
+test("scheduled broadcast update accepts partial snapshot and schedule changes", () => {
+  const parsed = parseUpdateBroadcastInput({
+    audience_id: audienceId,
+    scheduled_for: "2026-09-24T22:00:00.000Z",
+  });
+
+  assert.equal(parsed.audienceId, audienceId);
+  assert.equal(parsed.scheduledFor?.toISOString(), "2026-09-24T22:00:00.000Z");
+  assert.equal(parsed.templateId, undefined);
+});
+
+test("scheduled broadcast update rejects empty or unsupported changes", () => {
+  assert.throws(
+    () => parseUpdateBroadcastInput({}),
+    (error) =>
+      error instanceof BroadcastError &&
+      error.issues.some((issue) => issue.field === "body"),
+  );
+  assert.throws(
+    () => parseUpdateBroadcastInput({ recipients: [] }),
+    (error) =>
+      error instanceof BroadcastError &&
+      error.issues.some((issue) => issue.field === "recipients"),
   );
 });

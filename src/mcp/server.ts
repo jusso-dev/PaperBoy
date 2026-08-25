@@ -271,7 +271,7 @@ const configurationDocument = `# PaperBoy MCP configuration
 - Domain mutations re-check the key creator's current organization role.
 - Template CRUD re-checks the key creator's current organization role. Sending an existing template is authorized by the active organization-bound API key.
 - Template preview renders sample JSON and reports missing required variables without queueing or sending a message.
-- Broadcast tools send one template to a stored audience snapshot, add signed unsubscribe links, check organization suppressions before every enqueue, and expose progress without returning recipient data.
+- Broadcast tools create or update one template-to-audience snapshot without a PaperBoy recipient-count cap, add signed unsubscribe links, check organization suppressions before every enqueue, and expose progress without returning recipient data.
 - DKIM tools return public DNS material only. PaperBoy private keys remain encrypted at rest and never enter tool output.
 - paperboy_send_email and paperboy_send_email_batch use the same validation, domain authorization, and queue services as their HTTP peers. Single-send idempotencyKey values are scoped to the authenticated API key for 24 hours using PostgreSQL UTC instants; identical replays return the original message without another SMTP or Cloudflare submission. Single sends can persist private attachments outside PostgreSQL; batch sends reject them. Tool output never includes attachment content. Test keys always select the test sink; batch results preserve input order and report failures per item.
 - paperboy_list_delivery_statuses accepts optional status, domainId, createdAtFrom, createdAtBefore, and limit filters. Date bounds are RFC 3339 UTC instants; tenant and environment always come from the key.
@@ -317,7 +317,8 @@ const templateDocument = `# PaperBoy email templates
 const broadcastDocument = `# PaperBoy broadcasts
 
 - Broadcasts belong to the organization bound to the API key. Never pass an organization ID.
-- Create accepts one stored template and one tenant-owned audience ID containing 1-100 active contacts.
+- Create accepts one stored template and one tenant-owned audience ID without an application-level contact-count cap. List returns every broadcast owned by the authenticated organization.
+- paperboy_update_broadcast changes only a still-scheduled broadcast. Changing audienceId atomically replaces every pending recipient snapshot; changing templateId replaces the frozen template snapshot; scheduledFor moves the deterministic delayed BullMQ job.
 - PaperBoy snapshots the template and active contacts, appends a signed unsubscribe link when missing, checks the per-organization suppression table before each enqueue, and uses the same opt-in organization setting to inject one signed open-tracking pixel into future HTML as every other send path.
 - Template data contains name, email, contact.name, contact.email, and unsubscribe_url. Opening the link is read-only; the recipient confirms before PaperBoy records the opt-out.
 - Progress separates pending, processing, queued, suppressed, failed, and cancelled recipients. Tool output never returns audience addresses or rendered message content.

@@ -265,6 +265,7 @@ function broadcastServices(overrides = {}) {
     list: async () => [firstBroadcast],
     pause: async () => firstBroadcast,
     resume: async () => firstBroadcast,
+    update: async () => firstBroadcast,
     ...overrides,
   };
 }
@@ -449,6 +450,12 @@ test("initializes and publishes versioned tool schemas", async () => {
         "schemaVersion",
       ],
       paperboy_create_broadcast: [
+        "broadcast",
+        "observedAt",
+        "protocolTimeZone",
+        "schemaVersion",
+      ],
+      paperboy_update_broadcast: [
         "broadcast",
         "observedAt",
         "protocolTimeZone",
@@ -783,6 +790,14 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_preview_template: ["data", "templateId"],
       paperboy_pause_broadcast: ["broadcastId"],
       paperboy_resume_broadcast: ["broadcastId"],
+      paperboy_update_broadcast: [
+        "audienceId",
+        "broadcastId",
+        "from",
+        "name",
+        "scheduledFor",
+        "templateId",
+      ],
       paperboy_rotate_domain_dkim: ["domainId"],
       paperboy_send_email: [
         "attachments",
@@ -822,6 +837,7 @@ test("initializes and publishes versioned tool schemas", async () => {
     };
     const requiredInputSchemaSnapshots = {
       paperboy_create_broadcast: ["audienceId", "from", "name", "templateId"],
+      paperboy_update_broadcast: ["broadcastId"],
       paperboy_create_contact: ["audienceId", "email"],
       paperboy_create_template: ["name", "subject"],
       paperboy_create_suppression: ["email"],
@@ -852,6 +868,7 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_update_contact: { destructive: false, readOnly: false },
       paperboy_cancel_broadcast: { destructive: true, readOnly: false },
       paperboy_create_broadcast: { destructive: false, readOnly: false },
+      paperboy_update_broadcast: { destructive: false, readOnly: false },
       paperboy_create_domain: { destructive: false, readOnly: false },
       paperboy_create_template: { destructive: false, readOnly: false },
       paperboy_create_suppression: { destructive: false, readOnly: false },
@@ -1442,6 +1459,10 @@ test("broadcasts are first-class tenant-bound MCP operations with UTC progress",
           calls.push(["list", principal]);
           return [firstBroadcast];
         },
+        update: async (principal, broadcastId, received) => {
+          calls.push(["update", principal, broadcastId, received]);
+          return firstBroadcast;
+        },
       }),
     }),
     async (client) => {
@@ -1456,6 +1477,14 @@ test("broadcasts are first-class tenant-bound MCP operations with UTC progress",
       const cancelled = await client.callTool({
         arguments: { broadcastId: firstBroadcast.id, confirm: true },
         name: "paperboy_cancel_broadcast",
+      });
+      const updated = await client.callTool({
+        arguments: {
+          audienceId: firstAudience.id,
+          broadcastId: firstBroadcast.id,
+          scheduledFor: "2026-09-24T22:00:00.000Z",
+        },
+        name: "paperboy_update_broadcast",
       });
 
       assert.deepEqual(listed.structuredContent, {
@@ -1475,11 +1504,21 @@ test("broadcasts are first-class tenant-bound MCP operations with UTC progress",
       assert.equal(created.structuredContent.broadcast.progress.total, 20);
       assert.equal(created.structuredContent.protocolTimeZone, "UTC");
       assert.equal(cancelled.structuredContent.broadcast.id, firstBroadcast.id);
+      assert.equal(updated.structuredContent.broadcast.id, firstBroadcast.id);
       assert.equal(JSON.stringify(created).includes("reader@example.net"), false);
       assert.deepEqual(calls, [
         ["list", firstPrincipal],
         ["create", firstPrincipal, payload],
         ["cancel", firstPrincipal, firstBroadcast.id],
+        [
+          "update",
+          firstPrincipal,
+          firstBroadcast.id,
+          {
+            audienceId: firstAudience.id,
+            scheduledFor: "2026-09-24T22:00:00.000Z",
+          },
+        ],
       ]);
     },
   );

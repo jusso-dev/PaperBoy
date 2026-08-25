@@ -15,7 +15,7 @@ export function templateBrowserPreviewDocument(
 <html>
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob: https: http:; style-src 'unsafe-inline'">
     <meta name="referrer" content="no-referrer">
     <style>
       html { color-scheme: light; }

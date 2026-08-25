@@ -10,11 +10,15 @@ function servicePayload(payload: unknown): unknown {
   const input = payload as Record<string, unknown>;
   const mapped: Record<string, unknown> = {
     ...input,
-    audience_id: input.audienceId,
+    ...(input.audienceId === undefined
+      ? {}
+      : { audience_id: input.audienceId }),
     ...(input.scheduledFor === undefined
       ? {}
       : { scheduled_for: input.scheduledFor }),
-    template_id: input.templateId,
+    ...(input.templateId === undefined
+      ? {}
+      : { template_id: input.templateId }),
   };
   delete mapped.audienceId;
   delete mapped.scheduledFor;
@@ -30,4 +34,6 @@ export const paperBoyMcpBroadcastServices: PaperBoyMcpBroadcastServices = {
   list: broadcastApiServices.list,
   pause: broadcastApiServices.pause,
   resume: broadcastApiServices.resume,
+  update: (principal, broadcastId, payload) =>
+    broadcastApiServices.update(principal, broadcastId, servicePayload(payload)),
 };

@@ -1,7 +1,6 @@
 import { normalizeEmailAddress } from "@/lib/email-core";
 
 export const MAX_BROADCAST_NAME_LENGTH = 120;
-export const MAX_BROADCAST_SCHEDULE_AHEAD_MS = 366 * 24 * 60 * 60 * 1_000;
 
 export const BROADCAST_STATUSES = [
   "scheduled",
@@ -51,6 +50,8 @@ export type CreateBroadcastInput = {
   scheduledFor: Date | null;
   templateId: string;
 };
+
+export type UpdateBroadcastInput = Partial<CreateBroadcastInput>;
 
 const CREATE_FIELDS = new Set([
   "audience_id",
@@ -153,4 +154,88 @@ export function parseCreateBroadcastInput(value: unknown): CreateBroadcastInput 
   }
 
   return { audienceId, from, name, scheduledFor, templateId };
+}
+
+export function parseUpdateBroadcastInput(value: unknown): UpdateBroadcastInput {
+  if (!isRecord(value)) {
+    throw new BroadcastError("VALIDATION_ERROR", [
+      { field: "body", message: "Must be a JSON object." },
+    ]);
+  }
+
+  const issues: BroadcastValidationIssue[] = [];
+  const unsupported = Object.keys(value).filter(
+    (field) => !CREATE_FIELDS.has(field),
+  );
+  unsupported.forEach((field) => {
+    issues.push({ field, message: "This field is not supported." });
+  });
+
+  const result: UpdateBroadcastInput = {};
+  if (Object.hasOwn(value, "name")) {
+    const name = typeof value.name === "string" ? value.name.trim() : "";
+    if (
+      !name ||
+      name.length > MAX_BROADCAST_NAME_LENGTH ||
+      /[\u0000-\u001f\u007f]/.test(name)
+    ) {
+      issues.push({
+        field: "name",
+        message: `Enter a name of at most ${MAX_BROADCAST_NAME_LENGTH} characters without control characters.`,
+      });
+    } else {
+      result.name = name;
+    }
+  }
+
+  if (Object.hasOwn(value, "from")) {
+    const from = typeof value.from === "string" ? value.from.trim() : "";
+    if (!from || !normalizeEmailAddress(from)) {
+      issues.push({
+        field: "from",
+        message: "Enter a sender such as Newsroom <news@example.com>.",
+      });
+    } else {
+      result.from = from;
+    }
+  }
+
+  for (const [field, property] of [
+    ["template_id", "templateId"],
+    ["audience_id", "audienceId"],
+  ] as const) {
+    if (!Object.hasOwn(value, field)) continue;
+    const id = typeof value[field] === "string" ? value[field] : "";
+    if (!UUID_PATTERN.test(id)) {
+      issues.push({ field, message: `Provide a valid ${field.replace("_", " ")} UUID.` });
+    } else {
+      result[property] = id;
+    }
+  }
+
+  if (Object.hasOwn(value, "scheduled_for")) {
+    const raw = value.scheduled_for;
+    const parsed =
+      typeof raw === "string" && RFC3339_PATTERN.test(raw)
+        ? new Date(raw)
+        : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      issues.push({
+        field: "scheduled_for",
+        message: "Use an RFC 3339 timestamp with an explicit UTC offset.",
+      });
+    } else {
+      result.scheduledFor = parsed;
+    }
+  }
+
+  if (Object.keys(result).length === 0 && unsupported.length === 0) {
+    issues.push({ field: "body", message: "Provide at least one broadcast field to update." });
+  }
+
+  if (issues.length > 0) {
+    throw new BroadcastError("VALIDATION_ERROR", issues.slice(0, 100));
+  }
+
+  return result;
 }

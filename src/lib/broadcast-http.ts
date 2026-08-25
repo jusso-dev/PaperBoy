@@ -31,6 +31,11 @@ export type BroadcastHttpServices = {
     principal: ApiKeyPrincipal,
     broadcastId: string,
   ) => Promise<BroadcastRecord>;
+  update: (
+    principal: ApiKeyPrincipal,
+    broadcastId: string,
+    payload: unknown,
+  ) => Promise<BroadcastRecord>;
 };
 
 type BroadcastHttpDependencies = {
@@ -233,6 +238,33 @@ export async function handleGetBroadcastRequest(
 
   try {
     const record = await dependencies.services.get(principal, broadcastId);
+    return json({ data: serializeBroadcast(record) }, 200);
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function handleUpdateBroadcastRequest(
+  request: Request,
+  broadcastId: string,
+  dependencies: BroadcastHttpDependencies,
+): Promise<Response> {
+  const principal = await authenticate(request, dependencies);
+  if (principal instanceof Response) return principal;
+
+  let payload: unknown;
+  try {
+    payload = await request.json();
+  } catch {
+    return invalidJson();
+  }
+
+  try {
+    const record = await dependencies.services.update(
+      principal,
+      broadcastId,
+      payload,
+    );
     return json({ data: serializeBroadcast(record) }, 200);
   } catch (error) {
     return failure(error);

@@ -227,12 +227,26 @@ export async function enqueueBroadcastJob(input: {
   requireUuid(input.broadcastId, "Broadcast ID");
   requireUuid(input.orgId, "Organization ID");
   const queues = await getJobQueues();
+  const jobId = `broadcast-${input.broadcastId}`;
+  const delay = delayUntil(input.runAt);
+  const existing = await queues.broadcasts.getJob(jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === "delayed") {
+      await existing.changeDelay(delay);
+      return;
+    }
+    if (["active", "waiting", "waiting-children", "prioritized"].includes(state)) {
+      return;
+    }
+    await existing.remove();
+  }
   await queues.broadcasts.add(
     "process",
     { broadcastId: input.broadcastId, orgId: input.orgId },
     {
-      delay: delayUntil(input.runAt),
-      jobId: `broadcast-${input.broadcastId}`,
+      delay,
+      jobId,
     },
   );
 }

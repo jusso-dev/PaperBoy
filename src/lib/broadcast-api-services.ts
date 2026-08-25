@@ -8,6 +8,7 @@ import {
   listBroadcasts,
   pauseBroadcast,
   resumeBroadcast,
+  updateScheduledBroadcast,
 } from "@/lib/broadcasts";
 
 function actorUserId(principal: ApiKeyPrincipal): string {
@@ -41,4 +42,9 @@ export const broadcastApiServices: BroadcastHttpServices = {
     pauseBroadcast(context(principal, broadcastId)),
   resume: (principal, broadcastId) =>
     resumeBroadcast(context(principal, broadcastId)),
+  update: (principal, broadcastId, payload) =>
+    updateScheduledBroadcast({
+      ...context(principal, broadcastId),
+      payload,
+    }),
 };

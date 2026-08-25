@@ -20,12 +20,13 @@ export const PAPERBOY_BROADCAST_MCP_TOOL_NAMES = [
   "paperboy_pause_broadcast",
   "paperboy_resume_broadcast",
   "paperboy_cancel_broadcast",
+  "paperboy_update_broadcast",
 ] as const;
 
 export const PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS = [
   {
     description:
-      "List recent broadcast progress for the authenticated organization.",
+      "List all broadcast progress for the authenticated organization.",
     mutating: false,
     name: PAPERBOY_BROADCAST_MCP_TOOL_NAMES[0],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
@@ -63,6 +64,13 @@ export const PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS = [
     name: PAPERBOY_BROADCAST_MCP_TOOL_NAMES[5],
     schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
   },
+  {
+    description:
+      "Update a scheduled broadcast and atomically replace its stored template or audience snapshot when those IDs change.",
+    mutating: true,
+    name: PAPERBOY_BROADCAST_MCP_TOOL_NAMES[6],
+    schemaVersion: PAPERBOY_MCP_SCHEMA_VERSION,
+  },
 ] as const;
 
 export type PaperBoyMcpBroadcastServices = {
@@ -87,6 +95,11 @@ export type PaperBoyMcpBroadcastServices = {
     principal: ApiKeyPrincipal,
     broadcastId: string,
   ) => Promise<BroadcastRecord>;
+  update: (
+    principal: ApiKeyPrincipal,
+    broadcastId: string,
+    payload: unknown,
+  ) => Promise<BroadcastRecord>;
 };
 
 const createBroadcastInputSchema = z
@@ -109,6 +122,22 @@ const cancelBroadcastInputSchema = z
     confirm: z.literal(true),
   })
   .strict();
+
+const updateBroadcastInputSchema = z
+  .object({
+    audienceId: z.string().uuid().optional(),
+    broadcastId: z.string().uuid(),
+    from: z.string().min(3).max(320).optional(),
+    name: z.string().min(1).max(MAX_BROADCAST_NAME_LENGTH).optional(),
+    scheduledFor: z.iso.datetime({ offset: true }).optional(),
+    templateId: z.string().uuid().optional(),
+  })
+  .strict()
+  .refine(
+    ({ broadcastId: _broadcastId, ...fields }) =>
+      Object.values(fields).some((value) => value !== undefined),
+    { message: "Provide at least one broadcast field to update." },
+  );
 
 const progressSchema = z.object({
   cancelled: z.number().int().nonnegative(),
@@ -407,4 +436,36 @@ export function registerPaperBoyBroadcastTools(input: {
       },
     );
   }
+
+  input.server.registerTool(
+    PAPERBOY_BROADCAST_MCP_TOOL_NAMES[6],
+    {
+      annotations: {
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+        readOnlyHint: false,
+      },
+      description: PAPERBOY_BROADCAST_MCP_TOOL_DEFINITIONS[6].description,
+      inputSchema: updateBroadcastInputSchema,
+      outputSchema: broadcastOutputSchema,
+      title: "Update a scheduled PaperBoy broadcast",
+      _meta: { "paperboy/schemaVersion": PAPERBOY_MCP_SCHEMA_VERSION },
+    },
+    async ({ broadcastId, ...payload }) => {
+      const authenticated = await principal();
+      if (!authenticated) return unauthorizedResult();
+
+      try {
+        const record = await input.services.update(
+          authenticated,
+          broadcastId,
+          payload,
+        );
+        return successResult({ broadcast: serialize(record), ...metadata() });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
 }

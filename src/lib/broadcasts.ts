@@ -18,8 +18,8 @@ import {
 } from "@/lib/authorization";
 import {
   BroadcastError,
-  MAX_BROADCAST_SCHEDULE_AHEAD_MS,
   parseCreateBroadcastInput,
+  parseUpdateBroadcastInput,
   type BroadcastRecipientStatus,
   type BroadcastStatus,
 } from "@/lib/broadcast-core";
@@ -545,16 +545,11 @@ export async function createBroadcast(
   });
   const definition = parseCreateBroadcastInput(input.payload);
   const now = dependencies.now?.() ?? new Date();
-  if (
-    definition.scheduledFor &&
-    (definition.scheduledFor <= now ||
-      definition.scheduledFor.getTime() - now.getTime() >
-        MAX_BROADCAST_SCHEDULE_AHEAD_MS)
-  ) {
+  if (definition.scheduledFor && definition.scheduledFor <= now) {
     throw new BroadcastError("VALIDATION_ERROR", [
       {
         field: "scheduled_for",
-        message: "Schedule broadcasts in the future and no more than 366 days ahead.",
+        message: "Schedule broadcasts in the future.",
       },
     ]);
   }
@@ -616,15 +611,17 @@ export async function createBroadcast(
       throw new Error("Broadcast insert returned no row.");
     }
 
-    await tx.insert(broadcastRecipients).values(
-      recipients.map((recipient) => ({
-        broadcastId: broadcast.id,
-        contactId: recipient.contactId,
-        data: recipient.data,
-        email: recipient.email,
-        position: recipient.position,
-      })),
-    );
+    for (let offset = 0; offset < recipients.length; offset += 1_000) {
+      await tx.insert(broadcastRecipients).values(
+        recipients.slice(offset, offset + 1_000).map((recipient) => ({
+          broadcastId: broadcast.id,
+          contactId: recipient.contactId,
+          data: recipient.data,
+          email: recipient.email,
+          position: recipient.position,
+        })),
+      );
+    }
 
     return broadcast;
   });
@@ -648,6 +645,141 @@ export async function createBroadcast(
       orgId: input.principal.orgId,
     }),
   );
+}
+
+export async function updateScheduledBroadcast(
+  input: {
+    actorUserId: string | null;
+    broadcastId: string;
+    orgId: string;
+    payload: unknown;
+  },
+  dependencies: Pick<ProcessBroadcastDependencies, "now" | "unsubscribeUrl"> = {},
+): Promise<BroadcastRecord> {
+  requireBroadcastId(input.broadcastId);
+  const actorUserId = await requireOrganizationPermission({
+    ...input,
+    permission: "broadcasts.control",
+  });
+  const definition = parseUpdateBroadcastInput(input.payload);
+  const now = dependencies.now?.() ?? new Date();
+  if (definition.scheduledFor && definition.scheduledFor <= now) {
+    throw new BroadcastError("VALIDATION_ERROR", [
+      {
+        field: "scheduled_for",
+        message: "Schedule broadcasts in the future.",
+      },
+    ]);
+  }
+
+  const current = await readBroadcastRow(input);
+  if (current.status !== "scheduled" || !current.scheduledFor) {
+    throw new BroadcastError("INVALID_TRANSITION");
+  }
+
+  const [template, audience] = await Promise.all([
+    definition.templateId
+      ? getTemplate({
+          actorUserId,
+          orgId: input.orgId,
+          templateId: definition.templateId,
+        })
+      : null,
+    definition.audienceId
+      ? getActiveAudienceContacts({
+          audienceId: definition.audienceId,
+          orgId: input.orgId,
+        })
+      : null,
+  ]);
+  if (audience && audience.length === 0) throw new AudienceError("AUDIENCE_EMPTY");
+
+  const unsubscribeUrl =
+    dependencies.unsubscribeUrl ??
+    ((contactId: string) => createUnsubscribeUrl({ contactId }));
+  const recipients = audience?.map((contact) => ({
+    contactId: contact.id,
+    data: {
+      contact: { email: contact.email, name: contact.name ?? "" },
+      email: contact.email,
+      name: contact.name ?? "",
+      unsubscribe_url: unsubscribeUrl(contact.id),
+    },
+    email: contact.email,
+    position: contact.position,
+  }));
+  const templateBodies = template
+    ? withUnsubscribeFooter({ html: template.html, text: template.text })
+    : null;
+
+  const runAt = await db.transaction(async (tx) => {
+    const [locked] = await tx
+      .select({ scheduledFor: broadcasts.scheduledFor, status: broadcasts.status })
+      .from(broadcasts)
+      .where(
+        and(
+          eq(broadcasts.id, input.broadcastId),
+          eq(broadcasts.orgId, input.orgId),
+        ),
+      )
+      .for("update");
+    if (!locked) throw new BroadcastError("BROADCAST_NOT_FOUND");
+    if (locked.status !== "scheduled" || !locked.scheduledFor) {
+      throw new BroadcastError("INVALID_TRANSITION");
+    }
+
+    await tx
+      .update(broadcasts)
+      .set({
+        ...(definition.audienceId
+          ? { sourceAudienceId: definition.audienceId }
+          : {}),
+        ...(definition.from ? { from: definition.from } : {}),
+        ...(definition.name ? { name: definition.name } : {}),
+        ...(definition.scheduledFor
+          ? { scheduledFor: definition.scheduledFor }
+          : {}),
+        ...(template && templateBodies
+          ? {
+              sourceTemplateId: template.id,
+              templateHtml: templateBodies.html,
+              templateName: template.name,
+              templateRequiredVariables: template.requiredVariables,
+              templateSubject: template.subject,
+              templateText: templateBodies.text,
+            }
+          : {}),
+        updatedAt: now,
+      })
+      .where(eq(broadcasts.id, input.broadcastId));
+
+    if (recipients) {
+      await tx
+        .delete(broadcastRecipients)
+        .where(eq(broadcastRecipients.broadcastId, input.broadcastId));
+      for (let offset = 0; offset < recipients.length; offset += 1_000) {
+        await tx.insert(broadcastRecipients).values(
+          recipients.slice(offset, offset + 1_000).map((recipient) => ({
+            broadcastId: input.broadcastId,
+            contactId: recipient.contactId,
+            data: recipient.data,
+            email: recipient.email,
+            position: recipient.position,
+          })),
+        );
+      }
+    }
+
+    return definition.scheduledFor ?? locked.scheduledFor;
+  });
+
+  requestBroadcastJob({
+    broadcastId: input.broadcastId,
+    orgId: input.orgId,
+    runAt,
+  });
+
+  return recordFromRow(await readBroadcastRow(input));
 }
 
 export async function processBroadcastJob(
@@ -754,8 +886,7 @@ export async function listBroadcasts(input: {
     .select()
     .from(broadcasts)
     .where(eq(broadcasts.orgId, input.orgId))
-    .orderBy(desc(broadcasts.createdAt), desc(broadcasts.id))
-    .limit(50);
+    .orderBy(desc(broadcasts.createdAt), desc(broadcasts.id));
 
   return Promise.all(rows.map(recordFromRow));
 }
