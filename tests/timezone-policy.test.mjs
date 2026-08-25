@@ -6,16 +6,20 @@ import {
   fixedApplicationTimeZone,
 } from "../src/lib/timezone-policy.ts";
 
-test("Australia/Sydney is the default and a fixed deployment overrides stored users", () => {
+test("Australia/Sydney is the default and stored user timezones win", () => {
   assert.equal(defaultApplicationTimeZone({}), "Australia/Sydney");
   const environment = {
     PAPERBOY_DEFAULT_TIME_ZONE: "Australia/Sydney",
     PAPERBOY_FIXED_TIME_ZONE: "Australia/Sydney",
   };
   assert.equal(fixedApplicationTimeZone(environment), "Australia/Sydney");
-  assert.equal(effectiveUserTimeZone("UTC", environment), "Australia/Sydney");
+  assert.equal(effectiveUserTimeZone("UTC", environment), "UTC");
   assert.equal(
     effectiveUserTimeZone("Pacific/Auckland", environment),
+    "Pacific/Auckland",
+  );
+  assert.equal(
+    effectiveUserTimeZone("", environment),
     "Australia/Sydney",
   );
 });

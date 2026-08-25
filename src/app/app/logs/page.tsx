@@ -132,6 +132,8 @@ export default async function Logs({ searchParams }: LogsPageProps) {
       failureReason: message.failureReason,
       id: message.id,
       lastErrorCode: message.lastErrorCode,
+      subject: message.subject,
+      to: message.to,
       stateLabel: eventLabel(message.status),
       stateTime: stateTime
         ? formatDateTime(stateTime, session.user.timezone)
@@ -147,7 +149,8 @@ export default async function Logs({ searchParams }: LogsPageProps) {
     <section>
       <h1 className="page-title">Delivery</h1>
       <p className="page-sub">
-        Durable queue and worker outcomes. Calendar filters and timestamps use{" "}
+        Durable queue and worker outcomes. Open a row to read the subject and
+        body. Calendar filters and timestamps use{" "}
         <code>{session.user.timezone}</code>; storage remains UTC.
       </p>
 

@@ -7,6 +7,7 @@ import { WelcomeNote } from "@/components/dashboard/welcome-note";
 import { PostalStamp } from "@/components/brand/postal-stamp";
 import {
   dashboardRangeLabel,
+  dashboardRangeParam,
   getPaperBoyDashboard,
   parseDashboardRange,
 } from "@/lib/dashboard";
@@ -21,18 +22,18 @@ export default async function Overview({ searchParams }: OverviewProps) {
     requireOrganization(),
     searchParams,
   ]);
-  const rangeDays = parseDashboardRange(query.range);
+  const range = parseDashboardRange(query.range);
   const now = new Date();
   const dashboard = await getPaperBoyDashboard({
     actorUserId: session.user.id,
     now,
     orgId: organization.id,
-    rangeDays,
+    range,
     timeZone: session.user.timezone,
   });
   const rangeLabel = dashboardRangeLabel({
     now,
-    rangeDays,
+    range,
     timeZone: session.user.timezone,
   });
 
@@ -44,14 +45,22 @@ export default async function Overview({ searchParams }: OverviewProps) {
         <WelcomeNote organizationName={organization.name} />
         <div className="dashboard-postmark">
           <PostalStamp />
-          <DateRangeControl label={rangeLabel} rangeDays={rangeDays} />
+          <div className="dashboard-reporting">
+            <DateRangeControl label={rangeLabel} range={range} />
+            <a
+              className="btn btn-compact dashboard-export"
+              href={`/app/overview/export?range=${dashboardRangeParam(range)}`}
+            >
+              Export CSV
+            </a>
+          </div>
         </div>
       </div>
 
       <MetricsGrid metrics={dashboard.metrics} />
 
       <div className="dashboard-analytics-grid">
-        <EmailActivityPanel data={dashboard.activity} />
+        <EmailActivityPanel bucket={dashboard.bucket} data={dashboard.activity} />
         <RecentEmails emails={dashboard.recentEmails} now={now} />
       </div>
     </section>

@@ -5,14 +5,9 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { requireSession } from "@/lib/session";
 import { canonicalTimeZone } from "@/lib/time";
-import { fixedApplicationTimeZone } from "@/lib/timezone-policy";
 
 export async function updateTimeZoneAction(formData: FormData) {
   await requireSession();
-
-  if (fixedApplicationTimeZone()) {
-    redirect("/app/settings?error=timezone-locked");
-  }
 
   const timezone = canonicalTimeZone(formData.get("timezone"));
 

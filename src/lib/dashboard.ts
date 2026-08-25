@@ -11,18 +11,39 @@ import {
 import { db } from "@/db";
 import { events, messages } from "@/db/schema";
 import {
+  DASHBOARD_EXPORT_MESSAGE_LIMIT,
+  type DashboardExportMessage,
+} from "@/lib/dashboard-export";
+import {
+  dashboardSeriesPlan,
+  dashboardWindow,
+  displayDate,
+  displayMonth,
+  localDateKey,
+  rangeBoundary,
+  type DashboardBucket,
+  type DashboardRange,
+} from "@/lib/dashboard-range";
+import {
   resolveDashboardEmailStatus,
   type DashboardEmailStatus,
 } from "@/lib/dashboard-status";
 import { requireMessageRead } from "@/lib/message-statuses";
-import { normalizeTimeZone, startOfCalendarDate } from "@/lib/time";
+import { normalizeTimeZone } from "@/lib/time";
 
 export type { DashboardEmailStatus } from "@/lib/dashboard-status";
-
-export const DASHBOARD_RANGES = [7, 14, 30] as const;
-export type DashboardRangeDays = (typeof DASHBOARD_RANGES)[number];
+export type { DashboardBucket, DashboardRange, DashboardRangeDays } from "@/lib/dashboard-range";
+export {
+  DASHBOARD_RANGE_ALL,
+  DASHBOARD_RANGE_PRESETS,
+  DASHBOARD_RANGES,
+  dashboardRangeLabel,
+  dashboardRangeParam,
+  parseDashboardRange,
+} from "@/lib/dashboard-range";
 
 export type DashboardMetric = {
+  comparison: "none" | "previous-period";
   delta: number | null;
   id: "delivered" | "opened" | "clicked" | "bounced" | "complained";
   label: string;
@@ -38,6 +59,15 @@ export type DashboardActivityPoint = {
   opened: number;
 };
 
+export type DashboardSeriesPoint = {
+  bounced: number;
+  bucket: string;
+  clicked: number;
+  complained: number;
+  delivered: number;
+  opened: number;
+};
+
 export type DashboardEmail = {
   createdAt: string;
   id: string;
@@ -48,8 +78,16 @@ export type DashboardEmail = {
 
 export type PaperBoyDashboard = {
   activity: DashboardActivityPoint[];
+  bucket: DashboardBucket;
   metrics: DashboardMetric[];
   recentEmails: DashboardEmail[];
+  series: DashboardSeriesPoint[];
+};
+
+export type PaperBoyDashboardExport = {
+  dashboard: PaperBoyDashboard;
+  messages: DashboardExportMessage[];
+  messagesTruncated: boolean;
 };
 
 type DashboardEventType =
@@ -58,120 +96,40 @@ type DashboardEventType =
   | "delivered"
   | "opened";
 
-function localDateKey(value: Date, timeZone: string): string {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      calendar: "iso8601",
-      day: "2-digit",
-      month: "2-digit",
-      numberingSystem: "latn",
-      timeZone,
-      year: "numeric",
-    })
-      .formatToParts(value)
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, part.value]),
-  );
-
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function shiftDateKey(value: string, days: number): string {
-  const [year, month, day] = value.split("-").map(Number);
-  const shifted = new Date(Date.UTC(year, month - 1, day + days));
-  return [
-    shifted.getUTCFullYear(),
-    String(shifted.getUTCMonth() + 1).padStart(2, "0"),
-    String(shifted.getUTCDate()).padStart(2, "0"),
-  ].join("-");
-}
-
-function rangeBoundary(value: string, timeZone: string): Date {
-  const boundary = startOfCalendarDate(value, timeZone);
-
-  if (!boundary) {
-    throw new Error(`Unable to resolve dashboard date ${value}.`);
-  }
-
-  return boundary;
-}
+const EVENT_TYPES: DashboardEventType[] = [
+  "delivered",
+  "opened",
+  "bounced",
+  "complained",
+];
 
 function percentageDelta(current: number, previous: number): number | null {
   if (previous === 0) return current === 0 ? 0 : null;
   return Number((((current - previous) / previous) * 100).toFixed(1));
 }
 
-function displayDate(dateKey: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-AU", {
-    day: "numeric",
-    month: "short",
-    timeZone,
-  }).format(rangeBoundary(dateKey, timeZone));
-}
-
-export function parseDashboardRange(value: string | undefined): DashboardRangeDays {
-  const parsed = Number(value);
-  return DASHBOARD_RANGES.includes(parsed as DashboardRangeDays)
-    ? (parsed as DashboardRangeDays)
-    : 7;
-}
-
-export function dashboardRangeLabel(input: {
-  now: Date;
-  rangeDays: DashboardRangeDays;
-  timeZone: string;
-}): string {
-  const timeZone = normalizeTimeZone(input.timeZone);
-  const endKey = localDateKey(input.now, timeZone);
-  const startKey = shiftDateKey(endKey, -(input.rangeDays - 1));
-  const start = rangeBoundary(startKey, timeZone);
-  const end = rangeBoundary(endKey, timeZone);
-  const startParts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-AU", {
-      day: "numeric",
-      month: "short",
-      timeZone,
-      year: "numeric",
-    })
-      .formatToParts(start)
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, part.value]),
-  );
-  const endParts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-AU", {
-      day: "numeric",
-      month: "short",
-      timeZone,
-      year: "numeric",
-    })
-      .formatToParts(end)
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, part.value]),
-  );
-
-  if (startParts.month === endParts.month && startParts.year === endParts.year) {
-    return `${startParts.day}–${endParts.day} ${endParts.month} ${endParts.year}`;
-  }
-
-  return `${startParts.day} ${startParts.month} – ${endParts.day} ${endParts.month} ${endParts.year}`;
+function emptyBucketCounts() {
+  return { bounced: 0, complained: 0, delivered: 0, opened: 0 };
 }
 
 export async function getPaperBoyDashboard(input: {
   actorUserId: string;
   now?: Date;
   orgId: string;
-  rangeDays: DashboardRangeDays;
+  range: DashboardRange;
   timeZone: string;
 }): Promise<PaperBoyDashboard> {
   const timeZone = normalizeTimeZone(input.timeZone);
   const now = input.now ?? new Date();
   const today = localDateKey(now, timeZone);
-  const currentStartKey = shiftDateKey(today, -(input.rangeDays - 1));
-  const previousStartKey = shiftDateKey(currentStartKey, -input.rangeDays);
-  const endKey = shiftDateKey(today, 1);
-  const currentStart = rangeBoundary(currentStartKey, timeZone);
-  const previousStart = rangeBoundary(previousStartKey, timeZone);
-  const end = rangeBoundary(endKey, timeZone);
+  const window = dashboardWindow({ range: input.range, today });
+  const currentStart = window.currentStartKey
+    ? rangeBoundary(window.currentStartKey, timeZone)
+    : null;
+  const previousStart = window.previousStartKey
+    ? rangeBoundary(window.previousStartKey, timeZone)
+    : null;
+  const end = rangeBoundary(window.endKey, timeZone);
 
   // Reuse the established permission boundary before dashboard-only queries.
   await requireMessageRead({
@@ -190,7 +148,8 @@ export async function getPaperBoyDashboard(input: {
       .where(
         and(
           eq(messages.orgId, input.orgId),
-          gte(events.createdAt, previousStart),
+          inArray(events.type, EVENT_TYPES),
+          previousStart ? gte(events.createdAt, previousStart) : undefined,
           lt(events.createdAt, end),
         ),
       )
@@ -209,65 +168,70 @@ export async function getPaperBoyDashboard(input: {
       .limit(5),
   ]);
 
-  const currentKeys = Array.from({ length: input.rangeDays }, (_, index) =>
-    shiftDateKey(currentStartKey, index),
-  );
-  const eventTypes: DashboardEventType[] = [
-    "delivered",
-    "opened",
-    "bounced",
-    "complained",
-  ];
+  const firstDateKey = eventRows.reduce<string | null>((earliest, event) => {
+    const key = localDateKey(event.createdAt, timeZone);
+    return earliest === null || key < earliest ? key : earliest;
+  }, null);
+  const plan = dashboardSeriesPlan({
+    firstDateKey,
+    range: input.range,
+    today,
+  });
   const currentCounts = Object.fromEntries(
-    eventTypes.map((type) => [type, 0]),
+    EVENT_TYPES.map((type) => [type, 0]),
   ) as Record<DashboardEventType, number>;
   const previousCounts = Object.fromEntries(
-    eventTypes.map((type) => [type, 0]),
+    EVENT_TYPES.map((type) => [type, 0]),
   ) as Record<DashboardEventType, number>;
-  const dailyCounts = new Map(
-    currentKeys.map((key) => [
-      key,
-      { bounced: 0, complained: 0, delivered: 0, opened: 0 },
-    ]),
+  const bucketCounts = new Map(
+    plan.keys.map((key) => [key, emptyBucketCounts()]),
   );
 
   for (const event of eventRows) {
-    if (!eventTypes.includes(event.type as DashboardEventType)) continue;
+    if (!EVENT_TYPES.includes(event.type as DashboardEventType)) continue;
     const type = event.type as DashboardEventType;
-    const key = localDateKey(event.createdAt, timeZone);
+    const dateKey = localDateKey(event.createdAt, timeZone);
+    const bucketKey = plan.bucket === "month" ? dateKey.slice(0, 7) : dateKey;
+    const inCurrent = currentStart === null || event.createdAt >= currentStart;
 
-    if (event.createdAt >= currentStart) {
+    if (inCurrent) {
       currentCounts[type] += 1;
-      const day = dailyCounts.get(key);
-      if (day) day[type] += 1;
+      const bucket = bucketCounts.get(bucketKey);
+      if (bucket) bucket[type] += 1;
     } else {
       previousCounts[type] += 1;
     }
   }
 
+  const comparison = input.range === "all" ? "none" : "previous-period";
   const trends = Object.fromEntries(
-    eventTypes.map((type) => [
+    EVENT_TYPES.map((type) => [
       type,
-      currentKeys.map((key) => dailyCounts.get(key)?.[type] ?? 0),
+      plan.keys.map((key) => bucketCounts.get(key)?.[type] ?? 0),
     ]),
   ) as Record<DashboardEventType, number[]>;
-  const emptyTrend = currentKeys.map(() => 0);
+  const emptyTrend = plan.keys.map(() => 0);
+  const periodDelta = (current: number, previous: number) =>
+    comparison === "none" ? null : percentageDelta(current, previous);
   const metrics: DashboardMetric[] = [
     {
-      delta: percentageDelta(currentCounts.delivered, previousCounts.delivered),
+      comparison,
+      delta: periodDelta(currentCounts.delivered, previousCounts.delivered),
       id: "delivered",
       label: "Delivered",
       trend: trends.delivered,
       value: currentCounts.delivered,
     },
     {
-      delta: percentageDelta(currentCounts.opened, previousCounts.opened),
+      comparison,
+      delta: periodDelta(currentCounts.opened, previousCounts.opened),
       id: "opened",
       label: "Opened",
       trend: trends.opened,
       value: currentCounts.opened,
     },
     {
+      comparison,
       delta: null,
       id: "clicked",
       label: "Clicked",
@@ -276,25 +240,41 @@ export async function getPaperBoyDashboard(input: {
       value: null,
     },
     {
-      delta: percentageDelta(currentCounts.bounced, previousCounts.bounced),
+      comparison,
+      delta: periodDelta(currentCounts.bounced, previousCounts.bounced),
       id: "bounced",
       label: "Bounced",
       trend: trends.bounced,
       value: currentCounts.bounced,
     },
     {
-      delta: percentageDelta(currentCounts.complained, previousCounts.complained),
+      comparison,
+      delta: periodDelta(currentCounts.complained, previousCounts.complained),
       id: "complained",
       label: "Spam complaints",
       trend: trends.complained,
       value: currentCounts.complained,
     },
   ];
-  const activity: DashboardActivityPoint[] = currentKeys.map((key) => ({
-    clicked: 0,
-    date: displayDate(key, timeZone),
-    delivered: dailyCounts.get(key)?.delivered ?? 0,
-    opened: dailyCounts.get(key)?.opened ?? 0,
+  const series: DashboardSeriesPoint[] = plan.keys.map((key) => {
+    const counts = bucketCounts.get(key) ?? emptyBucketCounts();
+    return {
+      bounced: counts.bounced,
+      bucket: key,
+      clicked: 0,
+      complained: counts.complained,
+      delivered: counts.delivered,
+      opened: counts.opened,
+    };
+  });
+  const activity: DashboardActivityPoint[] = series.map((point) => ({
+    clicked: point.clicked,
+    date:
+      plan.bucket === "month"
+        ? displayMonth(point.bucket, timeZone)
+        : displayDate(point.bucket, timeZone),
+    delivered: point.delivered,
+    opened: point.opened,
   }));
 
   const recentIds = recentRows.map((message) => message.id);
@@ -319,6 +299,7 @@ export async function getPaperBoyDashboard(input: {
 
   return {
     activity,
+    bucket: plan.bucket,
     metrics,
     recentEmails: recentRows.map((message) => ({
       createdAt: message.createdAt.toISOString(),
@@ -330,5 +311,55 @@ export async function getPaperBoyDashboard(input: {
       ),
       subject: message.subject,
     })),
+    series,
+  };
+}
+
+export async function getPaperBoyDashboardExport(input: {
+  actorUserId: string;
+  now?: Date;
+  orgId: string;
+  range: DashboardRange;
+  timeZone: string;
+}): Promise<PaperBoyDashboardExport> {
+  const timeZone = normalizeTimeZone(input.timeZone);
+  const now = input.now ?? new Date();
+  const dashboard = await getPaperBoyDashboard({ ...input, now, timeZone });
+  const today = localDateKey(now, timeZone);
+  const window = dashboardWindow({ range: input.range, today });
+  const currentStart = window.currentStartKey
+    ? rangeBoundary(window.currentStartKey, timeZone)
+    : null;
+  const end = rangeBoundary(window.endKey, timeZone);
+  const messageRows = await db
+    .select({
+      createdAt: messages.createdAt,
+      id: messages.id,
+      recipient: messages.to,
+      status: messages.status,
+      subject: messages.subject,
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.orgId, input.orgId),
+        currentStart ? gte(messages.createdAt, currentStart) : undefined,
+        lt(messages.createdAt, end),
+      ),
+    )
+    .orderBy(desc(messages.createdAt), desc(messages.id))
+    .limit(DASHBOARD_EXPORT_MESSAGE_LIMIT + 1);
+  const messagesTruncated = messageRows.length > DASHBOARD_EXPORT_MESSAGE_LIMIT;
+
+  return {
+    dashboard,
+    messages: messageRows.slice(0, DASHBOARD_EXPORT_MESSAGE_LIMIT).map((message) => ({
+      createdAt: message.createdAt.toISOString(),
+      id: message.id,
+      recipient: message.recipient[0] ?? "No recipient",
+      status: message.status,
+      subject: message.subject,
+    })),
+    messagesTruncated,
   };
 }

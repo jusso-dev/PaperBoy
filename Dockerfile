@@ -39,7 +39,6 @@ ENV HOSTNAME=0.0.0.0 \
     NODE_ENV=production \
     PORT=3000 \
     PAPERBOY_DEFAULT_TIME_ZONE=Australia/Sydney \
-    PAPERBOY_FIXED_TIME_ZONE=Australia/Sydney \
     TZ=Australia/Sydney
 
 WORKDIR /app

@@ -7,6 +7,8 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { SandboxedHtmlPreview } from "@/components/broadcasts/sandboxed-html-preview";
+import { templateBrowserPreviewDocument } from "@/lib/template-browser-preview";
 import {
   getMessageDrawerAction,
   type MessageDrawerResult,
@@ -21,6 +23,8 @@ export type MessageLogRow = {
   failureReason: string | null;
   id: string;
   lastErrorCode: string | null;
+  subject: string;
+  to: string[];
   stateLabel: string;
   stateTime: string | null;
   status: "failed" | "queued" | "sending" | "sent";
@@ -86,12 +90,12 @@ export function MessageLogTable({ rows }: { rows: MessageLogRow[] }) {
       <div className="table-scroll">
         <table className="table delivery-table message-log-table">
           <caption>
-            Up to 50 matching messages. Select a row to inspect its event
-            timeline without leaving this page.
+            Up to 50 matching messages. Select a row to read the subject, body,
+            and event timeline without leaving this page.
           </caption>
           <thead>
             <tr>
-              <th scope="col">Message</th>
+              <th scope="col">Email</th>
               <th scope="col">State</th>
               <th scope="col">Domain</th>
               <th scope="col">Attempts</th>
@@ -103,7 +107,7 @@ export function MessageLogTable({ rows }: { rows: MessageLogRow[] }) {
           <tbody>
             {rows.map((row) => (
               <tr
-                aria-label={`Open events for message ${row.id}`}
+                aria-label={`Open ${row.subject || "email"}`}
                 className="message-log-row"
                 key={row.id}
                 onClick={() => void open(row)}
@@ -111,11 +115,16 @@ export function MessageLogTable({ rows }: { rows: MessageLogRow[] }) {
                 tabIndex={0}
               >
                 <td>
-                  <code>{row.id}</code>
+                  <strong className="message-log-subject">
+                    {row.subject.trim() || "(no subject)"}
+                  </strong>
+                  <span className="delivery-meta">
+                    {row.to.length > 0 ? `to ${row.to.join(", ")}` : "No recipients"}
+                  </span>
                   <span className="delivery-meta">
                     {row.environment} · {row.deliveryMode}
                   </span>
-                  <span className="row-open-hint">View events</span>
+                  <span className="row-open-hint">View email</span>
                 </td>
                 <td>
                   <span className={`pill delivery-status-${row.status}`}>
@@ -166,12 +175,16 @@ export function MessageLogTable({ rows }: { rows: MessageLogRow[] }) {
           >
             <div className="message-drawer-heading">
               <div>
-                <p className="eyebrow">Delivery record</p>
-                <h2 id="message-drawer-title">Message events</h2>
+                <p className="eyebrow">Email</p>
+                <h2 id="message-drawer-title">
+                  {result?.ok
+                    ? result.message.subject.trim() || "(no subject)"
+                    : selected.subject.trim() || "Email"}
+                </h2>
                 <code>{selected.id}</code>
               </div>
               <button
-                aria-label="Close message events"
+                aria-label="Close email"
                 className="btn btn-compact"
                 onClick={close}
                 ref={closeButton}
@@ -182,7 +195,7 @@ export function MessageLogTable({ rows }: { rows: MessageLogRow[] }) {
             </div>
 
             {loading ? (
-              <p className="empty-state">Loading message events…</p>
+              <p className="empty-state">Loading email…</p>
             ) : result?.ok === false ? (
               <p className="form-error" role="alert">
                 {result.error}
@@ -212,7 +225,7 @@ export function MessageLogTable({ rows }: { rows: MessageLogRow[] }) {
                   </div>
                   <div>
                     <dt>Subject</dt>
-                    <dd>{result.message.subject}</dd>
+                    <dd>{result.message.subject.trim() || "(no subject)"}</dd>
                   </div>
                   <div>
                     <dt>Queued</dt>
@@ -251,6 +264,30 @@ export function MessageLogTable({ rows }: { rows: MessageLogRow[] }) {
                     </p>
                   </div>
                 ) : null}
+
+                <section className="message-drawer-section">
+                  <h3>Body</h3>
+                  {result.message.html ? (
+                    <div className="message-body-preview">
+                      <SandboxedHtmlPreview
+                        html={templateBrowserPreviewDocument(result.message.html)}
+                        title={result.message.subject || "Email body"}
+                      />
+                    </div>
+                  ) : null}
+                  {result.message.text && result.message.html ? (
+                    <details className="message-body-text-details">
+                      <summary>Plain text</summary>
+                      <pre className="message-body-text">{result.message.text}</pre>
+                    </details>
+                  ) : null}
+                  {result.message.text && !result.message.html ? (
+                    <pre className="message-body-text">{result.message.text}</pre>
+                  ) : null}
+                  {!result.message.html && !result.message.text ? (
+                    <p>This message has no stored body.</p>
+                  ) : null}
+                </section>
 
                 <section className="message-drawer-section">
                   <h3>Attachments</h3>

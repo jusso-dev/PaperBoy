@@ -34,12 +34,14 @@ export function MetricCard({ metric }: { metric: DashboardMetric }) {
           <DeltaIcon aria-hidden="true" strokeWidth={1.8} />
           {metric.value === null
             ? "Not tracked"
-            : delta === null
-              ? "New"
-              : `${delta > 0 ? "+" : ""}${delta}%`}
+            : metric.comparison === "none"
+              ? "All time"
+              : delta === null
+                ? "New"
+                : `${delta > 0 ? "+" : ""}${delta}%`}
         </span>
       </div>
-      <div className="metric-sparkline" role="img" aria-label={`${metric.label} daily trend`}>
+      <div className="metric-sparkline" role="img" aria-label={`${metric.label} trend`}>
         <ResponsiveContainer height="100%" width="100%">
           <AreaChart accessibilityLayer data={chartData} margin={{ bottom: 1, left: 1, right: 1, top: 4 }}>
             <Tooltip content={<MetricTooltip />} cursor={false} />

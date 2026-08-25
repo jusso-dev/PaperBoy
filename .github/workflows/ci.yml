@@ -18,7 +18,6 @@ jobs:
     runs-on: ubuntu-24.04-arm
     env:
       PAPERBOY_DEFAULT_TIME_ZONE: Australia/Sydney
-      PAPERBOY_FIXED_TIME_ZONE: Australia/Sydney
       TZ: Australia/Sydney
     services:
       postgres:

@@ -56,7 +56,7 @@ Callers can control request bodies, IDs, headers, email addresses and content, t
 The deployment assumptions are explicit:
 
 - Production secrets come from a protected secret store, are independently generated, and are available only to the processes that need them. They are not placed in Git, images, command-line arguments, logs, or MCP configuration committed to the repository.
-- Web, MCP, jobs, CI, and development mail processes use `TZ=Australia/Sydney`; `PAPERBOY_FIXED_TIME_ZONE` prevents account drift. Provider and database instants are normalized to UTC before persistence or protocol output.
+- Web, MCP, jobs, CI, and development mail processes default to `TZ=Australia/Sydney`. Each user can persist a different IANA timezone for console, log, and scheduling surfaces. Provider and database instants are normalized to UTC before persistence or protocol output.
 - Production Redis uses private networking, persistent storage, and `maxmemory-policy=noeviction`. PostgreSQL reconciliation restores missing BullMQ jobs; Redis must never contain message bodies, recipients, credentials, or attachment bytes.
 - Production S3 attachment storage has all Block Public Access settings enabled, bucket-owner-enforced object ownership, SSE-S3 default encryption, and an EC2 role restricted to the configured object prefix. No attachment object has a public URL or ACL.
 - PostgreSQL, attachment storage, backups, and observability stay in the approved region with least-privilege access, encryption, recovery testing, and retention controls.

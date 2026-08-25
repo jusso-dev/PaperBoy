@@ -10,14 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { DashboardRangeDays } from "@/lib/dashboard";
+import type { DashboardRange } from "@/lib/dashboard";
 
 export function DateRangeControl({
   label,
-  rangeDays,
+  range,
 }: {
   label: string;
-  rangeDays: DashboardRangeDays;
+  range: DashboardRange;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -34,7 +34,7 @@ export function DateRangeControl({
     <div className="date-range-control">
       <CalendarDays aria-hidden="true" strokeWidth={1.6} />
       <span className="date-range-label">{label}</span>
-      <Select onValueChange={updateRange} value={String(rangeDays)}>
+      <Select onValueChange={updateRange} value={String(range)}>
         <SelectTrigger
           aria-label="Dashboard reporting period"
           className="date-range-select"
@@ -46,6 +46,7 @@ export function DateRangeControl({
           <SelectItem value="7">Last 7 days</SelectItem>
           <SelectItem value="14">Last 14 days</SelectItem>
           <SelectItem value="30">Last 30 days</SelectItem>
+          <SelectItem value="all">All time</SelectItem>
         </SelectContent>
       </Select>
     </div>

@@ -36,6 +36,7 @@ export type MessageDrawerResult =
         environment: string;
         failureReason: string | null;
         from: string;
+        html: string | null;
         id: string;
         lastErrorCode: string | null;
         nextAttemptAt: string | null;
@@ -43,6 +44,7 @@ export type MessageDrawerResult =
         status: string;
         subject: string;
         tags: { name: string; value: string }[];
+        text: string | null;
         to: string[];
         updatedAt: string;
       };
@@ -112,6 +114,7 @@ export async function getMessageDrawerAction(
         environment: message.environment,
         failureReason: message.failureReason,
         from: message.from,
+        html: message.html,
         id: message.id,
         lastErrorCode: message.lastErrorCode,
         nextAttemptAt: timestamp(message.nextAttemptAt),
@@ -119,6 +122,7 @@ export async function getMessageDrawerAction(
         status: message.status,
         subject: message.subject,
         tags: message.tags,
+        text: message.text,
         to: message.to,
         updatedAt: formatDateTime(message.updatedAt, session.user.timezone),
       },

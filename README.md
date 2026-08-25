@@ -60,7 +60,7 @@ docker pull --platform linux/arm64 ghcr.io/jusso-dev/paperboy:main
 docker run --rm --platform linux/arm64 --env-file /path/to/protected.env -p 3000:3000 ghcr.io/jusso-dev/paperboy:main
 ```
 
-The image runs Next.js and the remote MCP server on Bun as a non-root user with `TZ=Australia/Sydney`, `PAPERBOY_DEFAULT_TIME_ZONE=Australia/Sydney`, and `PAPERBOY_FIXED_TIME_ZONE=Australia/Sydney`. Run BullMQ jobs from the same immutable image digest as a separately supervised process by overriding the command with `bun run jobs`; local MCP clients can use `bun run mcp:stdio`. The fixed policy applies to every account and presentation surface while stored instants and public protocol timestamps remain UTC.
+The image runs Next.js and the remote MCP server on Bun as a non-root user with `TZ=Australia/Sydney` and `PAPERBOY_DEFAULT_TIME_ZONE=Australia/Sydney`. Run BullMQ jobs from the same immutable image digest as a separately supervised process by overriding the command with `bun run jobs`; local MCP clients can use `bun run mcp:stdio`. Each signed-in user can choose their IANA timezone in Settings; stored instants and public protocol timestamps remain UTC.
 
 ## Security
 
@@ -88,7 +88,7 @@ The production image includes the immutable `drizzle/` migration bundle and its
 runtime dependencies, so the same `bun run db:migrate` command can run as a
 one-off release task before the web and job containers are replaced.
 
-All stored instants and public protocol timestamps are UTC. PaperBoy persists and enforces `Australia/Sydney` for every user-facing calendar, console, log, and scheduling surface; the Settings control is locked while `PAPERBOY_FIXED_TIME_ZONE` is set.
+All stored instants and public protocol timestamps are UTC. PaperBoy persists each user's IANA timezone and uses it for every user-facing calendar, console, log, and scheduling surface. New accounts default to `Australia/Sydney` until they choose another zone in Settings.
 
 The matching SQL in `drizzle/down/` exists only to prove rollback on a throwaway database. Do not run it against a database containing PaperBoy data.
 

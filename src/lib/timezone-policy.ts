@@ -37,8 +37,7 @@ export function effectiveUserTimeZone(
   storedTimeZone: unknown,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
-  return (
-    fixedApplicationTimeZone(environment) ??
-    normalizeTimeZone(storedTimeZone || defaultApplicationTimeZone(environment))
+  return normalizeTimeZone(
+    storedTimeZone || defaultApplicationTimeZone(environment),
   );
 }

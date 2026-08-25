@@ -9,12 +9,14 @@ import {
   MessageStatusError,
   type MessageDeliveryStatusFilters,
   type MessageDeliveryCounts,
+  type MessageDeliveryOverviewRecord,
   type MessageDeliveryStatusRecord,
 } from "@/lib/message-status-core";
 import { isOutboundProvider } from "@/lib/outbound-provider-core";
 
 export type {
   MessageDeliveryCounts,
+  MessageDeliveryOverviewRecord,
   MessageDeliveryStatusRecord,
 } from "@/lib/message-status-core";
 
@@ -40,6 +42,12 @@ const statusSelection = {
   updatedAt: messages.updatedAt,
 };
 
+const overviewSelection = {
+  ...statusSelection,
+  subject: messages.subject,
+  to: messages.to,
+};
+
 type StatusRow = Pick<
   typeof messages.$inferSelect,
   | "attemptCount"
@@ -59,6 +67,9 @@ type StatusRow = Pick<
   | "status"
   | "updatedAt"
 >;
+
+type OverviewRow = StatusRow &
+  Pick<typeof messages.$inferSelect, "subject" | "to">;
 
 export async function requireMessageRead(input: {
   actorUserId: string | null;
@@ -84,6 +95,14 @@ export async function requireMessageRead(input: {
   }
 
   requirePermission(membership.role, "messages.read");
+}
+
+function overviewFromRow(row: OverviewRow): MessageDeliveryOverviewRecord {
+  return {
+    ...recordFromRow(row),
+    subject: row.subject,
+    to: Array.isArray(row.to) ? row.to.map(String) : [],
+  };
 }
 
 function recordFromRow(row: StatusRow): MessageDeliveryStatusRecord {
@@ -115,6 +134,25 @@ function boundedLimit(limit: number | undefined): number {
     : 50;
 }
 
+function messageFilters(
+  orgId: string,
+  environment?: "live" | "test",
+  filters: MessageDeliveryStatusFilters = {},
+) {
+  return and(
+    eq(messages.orgId, orgId),
+    environment ? eq(messages.environment, environment) : undefined,
+    filters.status ? eq(messages.status, filters.status) : undefined,
+    filters.domainId ? eq(messages.domainId, filters.domainId) : undefined,
+    filters.createdAtFrom
+      ? gte(messages.createdAt, filters.createdAtFrom)
+      : undefined,
+    filters.createdAtBefore
+      ? lt(messages.createdAt, filters.createdAtBefore)
+      : undefined,
+  );
+}
+
 async function listRows(
   orgId: string,
   limit?: number,
@@ -124,20 +162,20 @@ async function listRows(
   return db
     .select(statusSelection)
     .from(messages)
-    .where(
-      and(
-        eq(messages.orgId, orgId),
-        environment ? eq(messages.environment, environment) : undefined,
-        filters.status ? eq(messages.status, filters.status) : undefined,
-        filters.domainId ? eq(messages.domainId, filters.domainId) : undefined,
-        filters.createdAtFrom
-          ? gte(messages.createdAt, filters.createdAtFrom)
-          : undefined,
-        filters.createdAtBefore
-          ? lt(messages.createdAt, filters.createdAtBefore)
-          : undefined,
-      ),
-    )
+    .where(messageFilters(orgId, environment, filters))
+    .orderBy(desc(messages.createdAt), desc(messages.id))
+    .limit(boundedLimit(limit));
+}
+
+async function listOverviewRows(
+  orgId: string,
+  limit?: number,
+  filters: MessageDeliveryStatusFilters = {},
+) {
+  return db
+    .select(overviewSelection)
+    .from(messages)
+    .where(messageFilters(orgId, undefined, filters))
     .orderBy(desc(messages.createdAt), desc(messages.id))
     .limit(boundedLimit(limit));
 }
@@ -209,11 +247,11 @@ export async function getMessageDeliveryOverview(input: {
   status?: MessageDeliveryStatusRecord["status"];
 }): Promise<{
   counts: MessageDeliveryCounts;
-  messages: MessageDeliveryStatusRecord[];
+  messages: MessageDeliveryOverviewRecord[];
 }> {
   await requireMessageRead(input);
   const [rows, groupedCounts] = await Promise.all([
-    listRows(input.orgId, input.limit, undefined, input),
+    listOverviewRows(input.orgId, input.limit, input),
     countRows(input.orgId),
   ]);
   const counts: MessageDeliveryCounts = {
@@ -229,6 +267,6 @@ export async function getMessageDeliveryOverview(input: {
 
   return {
     counts,
-    messages: rows.map(recordFromRow),
+    messages: rows.map(overviewFromRow),
   };
 }

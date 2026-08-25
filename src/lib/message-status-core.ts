@@ -23,6 +23,11 @@ export type MessageDeliveryStatusRecord = {
   updatedAt: Date;
 };
 
+export type MessageDeliveryOverviewRecord = MessageDeliveryStatusRecord & {
+  subject: string;
+  to: string[];
+};
+
 export type MessageDeliveryStatusFilters = {
   createdAtBefore?: Date;
   createdAtFrom?: Date;

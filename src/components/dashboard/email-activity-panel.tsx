@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { DashboardActivityPoint } from "@/lib/dashboard";
+import type { DashboardActivityPoint, DashboardBucket } from "@/lib/dashboard";
 
 const legend = [
   { className: "legend-delivered", label: "Delivered" },
@@ -19,10 +19,16 @@ const legend = [
   { className: "legend-clicked", label: "Clicked" },
 ];
 
-export function EmailActivityPanel({ data }: { data: DashboardActivityPoint[] }) {
+export function EmailActivityPanel({
+  bucket,
+  data,
+}: {
+  bucket: DashboardBucket;
+  data: DashboardActivityPoint[];
+}) {
   const [granularity, setGranularity] = useState<"daily" | "weekly">("daily");
   const chartData = useMemo(() => {
-    if (granularity === "daily") return data;
+    if (bucket === "month" || granularity === "daily") return data;
 
     const points: DashboardActivityPoint[] = [];
     for (let index = 0; index < data.length; index += 7) {
@@ -38,25 +44,29 @@ export function EmailActivityPanel({ data }: { data: DashboardActivityPoint[] })
       });
     }
     return points;
-  }, [data, granularity]);
+  }, [bucket, data, granularity]);
 
   return (
     <PaperCard className="activity-panel">
       <Tape className="activity-panel-tape" />
       <header className="paper-panel-header">
         <h2>Email Activity</h2>
-        <Select
-          onValueChange={(value) => setGranularity(value as "daily" | "weekly")}
-          value={granularity}
-        >
-          <SelectTrigger aria-label="Chart granularity" className="paper-select-label">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent align="end">
-            <SelectItem value="daily">Daily</SelectItem>
-            <SelectItem value="weekly">Weekly</SelectItem>
-          </SelectContent>
-        </Select>
+        {bucket === "day" ? (
+          <Select
+            onValueChange={(value) => setGranularity(value as "daily" | "weekly")}
+            value={granularity}
+          >
+            <SelectTrigger aria-label="Chart granularity" className="paper-select-label">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="daily">Daily</SelectItem>
+              <SelectItem value="weekly">Weekly</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="paper-select-label activity-bucket-label">Monthly</span>
+        )}
       </header>
       <div aria-label="Chart legend" className="activity-legend">
         {legend.map((item) => (

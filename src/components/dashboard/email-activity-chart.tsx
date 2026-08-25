@@ -37,7 +37,7 @@ function ActivityTooltip({
 
 export function EmailActivityChart({ data }: { data: DashboardActivityPoint[] }) {
   return (
-    <div className="activity-chart" role="img" aria-label="Daily delivered, opened, and clicked email events">
+    <div className="activity-chart" role="img" aria-label="Delivered, opened, and clicked email events">
       <ResponsiveContainer height="100%" width="100%">
         <BarChart accessibilityLayer barCategoryGap="24%" data={data} margin={{ bottom: 0, left: -12, right: 4, top: 8 }}>
           <CartesianGrid stroke="var(--line)" strokeDasharray="2 4" vertical={false} />

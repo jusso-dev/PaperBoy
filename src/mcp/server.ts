@@ -321,7 +321,7 @@ const templateDocument = `# PaperBoy email templates
 - Queue email with \`template_id\` and an optional JSON \`data\` object. Do not combine those fields with inline subject, HTML, or text.
 - Rendering happens before provider delivery, so Cloudflare Email Sending and SMTP receive the same content.
 - Read a template before deleting it, then pass \`confirm: true\` to paperboy_delete_template.
-- Stored instants and MCP timestamps are UTC. Console presentation uses the deployment's fixed Australia/Sydney IANA timezone.
+- Stored instants and MCP timestamps are UTC. Console presentation uses the signed-in user's IANA timezone.
 `;
 
 const broadcastDocument = `# PaperBoy broadcasts
@@ -334,7 +334,7 @@ const broadcastDocument = `# PaperBoy broadcasts
 - Progress separates pending, processing, queued, suppressed, failed, and cancelled recipients. Tool output never returns audience addresses or rendered message content.
 - Pause stops before the next recipient. Resume processes remaining recipients. Cancel marks every pending recipient cancelled and prevents further claims; an already-processing recipient may finish.
 - Queue records remain provider-neutral. SMTP and Cloudflare Email Sending receive the same rendered subject, HTML, and text through the normal job path.
-- Stored instants and MCP timestamps are UTC. Console presentation uses the deployment's fixed Australia/Sydney IANA timezone.
+- Stored instants and MCP timestamps are UTC. Console presentation uses the signed-in user's IANA timezone.
 `;
 
 const jobsDocument = `# PaperBoy BullMQ jobs
@@ -389,7 +389,7 @@ const suppressionDocument = `# PaperBoy suppression list
 - CSV import accepts UTF-8 with an email header and optional reason column, at most 1 MiB and 5,000 data rows. The entire file validates before mutation. Duplicate rows and existing entries keep the strongest reason: complained, then bounced, then unsubscribed, then manual.
 - Read a suppression before deleting it and pass confirm: true. Deletion means the address may receive future mail; it does not modify Cloudflare provider suppressions.
 - PaperBoy suppression state is provider-neutral and complements, but does not replace, the Cloudflare-managed cf-bounce and provider suppression pipeline.
-- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the fixed Australia/Sydney IANA timezone.
+- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the signed-in user's IANA timezone.
 `;
 
 const audienceDocument = `# PaperBoy audiences and contacts
@@ -403,7 +403,7 @@ const audienceDocument = `# PaperBoy audiences and contacts
 - Opening an unsubscribe URL is read-only. The recipient must confirm; confirmation sets unsubscribed_at and creates an organization-wide unsubscribed suppression atomically.
 - PaperBoy links are HMAC-SHA256 signed with PAPERBOY_UNSUBSCRIBE_SIGNING_KEY and have no provider dependency. SMTP and Cloudflare Email Sending receive the same rendered link and body.
 - Cloudflare keeps its independent cf-bounce return path and provider suppression pipeline. PaperBoy unsubscribe state complements it and blocks before provider queue insertion.
-- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the fixed Australia/Sydney IANA timezone.
+- Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the signed-in user's IANA timezone.
 `;
 
 const rateLimitDocument = `# PaperBoy organization send-rate limits
@@ -425,7 +425,7 @@ const openTrackingDocument = `# PaperBoy open tracking
 - An opened event means the pixel was fetched. Security scanners, privacy proxies, and prefetchers can trigger it, so it does not prove a person read the message.
 - PAPERBOY_OPEN_TRACKING_SIGNING_KEY is a dedicated Base64-encoded 32-byte key. Rotation invalidates outstanding pixels. PAPERBOY_PUBLIC_URL supplies their public origin.
 - Pixel URLs and stored HTML are provider-neutral. SMTP and Cloudflare Email Service receive the same body; Cloudflare remains its own DKIM and ARC authority.
-- Event instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the fixed Australia/Sydney IANA timezone.
+- Event instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the signed-in user's IANA timezone.
 `;
 
 const outboundProviderDocument = `# PaperBoy outbound providers
@@ -440,7 +440,7 @@ const outboundProviderDocument = `# PaperBoy outbound providers
 - Amazon SES is a live v2 delivery and event adapter. Azure remains selectable but unavailable until its adapter lands. Neither path silently falls back to SMTP.
 - SES SendEmail stores the returned SES message ID. SendBulkEmail supports up to 50 compatible entries. Both reserve recipient capacity through a shared PostgreSQL guard using 80% rate and 90% rolling-day headroom; capacity waits do not consume delivery attempts. Configuration-set tags preserve each PaperBoy UUID, while signed SNS or API-key-authenticated EventBridge ingestion verifies both the tenant message and SES message ID before mutation.
 - Provider event adapters map into the stable PaperBoy delivered, deferred, bounced, and complained event names. Permanent SES bounces and complaints update the shared organization suppression list; transient bounces and delays do not.
-- Settings and test timestamps are RFC 3339 UTC. Console presentation uses the fixed Australia/Sydney IANA timezone.
+- Settings and test timestamps are RFC 3339 UTC. Console presentation uses the signed-in user's IANA timezone.
 `;
 
 function authorizationError() {
