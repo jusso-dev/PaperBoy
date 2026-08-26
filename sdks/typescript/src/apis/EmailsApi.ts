@@ -19,11 +19,22 @@ import type {
     ErrorEnvelope,
     QueuedEmail,
     RateLimitErrorEnvelope,
+    ReceiveInboundEmailInput,
+    ReceivedEmail,
+    ReceivedEmailAccepted,
     SendEmailInput,
 } from '../models/index';
 
 export interface GetEmailRequest {
     emailId: string;
+}
+
+export interface GetReceivedEmailRequest {
+    emailId: string;
+}
+
+export interface ReceiveInboundEmailRequest {
+    receiveInboundEmailInput: ReceiveInboundEmailInput;
 }
 
 export interface SendEmailRequest {
@@ -92,6 +103,118 @@ export class EmailsApi extends runtime.BaseAPI {
      */
     async getEmail(requestParameters: GetEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Email> {
         const response = await this.getEmailRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for getReceivedEmail without sending the request
+     */
+    async getReceivedEmailRequestOpts(requestParameters: GetReceivedEmailRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['emailId'] == null) {
+            throw new runtime.RequiredError(
+                'emailId',
+                'Required parameter "emailId" was null or undefined when calling getReceivedEmail().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("bearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/api/v1/received-emails/{emailId}`;
+        urlPath = urlPath.replace('{emailId}', encodeURIComponent(String(requestParameters['emailId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Returns the stored inbound email for the organization and environment selected by the bearer key. Support desks use this after `email.received` to read the customer reply body.
+     * Get one inbound email
+     */
+    async getReceivedEmailRaw(requestParameters: GetReceivedEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ReceivedEmail>> {
+        const requestOptions = await this.getReceivedEmailRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response);
+    }
+
+    /**
+     * Returns the stored inbound email for the organization and environment selected by the bearer key. Support desks use this after `email.received` to read the customer reply body.
+     * Get one inbound email
+     */
+    async getReceivedEmail(requestParameters: GetReceivedEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ReceivedEmail> {
+        const response = await this.getReceivedEmailRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for receiveInboundEmail without sending the request
+     */
+    async receiveInboundEmailRequestOpts(requestParameters: ReceiveInboundEmailRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['receiveInboundEmailInput'] == null) {
+            throw new runtime.RequiredError(
+                'receiveInboundEmailInput',
+                'Required parameter "receiveInboundEmailInput" was null or undefined when calling receiveInboundEmail().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("bearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/api/v1/received-emails`;
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: requestParameters['receiveInboundEmailInput'],
+        };
+    }
+
+    /**
+     * Accepts a raw RFC 822 `email` string or parsed from/to/subject/html/text fields. Live keys require at least one recipient domain to be a verified organization sending domain, including plus-addresses used by support desks. A configured organization webhook receives `email.received` with routing metadata only; fetch the body with GET /api/v1/received-emails/{emailId}.
+     * Store one inbound email
+     */
+    async receiveInboundEmailRaw(requestParameters: ReceiveInboundEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ReceivedEmailAccepted>> {
+        const requestOptions = await this.receiveInboundEmailRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response);
+    }
+
+    /**
+     * Accepts a raw RFC 822 `email` string or parsed from/to/subject/html/text fields. Live keys require at least one recipient domain to be a verified organization sending domain, including plus-addresses used by support desks. A configured organization webhook receives `email.received` with routing metadata only; fetch the body with GET /api/v1/received-emails/{emailId}.
+     * Store one inbound email
+     */
+    async receiveInboundEmail(requestParameters: ReceiveInboundEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ReceivedEmailAccepted> {
+        const response = await this.receiveInboundEmailRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

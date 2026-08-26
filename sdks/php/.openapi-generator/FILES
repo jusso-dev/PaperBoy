@@ -69,6 +69,9 @@ src/Model/RateLimitErrorEnvelopeError.php
 src/Model/RateLimitLane.php
 src/Model/RateLimitSettings.php
 src/Model/RateLimitUpdateInput.php
+src/Model/ReceiveInboundEmailInput.php
+src/Model/ReceivedEmail.php
+src/Model/ReceivedEmailAccepted.php
 src/Model/Recipients.php
 src/Model/SendEmailInput.php
 src/Model/StoredAttachment.php

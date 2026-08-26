@@ -1,6 +1,6 @@
 <?php
 /**
- * InlineEmailInput
+ * ReceivedEmail
  *
  * PHP version 8.1
  *
@@ -32,7 +32,7 @@ use \ArrayAccess;
 use \PaperBoy\OpenApi\ObjectSerializer;
 
 /**
- * InlineEmailInput Class Doc Comment
+ * ReceivedEmail Class Doc Comment
  *
  * @category Class
  * @package  PaperBoy\OpenApi
@@ -40,7 +40,7 @@ use \PaperBoy\OpenApi\ObjectSerializer;
  * @link     https://openapi-generator.tech
  * @implements \ArrayAccess<string, mixed>
  */
-class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
+class ReceivedEmail implements ModelInterface, ArrayAccess, \JsonSerializable
 {
     public const DISCRIMINATOR = null;
 
@@ -49,7 +49,7 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
      *
      * @var string
      */
-    protected static $openAPIModelName = 'InlineEmailInput';
+    protected static $openAPIModelName = 'ReceivedEmail';
 
     /**
      * Array of property to type mappings. Used for (de)serialization
@@ -57,15 +57,17 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $openAPITypes = [
+        'id' => 'string',
+        'object' => 'string',
         'from' => 'string',
-        'to' => '\PaperBoy\OpenApi\Model\Recipients',
+        'to' => 'string[]',
+        'cc' => 'string[]',
+        'bcc' => 'string[]',
         'subject' => 'string',
         'html' => 'string',
-        'idempotency_key' => 'string',
         'text' => 'string',
-        'tags' => '\PaperBoy\OpenApi\Model\EmailTag[]',
-        'attachments' => '\PaperBoy\OpenApi\Model\EmailAttachment[]',
-        'reply_to' => '\PaperBoy\OpenApi\Model\Recipients'
+        'message_id' => 'string',
+        'created_at' => '\DateTime'
     ];
 
     /**
@@ -76,15 +78,17 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
      * @psalm-var array<string, string|null>
      */
     protected static $openAPIFormats = [
+        'id' => 'uuid',
+        'object' => null,
         'from' => null,
         'to' => null,
+        'cc' => null,
+        'bcc' => null,
         'subject' => null,
         'html' => null,
-        'idempotency_key' => null,
         'text' => null,
-        'tags' => null,
-        'attachments' => null,
-        'reply_to' => null
+        'message_id' => null,
+        'created_at' => 'date-time'
     ];
 
     /**
@@ -93,15 +97,17 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var boolean[]
      */
     protected static array $openAPINullables = [
+        'id' => false,
+        'object' => false,
         'from' => false,
         'to' => false,
+        'cc' => false,
+        'bcc' => false,
         'subject' => false,
-        'html' => false,
-        'idempotency_key' => false,
-        'text' => false,
-        'tags' => false,
-        'attachments' => false,
-        'reply_to' => false
+        'html' => true,
+        'text' => true,
+        'message_id' => true,
+        'created_at' => false
     ];
 
     /**
@@ -190,15 +196,17 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $attributeMap = [
+        'id' => 'id',
+        'object' => 'object',
         'from' => 'from',
         'to' => 'to',
+        'cc' => 'cc',
+        'bcc' => 'bcc',
         'subject' => 'subject',
         'html' => 'html',
-        'idempotency_key' => 'idempotency_key',
         'text' => 'text',
-        'tags' => 'tags',
-        'attachments' => 'attachments',
-        'reply_to' => 'reply_to'
+        'message_id' => 'message_id',
+        'created_at' => 'created_at'
     ];
 
     /**
@@ -207,15 +215,17 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $setters = [
+        'id' => 'setId',
+        'object' => 'setObject',
         'from' => 'setFrom',
         'to' => 'setTo',
+        'cc' => 'setCc',
+        'bcc' => 'setBcc',
         'subject' => 'setSubject',
         'html' => 'setHtml',
-        'idempotency_key' => 'setIdempotencyKey',
         'text' => 'setText',
-        'tags' => 'setTags',
-        'attachments' => 'setAttachments',
-        'reply_to' => 'setReplyTo'
+        'message_id' => 'setMessageId',
+        'created_at' => 'setCreatedAt'
     ];
 
     /**
@@ -224,15 +234,17 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $getters = [
+        'id' => 'getId',
+        'object' => 'getObject',
         'from' => 'getFrom',
         'to' => 'getTo',
+        'cc' => 'getCc',
+        'bcc' => 'getBcc',
         'subject' => 'getSubject',
         'html' => 'getHtml',
-        'idempotency_key' => 'getIdempotencyKey',
         'text' => 'getText',
-        'tags' => 'getTags',
-        'attachments' => 'getAttachments',
-        'reply_to' => 'getReplyTo'
+        'message_id' => 'getMessageId',
+        'created_at' => 'getCreatedAt'
     ];
 
     /**
@@ -276,6 +288,19 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         return self::$openAPIModelName;
     }
 
+    public const OBJECT_EMAIL = 'email';
+
+    /**
+     * Gets allowable values of the enum
+     *
+     * @return string[]
+     */
+    public function getObjectAllowableValues()
+    {
+        return [
+            self::OBJECT_EMAIL,
+        ];
+    }
 
     /**
      * Associative array for storing property values
@@ -292,15 +317,17 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     public function __construct(?array $data = null)
     {
+        $this->setIfExists('id', $data ?? [], null);
+        $this->setIfExists('object', $data ?? [], null);
         $this->setIfExists('from', $data ?? [], null);
         $this->setIfExists('to', $data ?? [], null);
+        $this->setIfExists('cc', $data ?? [], null);
+        $this->setIfExists('bcc', $data ?? [], null);
         $this->setIfExists('subject', $data ?? [], null);
         $this->setIfExists('html', $data ?? [], null);
-        $this->setIfExists('idempotency_key', $data ?? [], null);
         $this->setIfExists('text', $data ?? [], null);
-        $this->setIfExists('tags', $data ?? [], null);
-        $this->setIfExists('attachments', $data ?? [], null);
-        $this->setIfExists('reply_to', $data ?? [], null);
+        $this->setIfExists('message_id', $data ?? [], null);
+        $this->setIfExists('created_at', $data ?? [], null);
     }
 
     /**
@@ -330,63 +357,33 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
     {
         $invalidProperties = [];
 
+        if ($this->container['id'] === null) {
+            $invalidProperties[] = "'id' can't be null";
+        }
+        if ($this->container['object'] === null) {
+            $invalidProperties[] = "'object' can't be null";
+        }
+        $allowedValues = $this->getObjectAllowableValues();
+        if (!is_null($this->container['object']) && !in_array($this->container['object'], $allowedValues, true)) {
+            $invalidProperties[] = sprintf(
+                "invalid value '%s' for 'object', must be one of '%s'",
+                $this->container['object'],
+                implode("', '", $allowedValues)
+            );
+        }
+
         if ($this->container['from'] === null) {
             $invalidProperties[] = "'from' can't be null";
         }
-        if ((mb_strlen($this->container['from']) > 320)) {
-            $invalidProperties[] = "invalid value for 'from', the character length must be smaller than or equal to 320.";
-        }
-
-        if ((mb_strlen($this->container['from']) < 3)) {
-            $invalidProperties[] = "invalid value for 'from', the character length must be bigger than or equal to 3.";
-        }
-
         if ($this->container['to'] === null) {
             $invalidProperties[] = "'to' can't be null";
         }
         if ($this->container['subject'] === null) {
             $invalidProperties[] = "'subject' can't be null";
         }
-        if ((mb_strlen($this->container['subject']) > 998)) {
-            $invalidProperties[] = "invalid value for 'subject', the character length must be smaller than or equal to 998.";
+        if ($this->container['created_at'] === null) {
+            $invalidProperties[] = "'created_at' can't be null";
         }
-
-        if ((mb_strlen($this->container['subject']) < 1)) {
-            $invalidProperties[] = "invalid value for 'subject', the character length must be bigger than or equal to 1.";
-        }
-
-        if (!preg_match("/^(?=.*\\S)[^\\r\\n]*$/", $this->container['subject'])) {
-            $invalidProperties[] = "invalid value for 'subject', must be conform to the pattern /^(?=.*\\S)[^\\r\\n]*$/.";
-        }
-
-        if (!is_null($this->container['html']) && (mb_strlen($this->container['html']) > 2097152)) {
-            $invalidProperties[] = "invalid value for 'html', the character length must be smaller than or equal to 2097152.";
-        }
-
-        if (!is_null($this->container['idempotency_key']) && (mb_strlen($this->container['idempotency_key']) > 256)) {
-            $invalidProperties[] = "invalid value for 'idempotency_key', the character length must be smaller than or equal to 256.";
-        }
-
-        if (!is_null($this->container['idempotency_key']) && (mb_strlen($this->container['idempotency_key']) < 1)) {
-            $invalidProperties[] = "invalid value for 'idempotency_key', the character length must be bigger than or equal to 1.";
-        }
-
-        if (!is_null($this->container['idempotency_key']) && !preg_match("/^[!-~]+$/", $this->container['idempotency_key'])) {
-            $invalidProperties[] = "invalid value for 'idempotency_key', must be conform to the pattern /^[!-~]+$/.";
-        }
-
-        if (!is_null($this->container['text']) && (mb_strlen($this->container['text']) > 2097152)) {
-            $invalidProperties[] = "invalid value for 'text', the character length must be smaller than or equal to 2097152.";
-        }
-
-        if (!is_null($this->container['tags']) && (count($this->container['tags']) > 75)) {
-            $invalidProperties[] = "invalid value for 'tags', number of items must be less than or equal to 75.";
-        }
-
-        if (!is_null($this->container['attachments']) && (count($this->container['attachments']) > 100)) {
-            $invalidProperties[] = "invalid value for 'attachments', number of items must be less than or equal to 100.";
-        }
-
         return $invalidProperties;
     }
 
@@ -403,6 +400,70 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
 
 
     /**
+     * Gets id
+     *
+     * @return string
+     */
+    public function getId()
+    {
+        return $this->container['id'];
+    }
+
+    /**
+     * Sets id
+     *
+     * @param string $id id
+     *
+     * @return self
+     */
+    public function setId($id)
+    {
+        if (is_null($id)) {
+            throw new \InvalidArgumentException('non-nullable id cannot be null');
+        }
+        $this->container['id'] = $id;
+
+        return $this;
+    }
+
+    /**
+     * Gets object
+     *
+     * @return string
+     */
+    public function getObject()
+    {
+        return $this->container['object'];
+    }
+
+    /**
+     * Sets object
+     *
+     * @param string $object object
+     *
+     * @return self
+     */
+    public function setObject($object)
+    {
+        if (is_null($object)) {
+            throw new \InvalidArgumentException('non-nullable object cannot be null');
+        }
+        $allowedValues = $this->getObjectAllowableValues();
+        if (!in_array($object, $allowedValues, true)) {
+            throw new \InvalidArgumentException(
+                sprintf(
+                    "Invalid value '%s' for 'object', must be one of '%s'",
+                    $object,
+                    implode("', '", $allowedValues)
+                )
+            );
+        }
+        $this->container['object'] = $object;
+
+        return $this;
+    }
+
+    /**
      * Gets from
      *
      * @return string
@@ -415,7 +476,7 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
     /**
      * Sets from
      *
-     * @param string $from Plain address or `Display name <address@example.com>` form.
+     * @param string $from from
      *
      * @return self
      */
@@ -424,13 +485,6 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         if (is_null($from)) {
             throw new \InvalidArgumentException('non-nullable from cannot be null');
         }
-        if ((mb_strlen($from) > 320)) {
-            throw new \InvalidArgumentException('invalid length for $from when calling InlineEmailInput., must be smaller than or equal to 320.');
-        }
-        if ((mb_strlen($from) < 3)) {
-            throw new \InvalidArgumentException('invalid length for $from when calling InlineEmailInput., must be bigger than or equal to 3.');
-        }
-
         $this->container['from'] = $from;
 
         return $this;
@@ -439,7 +493,7 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
     /**
      * Gets to
      *
-     * @return \PaperBoy\OpenApi\Model\Recipients
+     * @return string[]
      */
     public function getTo()
     {
@@ -449,7 +503,7 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
     /**
      * Sets to
      *
-     * @param \PaperBoy\OpenApi\Model\Recipients $to to
+     * @param string[] $to to
      *
      * @return self
      */
@@ -459,6 +513,60 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
             throw new \InvalidArgumentException('non-nullable to cannot be null');
         }
         $this->container['to'] = $to;
+
+        return $this;
+    }
+
+    /**
+     * Gets cc
+     *
+     * @return string[]|null
+     */
+    public function getCc()
+    {
+        return $this->container['cc'];
+    }
+
+    /**
+     * Sets cc
+     *
+     * @param string[]|null $cc cc
+     *
+     * @return self
+     */
+    public function setCc($cc)
+    {
+        if (is_null($cc)) {
+            throw new \InvalidArgumentException('non-nullable cc cannot be null');
+        }
+        $this->container['cc'] = $cc;
+
+        return $this;
+    }
+
+    /**
+     * Gets bcc
+     *
+     * @return string[]|null
+     */
+    public function getBcc()
+    {
+        return $this->container['bcc'];
+    }
+
+    /**
+     * Sets bcc
+     *
+     * @param string[]|null $bcc bcc
+     *
+     * @return self
+     */
+    public function setBcc($bcc)
+    {
+        if (is_null($bcc)) {
+            throw new \InvalidArgumentException('non-nullable bcc cannot be null');
+        }
+        $this->container['bcc'] = $bcc;
 
         return $this;
     }
@@ -485,16 +593,6 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         if (is_null($subject)) {
             throw new \InvalidArgumentException('non-nullable subject cannot be null');
         }
-        if ((mb_strlen($subject) > 998)) {
-            throw new \InvalidArgumentException('invalid length for $subject when calling InlineEmailInput., must be smaller than or equal to 998.');
-        }
-        if ((mb_strlen($subject) < 1)) {
-            throw new \InvalidArgumentException('invalid length for $subject when calling InlineEmailInput., must be bigger than or equal to 1.');
-        }
-        if ((!preg_match("/^(?=.*\\S)[^\\r\\n]*$/", ObjectSerializer::toString($subject)))) {
-            throw new \InvalidArgumentException("invalid value for \$subject when calling InlineEmailInput., must conform to the pattern /^(?=.*\\S)[^\\r\\n]*$/.");
-        }
-
         $this->container['subject'] = $subject;
 
         return $this;
@@ -520,50 +618,16 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
     public function setHtml($html)
     {
         if (is_null($html)) {
-            throw new \InvalidArgumentException('non-nullable html cannot be null');
+            array_push($this->openAPINullablesSetToNull, 'html');
+        } else {
+            $nullablesSetToNull = $this->getOpenAPINullablesSetToNull();
+            $index = array_search('html', $nullablesSetToNull);
+            if ($index !== FALSE) {
+                unset($nullablesSetToNull[$index]);
+                $this->setOpenAPINullablesSetToNull($nullablesSetToNull);
+            }
         }
-        if ((mb_strlen($html) > 2097152)) {
-            throw new \InvalidArgumentException('invalid length for $html when calling InlineEmailInput., must be smaller than or equal to 2097152.');
-        }
-
         $this->container['html'] = $html;
-
-        return $this;
-    }
-
-    /**
-     * Gets idempotency_key
-     *
-     * @return string|null
-     */
-    public function getIdempotencyKey()
-    {
-        return $this->container['idempotency_key'];
-    }
-
-    /**
-     * Sets idempotency_key
-     *
-     * @param string|null $idempotency_key API-key-scoped key with a 24-hour lifetime measured using PostgreSQL UTC instants. A replay does not insert or resubmit a provider message.
-     *
-     * @return self
-     */
-    public function setIdempotencyKey($idempotency_key)
-    {
-        if (is_null($idempotency_key)) {
-            throw new \InvalidArgumentException('non-nullable idempotency_key cannot be null');
-        }
-        if ((mb_strlen($idempotency_key) > 256)) {
-            throw new \InvalidArgumentException('invalid length for $idempotency_key when calling InlineEmailInput., must be smaller than or equal to 256.');
-        }
-        if ((mb_strlen($idempotency_key) < 1)) {
-            throw new \InvalidArgumentException('invalid length for $idempotency_key when calling InlineEmailInput., must be bigger than or equal to 1.');
-        }
-        if ((!preg_match("/^[!-~]+$/", ObjectSerializer::toString($idempotency_key)))) {
-            throw new \InvalidArgumentException("invalid value for \$idempotency_key when calling InlineEmailInput., must conform to the pattern /^[!-~]+$/.");
-        }
-
-        $this->container['idempotency_key'] = $idempotency_key;
 
         return $this;
     }
@@ -588,100 +652,77 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
     public function setText($text)
     {
         if (is_null($text)) {
-            throw new \InvalidArgumentException('non-nullable text cannot be null');
+            array_push($this->openAPINullablesSetToNull, 'text');
+        } else {
+            $nullablesSetToNull = $this->getOpenAPINullablesSetToNull();
+            $index = array_search('text', $nullablesSetToNull);
+            if ($index !== FALSE) {
+                unset($nullablesSetToNull[$index]);
+                $this->setOpenAPINullablesSetToNull($nullablesSetToNull);
+            }
         }
-        if ((mb_strlen($text) > 2097152)) {
-            throw new \InvalidArgumentException('invalid length for $text when calling InlineEmailInput., must be smaller than or equal to 2097152.');
-        }
-
         $this->container['text'] = $text;
 
         return $this;
     }
 
     /**
-     * Gets tags
+     * Gets message_id
      *
-     * @return \PaperBoy\OpenApi\Model\EmailTag[]|null
+     * @return string|null
      */
-    public function getTags()
+    public function getMessageId()
     {
-        return $this->container['tags'];
+        return $this->container['message_id'];
     }
 
     /**
-     * Sets tags
+     * Sets message_id
      *
-     * @param \PaperBoy\OpenApi\Model\EmailTag[]|null $tags tags
+     * @param string|null $message_id message_id
      *
      * @return self
      */
-    public function setTags($tags)
+    public function setMessageId($message_id)
     {
-        if (is_null($tags)) {
-            throw new \InvalidArgumentException('non-nullable tags cannot be null');
+        if (is_null($message_id)) {
+            array_push($this->openAPINullablesSetToNull, 'message_id');
+        } else {
+            $nullablesSetToNull = $this->getOpenAPINullablesSetToNull();
+            $index = array_search('message_id', $nullablesSetToNull);
+            if ($index !== FALSE) {
+                unset($nullablesSetToNull[$index]);
+                $this->setOpenAPINullablesSetToNull($nullablesSetToNull);
+            }
         }
-        if ((count($tags) > 75)) {
-            throw new \InvalidArgumentException('invalid value for $tags when calling InlineEmailInput., number of items must be less than or equal to 75.');
-        }
-        $this->container['tags'] = $tags;
+        $this->container['message_id'] = $message_id;
 
         return $this;
     }
 
     /**
-     * Gets attachments
+     * Gets created_at
      *
-     * @return \PaperBoy\OpenApi\Model\EmailAttachment[]|null
+     * @return \DateTime
      */
-    public function getAttachments()
+    public function getCreatedAt()
     {
-        return $this->container['attachments'];
+        return $this->container['created_at'];
     }
 
     /**
-     * Sets attachments
+     * Sets created_at
      *
-     * @param \PaperBoy\OpenApi\Model\EmailAttachment[]|null $attachments Decoded bytes across all items may total at most 10 MiB.
+     * @param \DateTime $created_at created_at
      *
      * @return self
      */
-    public function setAttachments($attachments)
+    public function setCreatedAt($created_at)
     {
-        if (is_null($attachments)) {
-            throw new \InvalidArgumentException('non-nullable attachments cannot be null');
+        if (is_null($created_at)) {
+            throw new \InvalidArgumentException('non-nullable created_at cannot be null');
         }
-        if ((count($attachments) > 100)) {
-            throw new \InvalidArgumentException('invalid value for $attachments when calling InlineEmailInput., number of items must be less than or equal to 100.');
-        }
-        $this->container['attachments'] = $attachments;
-
-        return $this;
-    }
-
-    /**
-     * Gets reply_to
-     *
-     * @return \PaperBoy\OpenApi\Model\Recipients|null
-     */
-    public function getReplyTo()
-    {
-        return $this->container['reply_to'];
-    }
-
-    /**
-     * Sets reply_to
-     *
-     * @param \PaperBoy\OpenApi\Model\Recipients|null $reply_to reply_to
-     *
-     * @return self
-     */
-    public function setReplyTo($reply_to)
-    {
-        if (is_null($reply_to)) {
-            throw new \InvalidArgumentException('non-nullable reply_to cannot be null');
-        }
-        $this->container['reply_to'] = $reply_to;
+        $this->container['created_at'] = $created_at;
 
         return $this;
     }

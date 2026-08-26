@@ -63,7 +63,8 @@ class TemplateEmailInput implements ModelInterface, ArrayAccess, \JsonSerializab
         'data' => 'array<string,mixed>',
         'idempotency_key' => 'string',
         'tags' => '\PaperBoy\OpenApi\Model\EmailTag[]',
-        'attachments' => '\PaperBoy\OpenApi\Model\EmailAttachment[]'
+        'attachments' => '\PaperBoy\OpenApi\Model\EmailAttachment[]',
+        'reply_to' => '\PaperBoy\OpenApi\Model\Recipients'
     ];
 
     /**
@@ -80,7 +81,8 @@ class TemplateEmailInput implements ModelInterface, ArrayAccess, \JsonSerializab
         'data' => null,
         'idempotency_key' => null,
         'tags' => null,
-        'attachments' => null
+        'attachments' => null,
+        'reply_to' => null
     ];
 
     /**
@@ -95,7 +97,8 @@ class TemplateEmailInput implements ModelInterface, ArrayAccess, \JsonSerializab
         'data' => false,
         'idempotency_key' => false,
         'tags' => false,
-        'attachments' => false
+        'attachments' => false,
+        'reply_to' => false
     ];
 
     /**
@@ -190,7 +193,8 @@ class TemplateEmailInput implements ModelInterface, ArrayAccess, \JsonSerializab
         'data' => 'data',
         'idempotency_key' => 'idempotency_key',
         'tags' => 'tags',
-        'attachments' => 'attachments'
+        'attachments' => 'attachments',
+        'reply_to' => 'reply_to'
     ];
 
     /**
@@ -205,7 +209,8 @@ class TemplateEmailInput implements ModelInterface, ArrayAccess, \JsonSerializab
         'data' => 'setData',
         'idempotency_key' => 'setIdempotencyKey',
         'tags' => 'setTags',
-        'attachments' => 'setAttachments'
+        'attachments' => 'setAttachments',
+        'reply_to' => 'setReplyTo'
     ];
 
     /**
@@ -220,7 +225,8 @@ class TemplateEmailInput implements ModelInterface, ArrayAccess, \JsonSerializab
         'data' => 'getData',
         'idempotency_key' => 'getIdempotencyKey',
         'tags' => 'getTags',
-        'attachments' => 'getAttachments'
+        'attachments' => 'getAttachments',
+        'reply_to' => 'getReplyTo'
     ];
 
     /**
@@ -287,6 +293,7 @@ class TemplateEmailInput implements ModelInterface, ArrayAccess, \JsonSerializab
         $this->setIfExists('idempotency_key', $data ?? [], null);
         $this->setIfExists('tags', $data ?? [], null);
         $this->setIfExists('attachments', $data ?? [], null);
+        $this->setIfExists('reply_to', $data ?? [], null);
     }
 
     /**
@@ -576,6 +583,33 @@ class TemplateEmailInput implements ModelInterface, ArrayAccess, \JsonSerializab
             throw new \InvalidArgumentException('invalid value for $attachments when calling TemplateEmailInput., number of items must be less than or equal to 100.');
         }
         $this->container['attachments'] = $attachments;
+
+        return $this;
+    }
+
+    /**
+     * Gets reply_to
+     *
+     * @return \PaperBoy\OpenApi\Model\Recipients|null
+     */
+    public function getReplyTo()
+    {
+        return $this->container['reply_to'];
+    }
+
+    /**
+     * Sets reply_to
+     *
+     * @param \PaperBoy\OpenApi\Model\Recipients|null $reply_to reply_to
+     *
+     * @return self
+     */
+    public function setReplyTo($reply_to)
+    {
+        if (is_null($reply_to)) {
+            throw new \InvalidArgumentException('non-nullable reply_to cannot be null');
+        }
+        $this->container['reply_to'] = $reply_to;
 
         return $this;
     }

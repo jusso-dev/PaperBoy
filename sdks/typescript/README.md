@@ -73,6 +73,8 @@ All URIs are relative to *http://localhost*
 *BroadcastsApi* | [**resumeBroadcast**](docs/BroadcastsApi.md#resumebroadcast) | **POST** /api/v1/broadcasts/{broadcastId}/resume | Resume a paused broadcast
 *BroadcastsApi* | [**updateBroadcast**](docs/BroadcastsApi.md#updatebroadcast) | **PATCH** /api/v1/broadcasts/{broadcastId} | Update a scheduled broadcast
 *EmailsApi* | [**getEmail**](docs/EmailsApi.md#getemail) | **GET** /api/v1/emails/{emailId} | Get one email
+*EmailsApi* | [**getReceivedEmail**](docs/EmailsApi.md#getreceivedemail) | **GET** /api/v1/received-emails/{emailId} | Get one inbound email
+*EmailsApi* | [**receiveInboundEmail**](docs/EmailsApi.md#receiveinboundemail) | **POST** /api/v1/received-emails | Store one inbound email
 *EmailsApi* | [**sendEmail**](docs/EmailsApi.md#sendemail) | **POST** /api/v1/emails | Queue one email
 *EmailsApi* | [**sendEmailBatch**](docs/EmailsApi.md#sendemailbatch) | **POST** /api/v1/emails/batch | Queue one to 100 emails
 *EventsApi* | [**listEmailEvents**](docs/EventsApi.md#listemailevents) | **GET** /api/v1/emails/{emailId}/events | List one email\&#39;s events
@@ -151,6 +153,9 @@ All URIs are relative to *http://localhost*
 - [RateLimitLane](docs/RateLimitLane.md)
 - [RateLimitSettings](docs/RateLimitSettings.md)
 - [RateLimitUpdateInput](docs/RateLimitUpdateInput.md)
+- [ReceiveInboundEmailInput](docs/ReceiveInboundEmailInput.md)
+- [ReceivedEmail](docs/ReceivedEmail.md)
+- [ReceivedEmailAccepted](docs/ReceivedEmailAccepted.md)
 - [Recipients](docs/Recipients.md)
 - [SendEmailInput](docs/SendEmailInput.md)
 - [StoredAttachment](docs/StoredAttachment.md)

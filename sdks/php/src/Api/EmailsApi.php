@@ -77,6 +77,12 @@ class EmailsApi
         'getEmail' => [
             'application/json',
         ],
+        'getReceivedEmail' => [
+            'application/json',
+        ],
+        'receiveInboundEmail' => [
+            'application/json',
+        ],
         'sendEmail' => [
             'application/json',
         ],
@@ -453,6 +459,647 @@ class EmailsApi
         $query = ObjectSerializer::buildQuery($queryParams);
         return new Request(
             'GET',
+            $operationHost . $resourcePath . ($query ? "?{$query}" : ''),
+            $headers,
+            $httpBody
+        );
+    }
+
+    /**
+     * Operation getReceivedEmail
+     *
+     * Get one inbound email
+     *
+     * @param  string $email_id PaperBoy message UUID. (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['getReceivedEmail'] to see the possible values for this operation
+     *
+     * @throws \PaperBoy\OpenApi\ApiException on non-2xx response or if the response body is not in the expected format
+     * @throws \InvalidArgumentException
+     * @return \PaperBoy\OpenApi\Model\ReceivedEmail|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope
+     */
+    public function getReceivedEmail($email_id, string $contentType = self::contentTypes['getReceivedEmail'][0])
+    {
+        list($response) = $this->getReceivedEmailWithHttpInfo($email_id, $contentType);
+        return $response;
+    }
+
+    /**
+     * Operation getReceivedEmailWithHttpInfo
+     *
+     * Get one inbound email
+     *
+     * @param  string $email_id PaperBoy message UUID. (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['getReceivedEmail'] to see the possible values for this operation
+     *
+     * @throws \PaperBoy\OpenApi\ApiException on non-2xx response or if the response body is not in the expected format
+     * @throws \InvalidArgumentException
+     * @return array of \PaperBoy\OpenApi\Model\ReceivedEmail|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope, HTTP status code, HTTP response headers (array of strings)
+     */
+    public function getReceivedEmailWithHttpInfo($email_id, string $contentType = self::contentTypes['getReceivedEmail'][0])
+    {
+        $request = $this->getReceivedEmailRequest($email_id, $contentType);
+
+        try {
+            $options = $this->createHttpClientOption();
+            try {
+                $response = $this->client->send($request, $options);
+            } catch (RequestException $e) {
+                throw new ApiException(
+                    "[{$e->getCode()}] {$e->getMessage()}",
+                    (int) $e->getCode(),
+                    $e->getResponse() ? $e->getResponse()->getHeaders() : null,
+                    $e->getResponse() ? (string) $e->getResponse()->getBody() : null
+                );
+            } catch (ConnectException $e) {
+                throw new ApiException(
+                    "[{$e->getCode()}] {$e->getMessage()}",
+                    (int) $e->getCode(),
+                    null,
+                    null
+                );
+            }
+
+            $statusCode = $response->getStatusCode();
+
+
+            switch($statusCode) {
+                case 200:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ReceivedEmail',
+                        $request,
+                        $response,
+                    );
+                case 401:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $request,
+                        $response,
+                    );
+                case 404:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $request,
+                        $response,
+                    );
+            }
+
+            
+
+            if ($statusCode < 200 || $statusCode > 299) {
+                throw new ApiException(
+                    sprintf(
+                        '[%d] Error connecting to the API (%s)',
+                        $statusCode,
+                        (string) $request->getUri()
+                    ),
+                    $statusCode,
+                    $response->getHeaders(),
+                    (string) $response->getBody()
+                );
+            }
+
+            return $this->handleResponseWithDataType(
+                '\PaperBoy\OpenApi\Model\ReceivedEmail',
+                $request,
+                $response,
+            );
+        } catch (ApiException $e) {
+            switch ($e->getCode()) {
+                case 200:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ReceivedEmail',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+                case 401:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+                case 404:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+            }
+        
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Operation getReceivedEmailAsync
+     *
+     * Get one inbound email
+     *
+     * @param  string $email_id PaperBoy message UUID. (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['getReceivedEmail'] to see the possible values for this operation
+     *
+     * @throws \InvalidArgumentException
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     */
+    public function getReceivedEmailAsync($email_id, string $contentType = self::contentTypes['getReceivedEmail'][0])
+    {
+        return $this->getReceivedEmailAsyncWithHttpInfo($email_id, $contentType)
+            ->then(
+                function ($response) {
+                    return $response[0];
+                }
+            );
+    }
+
+    /**
+     * Operation getReceivedEmailAsyncWithHttpInfo
+     *
+     * Get one inbound email
+     *
+     * @param  string $email_id PaperBoy message UUID. (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['getReceivedEmail'] to see the possible values for this operation
+     *
+     * @throws \InvalidArgumentException
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     */
+    public function getReceivedEmailAsyncWithHttpInfo($email_id, string $contentType = self::contentTypes['getReceivedEmail'][0])
+    {
+        $returnType = '\PaperBoy\OpenApi\Model\ReceivedEmail';
+        $request = $this->getReceivedEmailRequest($email_id, $contentType);
+
+        return $this->client
+            ->sendAsync($request, $this->createHttpClientOption())
+            ->then(
+                function ($response) use ($returnType) {
+                    if ($returnType === '\SplFileObject') {
+                        $content = $response->getBody(); //stream goes to serializer
+                    } else {
+                        $content = (string) $response->getBody();
+                        if ($returnType !== 'string') {
+                            $content = json_decode($content);
+                        }
+                    }
+
+                    return [
+                        ObjectSerializer::deserialize($content, $returnType, []),
+                        $response->getStatusCode(),
+                        $response->getHeaders()
+                    ];
+                },
+                function ($exception) {
+                    $response = $exception->getResponse();
+                    $statusCode = $response->getStatusCode();
+                    throw new ApiException(
+                        sprintf(
+                            '[%d] Error connecting to the API (%s)',
+                            $statusCode,
+                            $exception->getRequest()->getUri()
+                        ),
+                        $statusCode,
+                        $response->getHeaders(),
+                        (string) $response->getBody()
+                    );
+                }
+            );
+    }
+
+    /**
+     * Create request for operation 'getReceivedEmail'
+     *
+     * @param  string $email_id PaperBoy message UUID. (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['getReceivedEmail'] to see the possible values for this operation
+     *
+     * @throws \InvalidArgumentException
+     * @return \GuzzleHttp\Psr7\Request
+     */
+    public function getReceivedEmailRequest($email_id, string $contentType = self::contentTypes['getReceivedEmail'][0])
+    {
+
+        // verify the required parameter 'email_id' is set
+        if ($email_id === null || (is_array($email_id) && count($email_id) === 0)) {
+            throw new \InvalidArgumentException(
+                'Missing the required parameter $email_id when calling getReceivedEmail'
+            );
+        }
+
+
+        $resourcePath = '/api/v1/received-emails/{emailId}';
+        $formParams = [];
+        $queryParams = [];
+        $headerParams = [];
+        $httpBody = '';
+        $multipart = false;
+
+
+
+        // path params
+        if ($email_id !== null) {
+            $resourcePath = str_replace(
+                '{emailId}',
+                ObjectSerializer::toPathValue($email_id),
+                $resourcePath
+            );
+        }
+
+
+        $headers = $this->headerSelector->selectHeaders(
+            ['application/json', ],
+            $contentType,
+            $multipart
+        );
+
+        // for model (json/xml)
+        if (count($formParams) > 0) {
+            if ($multipart) {
+                $multipartContents = [];
+                foreach ($formParams as $formParamName => $formParamValue) {
+                    $formParamValueItems = is_array($formParamValue) ? $formParamValue : [$formParamValue];
+                    foreach ($formParamValueItems as $formParamValueItem) {
+                        $multipartContents[] = [
+                            'name' => $formParamName,
+                            'contents' => $formParamValueItem
+                        ];
+                    }
+                }
+                // for HTTP post (form)
+                $httpBody = new MultipartStream($multipartContents);
+
+            } elseif (stripos($headers['Content-Type'], 'application/json') !== false) {
+                # if Content-Type contains "application/json", json_encode the form parameters
+                $httpBody = \GuzzleHttp\Utils::jsonEncode($formParams);
+            } else {
+                // for HTTP post (form)
+                $httpBody = ObjectSerializer::buildQuery($formParams);
+            }
+        }
+
+        // this endpoint requires Bearer (pb_live_... or pb_test_...) authentication (access token)
+        if (!empty($this->config->getAccessToken())) {
+            $headers['Authorization'] = 'Bearer ' . $this->config->getAccessToken();
+        }
+
+        $defaultHeaders = [];
+        if ($this->config->getUserAgent()) {
+            $defaultHeaders['User-Agent'] = $this->config->getUserAgent();
+        }
+
+        $headers = array_merge(
+            $defaultHeaders,
+            $headerParams,
+            $headers
+        );
+
+        $operationHost = $this->config->getHost();
+        $query = ObjectSerializer::buildQuery($queryParams);
+        return new Request(
+            'GET',
+            $operationHost . $resourcePath . ($query ? "?{$query}" : ''),
+            $headers,
+            $httpBody
+        );
+    }
+
+    /**
+     * Operation receiveInboundEmail
+     *
+     * Store one inbound email
+     *
+     * @param  \PaperBoy\OpenApi\Model\ReceiveInboundEmailInput $receive_inbound_email_input receive_inbound_email_input (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['receiveInboundEmail'] to see the possible values for this operation
+     *
+     * @throws \PaperBoy\OpenApi\ApiException on non-2xx response or if the response body is not in the expected format
+     * @throws \InvalidArgumentException
+     * @return \PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope
+     */
+    public function receiveInboundEmail($receive_inbound_email_input, string $contentType = self::contentTypes['receiveInboundEmail'][0])
+    {
+        list($response) = $this->receiveInboundEmailWithHttpInfo($receive_inbound_email_input, $contentType);
+        return $response;
+    }
+
+    /**
+     * Operation receiveInboundEmailWithHttpInfo
+     *
+     * Store one inbound email
+     *
+     * @param  \PaperBoy\OpenApi\Model\ReceiveInboundEmailInput $receive_inbound_email_input (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['receiveInboundEmail'] to see the possible values for this operation
+     *
+     * @throws \PaperBoy\OpenApi\ApiException on non-2xx response or if the response body is not in the expected format
+     * @throws \InvalidArgumentException
+     * @return array of \PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope, HTTP status code, HTTP response headers (array of strings)
+     */
+    public function receiveInboundEmailWithHttpInfo($receive_inbound_email_input, string $contentType = self::contentTypes['receiveInboundEmail'][0])
+    {
+        $request = $this->receiveInboundEmailRequest($receive_inbound_email_input, $contentType);
+
+        try {
+            $options = $this->createHttpClientOption();
+            try {
+                $response = $this->client->send($request, $options);
+            } catch (RequestException $e) {
+                throw new ApiException(
+                    "[{$e->getCode()}] {$e->getMessage()}",
+                    (int) $e->getCode(),
+                    $e->getResponse() ? $e->getResponse()->getHeaders() : null,
+                    $e->getResponse() ? (string) $e->getResponse()->getBody() : null
+                );
+            } catch (ConnectException $e) {
+                throw new ApiException(
+                    "[{$e->getCode()}] {$e->getMessage()}",
+                    (int) $e->getCode(),
+                    null,
+                    null
+                );
+            }
+
+            $statusCode = $response->getStatusCode();
+
+
+            switch($statusCode) {
+                case 201:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ReceivedEmailAccepted',
+                        $request,
+                        $response,
+                    );
+                case 200:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ReceivedEmailAccepted',
+                        $request,
+                        $response,
+                    );
+                case 400:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $request,
+                        $response,
+                    );
+                case 401:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $request,
+                        $response,
+                    );
+                case 422:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $request,
+                        $response,
+                    );
+                case 500:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $request,
+                        $response,
+                    );
+            }
+
+            
+
+            if ($statusCode < 200 || $statusCode > 299) {
+                throw new ApiException(
+                    sprintf(
+                        '[%d] Error connecting to the API (%s)',
+                        $statusCode,
+                        (string) $request->getUri()
+                    ),
+                    $statusCode,
+                    $response->getHeaders(),
+                    (string) $response->getBody()
+                );
+            }
+
+            return $this->handleResponseWithDataType(
+                '\PaperBoy\OpenApi\Model\ReceivedEmailAccepted',
+                $request,
+                $response,
+            );
+        } catch (ApiException $e) {
+            switch ($e->getCode()) {
+                case 201:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ReceivedEmailAccepted',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+                case 200:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ReceivedEmailAccepted',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+                case 400:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+                case 401:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+                case 422:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+                case 500:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ErrorEnvelope',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+            }
+        
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Operation receiveInboundEmailAsync
+     *
+     * Store one inbound email
+     *
+     * @param  \PaperBoy\OpenApi\Model\ReceiveInboundEmailInput $receive_inbound_email_input (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['receiveInboundEmail'] to see the possible values for this operation
+     *
+     * @throws \InvalidArgumentException
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     */
+    public function receiveInboundEmailAsync($receive_inbound_email_input, string $contentType = self::contentTypes['receiveInboundEmail'][0])
+    {
+        return $this->receiveInboundEmailAsyncWithHttpInfo($receive_inbound_email_input, $contentType)
+            ->then(
+                function ($response) {
+                    return $response[0];
+                }
+            );
+    }
+
+    /**
+     * Operation receiveInboundEmailAsyncWithHttpInfo
+     *
+     * Store one inbound email
+     *
+     * @param  \PaperBoy\OpenApi\Model\ReceiveInboundEmailInput $receive_inbound_email_input (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['receiveInboundEmail'] to see the possible values for this operation
+     *
+     * @throws \InvalidArgumentException
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     */
+    public function receiveInboundEmailAsyncWithHttpInfo($receive_inbound_email_input, string $contentType = self::contentTypes['receiveInboundEmail'][0])
+    {
+        $returnType = '\PaperBoy\OpenApi\Model\ReceivedEmailAccepted';
+        $request = $this->receiveInboundEmailRequest($receive_inbound_email_input, $contentType);
+
+        return $this->client
+            ->sendAsync($request, $this->createHttpClientOption())
+            ->then(
+                function ($response) use ($returnType) {
+                    if ($returnType === '\SplFileObject') {
+                        $content = $response->getBody(); //stream goes to serializer
+                    } else {
+                        $content = (string) $response->getBody();
+                        if ($returnType !== 'string') {
+                            $content = json_decode($content);
+                        }
+                    }
+
+                    return [
+                        ObjectSerializer::deserialize($content, $returnType, []),
+                        $response->getStatusCode(),
+                        $response->getHeaders()
+                    ];
+                },
+                function ($exception) {
+                    $response = $exception->getResponse();
+                    $statusCode = $response->getStatusCode();
+                    throw new ApiException(
+                        sprintf(
+                            '[%d] Error connecting to the API (%s)',
+                            $statusCode,
+                            $exception->getRequest()->getUri()
+                        ),
+                        $statusCode,
+                        $response->getHeaders(),
+                        (string) $response->getBody()
+                    );
+                }
+            );
+    }
+
+    /**
+     * Create request for operation 'receiveInboundEmail'
+     *
+     * @param  \PaperBoy\OpenApi\Model\ReceiveInboundEmailInput $receive_inbound_email_input (required)
+     * @param  string $contentType The value for the Content-Type header. Check self::contentTypes['receiveInboundEmail'] to see the possible values for this operation
+     *
+     * @throws \InvalidArgumentException
+     * @return \GuzzleHttp\Psr7\Request
+     */
+    public function receiveInboundEmailRequest($receive_inbound_email_input, string $contentType = self::contentTypes['receiveInboundEmail'][0])
+    {
+
+        // verify the required parameter 'receive_inbound_email_input' is set
+        if ($receive_inbound_email_input === null || (is_array($receive_inbound_email_input) && count($receive_inbound_email_input) === 0)) {
+            throw new \InvalidArgumentException(
+                'Missing the required parameter $receive_inbound_email_input when calling receiveInboundEmail'
+            );
+        }
+
+
+        $resourcePath = '/api/v1/received-emails';
+        $formParams = [];
+        $queryParams = [];
+        $headerParams = [];
+        $httpBody = '';
+        $multipart = false;
+
+
+
+
+
+        $headers = $this->headerSelector->selectHeaders(
+            ['application/json', ],
+            $contentType,
+            $multipart
+        );
+
+        // for model (json/xml)
+        if (isset($receive_inbound_email_input)) {
+            if (stripos($headers['Content-Type'], 'application/json') !== false) {
+                # if Content-Type contains "application/json", json_encode the body
+                $httpBody = \GuzzleHttp\Utils::jsonEncode(ObjectSerializer::sanitizeForSerialization($receive_inbound_email_input));
+            } else {
+                $httpBody = $receive_inbound_email_input;
+            }
+        } elseif (count($formParams) > 0) {
+            if ($multipart) {
+                $multipartContents = [];
+                foreach ($formParams as $formParamName => $formParamValue) {
+                    $formParamValueItems = is_array($formParamValue) ? $formParamValue : [$formParamValue];
+                    foreach ($formParamValueItems as $formParamValueItem) {
+                        $multipartContents[] = [
+                            'name' => $formParamName,
+                            'contents' => $formParamValueItem
+                        ];
+                    }
+                }
+                // for HTTP post (form)
+                $httpBody = new MultipartStream($multipartContents);
+
+            } elseif (stripos($headers['Content-Type'], 'application/json') !== false) {
+                # if Content-Type contains "application/json", json_encode the form parameters
+                $httpBody = \GuzzleHttp\Utils::jsonEncode($formParams);
+            } else {
+                // for HTTP post (form)
+                $httpBody = ObjectSerializer::buildQuery($formParams);
+            }
+        }
+
+        // this endpoint requires Bearer (pb_live_... or pb_test_...) authentication (access token)
+        if (!empty($this->config->getAccessToken())) {
+            $headers['Authorization'] = 'Bearer ' . $this->config->getAccessToken();
+        }
+
+        $defaultHeaders = [];
+        if ($this->config->getUserAgent()) {
+            $defaultHeaders['User-Agent'] = $this->config->getUserAgent();
+        }
+
+        $headers = array_merge(
+            $defaultHeaders,
+            $headerParams,
+            $headers
+        );
+
+        $operationHost = $this->config->getHost();
+        $query = ObjectSerializer::buildQuery($queryParams);
+        return new Request(
+            'POST',
             $operationHost . $resourcePath . ($query ? "?{$query}" : ''),
             $headers,
             $httpBody

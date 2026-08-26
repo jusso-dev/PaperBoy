@@ -962,6 +962,12 @@ export interface InlineEmailInput {
      * @memberof InlineEmailInput
      */
     attachments?: Array<EmailAttachment>;
+    /**
+     * 
+     * @type {Recipients}
+     * @memberof InlineEmailInput
+     */
+    reply_to?: Recipients;
 }
 /**
  * 
@@ -1732,6 +1738,179 @@ export interface RateLimitUpdateInput {
     test_limit_per_minute?: number | null;
 }
 /**
+ * Raw RFC 822 or parsed inbound fields used by support desks.
+ * @export
+ * @interface ReceiveInboundEmailInput
+ */
+export interface ReceiveInboundEmailInput {
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceiveInboundEmailInput
+     */
+    email?: string;
+    /**
+     * Plain address or `Display name <address@example.com>` form.
+     * @type {string}
+     * @memberof ReceiveInboundEmailInput
+     */
+    from?: string;
+    /**
+     * 
+     * @type {Recipients}
+     * @memberof ReceiveInboundEmailInput
+     */
+    to?: Recipients;
+    /**
+     * 
+     * @type {Recipients}
+     * @memberof ReceiveInboundEmailInput
+     */
+    cc?: Recipients;
+    /**
+     * 
+     * @type {Recipients}
+     * @memberof ReceiveInboundEmailInput
+     */
+    bcc?: Recipients;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceiveInboundEmailInput
+     */
+    subject?: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceiveInboundEmailInput
+     */
+    html?: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceiveInboundEmailInput
+     */
+    text?: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceiveInboundEmailInput
+     */
+    message_id?: string;
+}
+/**
+ * 
+ * @export
+ * @interface ReceivedEmail
+ */
+export interface ReceivedEmail {
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceivedEmail
+     */
+    id: string;
+    /**
+     * 
+     * @type {ReceivedEmailObjectEnum}
+     * @memberof ReceivedEmail
+     */
+    object: ReceivedEmailObjectEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceivedEmail
+     */
+    from: string;
+    /**
+     * 
+     * @type {Array<string>}
+     * @memberof ReceivedEmail
+     */
+    to: Array<string>;
+    /**
+     * 
+     * @type {Array<string>}
+     * @memberof ReceivedEmail
+     */
+    cc?: Array<string>;
+    /**
+     * 
+     * @type {Array<string>}
+     * @memberof ReceivedEmail
+     */
+    bcc?: Array<string>;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceivedEmail
+     */
+    subject: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceivedEmail
+     */
+    html?: string | null;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceivedEmail
+     */
+    text?: string | null;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceivedEmail
+     */
+    message_id?: string | null;
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceivedEmail
+     */
+    created_at: string;
+}
+
+
+/**
+ * @export
+ */
+export const ReceivedEmailObjectEnum = {
+    email: 'email'
+} as const;
+export type ReceivedEmailObjectEnum = typeof ReceivedEmailObjectEnum[keyof typeof ReceivedEmailObjectEnum];
+
+/**
+ * 
+ * @export
+ * @interface ReceivedEmailAccepted
+ */
+export interface ReceivedEmailAccepted {
+    /**
+     * 
+     * @type {string}
+     * @memberof ReceivedEmailAccepted
+     */
+    id: string;
+    /**
+     * 
+     * @type {ReceivedEmailAcceptedObjectEnum}
+     * @memberof ReceivedEmailAccepted
+     */
+    object: ReceivedEmailAcceptedObjectEnum;
+}
+
+
+/**
+ * @export
+ */
+export const ReceivedEmailAcceptedObjectEnum = {
+    email: 'email'
+} as const;
+export type ReceivedEmailAcceptedObjectEnum = typeof ReceivedEmailAcceptedObjectEnum[keyof typeof ReceivedEmailAcceptedObjectEnum];
+
+/**
  * @type Recipients
  * 
  * @export
@@ -2000,6 +2179,12 @@ export interface TemplateEmailInput {
      * @memberof TemplateEmailInput
      */
     attachments?: Array<EmailAttachment>;
+    /**
+     * 
+     * @type {Recipients}
+     * @memberof TemplateEmailInput
+     */
+    reply_to?: Recipients;
 }
 /**
  * 

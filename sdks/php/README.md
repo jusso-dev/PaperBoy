@@ -94,6 +94,8 @@ Class | Method | HTTP request | Description
 *BroadcastsApi* | [**resumeBroadcast**](docs/Api/BroadcastsApi.md#resumebroadcast) | **POST** /api/v1/broadcasts/{broadcastId}/resume | Resume a paused broadcast
 *BroadcastsApi* | [**updateBroadcast**](docs/Api/BroadcastsApi.md#updatebroadcast) | **PATCH** /api/v1/broadcasts/{broadcastId} | Update a scheduled broadcast
 *EmailsApi* | [**getEmail**](docs/Api/EmailsApi.md#getemail) | **GET** /api/v1/emails/{emailId} | Get one email
+*EmailsApi* | [**getReceivedEmail**](docs/Api/EmailsApi.md#getreceivedemail) | **GET** /api/v1/received-emails/{emailId} | Get one inbound email
+*EmailsApi* | [**receiveInboundEmail**](docs/Api/EmailsApi.md#receiveinboundemail) | **POST** /api/v1/received-emails | Store one inbound email
 *EmailsApi* | [**sendEmail**](docs/Api/EmailsApi.md#sendemail) | **POST** /api/v1/emails | Queue one email
 *EmailsApi* | [**sendEmailBatch**](docs/Api/EmailsApi.md#sendemailbatch) | **POST** /api/v1/emails/batch | Queue one to 100 emails
 *EventsApi* | [**listEmailEvents**](docs/Api/EventsApi.md#listemailevents) | **GET** /api/v1/emails/{emailId}/events | List one email&#39;s events
@@ -171,6 +173,9 @@ Class | Method | HTTP request | Description
 - [RateLimitLane](docs/Model/RateLimitLane.md)
 - [RateLimitSettings](docs/Model/RateLimitSettings.md)
 - [RateLimitUpdateInput](docs/Model/RateLimitUpdateInput.md)
+- [ReceiveInboundEmailInput](docs/Model/ReceiveInboundEmailInput.md)
+- [ReceivedEmail](docs/Model/ReceivedEmail.md)
+- [ReceivedEmailAccepted](docs/Model/ReceivedEmailAccepted.md)
 - [Recipients](docs/Model/Recipients.md)
 - [SendEmailInput](docs/Model/SendEmailInput.md)
 - [StoredAttachment](docs/Model/StoredAttachment.md)
