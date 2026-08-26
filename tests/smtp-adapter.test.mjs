@@ -312,7 +312,11 @@ test("SMTP adapter hands one complete MIME message to the configured MTA", async
   });
 
   await adapter.verify();
-  await adapter.send(message());
+  await adapter.send(
+    message({
+      replyTo: ["Acme Corp <reply+abc123@mail.snagspot.test>"],
+    }),
+  );
   adapter.close();
 
   assert.equal(receivedOptions.host, "127.0.0.1");
@@ -331,6 +335,10 @@ test("SMTP adapter hands one complete MIME message to the configured MTA", async
 
   const parsed = await simpleParser(fake.calls[0].raw);
   assert.equal(parsed.subject, "Morning edition");
+  assert.equal(
+    parsed.replyTo?.value[0].address,
+    "reply+abc123@mail.snagspot.test",
+  );
   assert.equal(parsed.messageId, "<11111111-1111-4111-8111-111111111111@example.com>");
   assert.equal(
     parsed.headers.get("x-paperboy-message-id"),

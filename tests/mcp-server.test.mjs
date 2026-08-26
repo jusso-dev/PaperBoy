@@ -842,6 +842,7 @@ test("initializes and publishes versioned tool schemas", async () => {
         "data",
         "from",
         "html",
+        "reply_to",
         "idempotencyKey",
         "subject",
         "tags",

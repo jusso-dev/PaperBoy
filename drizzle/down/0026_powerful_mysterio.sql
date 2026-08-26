@@ -1,0 +1,10 @@
+ALTER TABLE "webhook_deliveries" DROP CONSTRAINT "webhook_deliveries_source_check";
+ALTER TABLE "webhook_deliveries" DROP CONSTRAINT "webhook_deliveries_received_email_id_received_emails_id_fk";
+DROP INDEX "webhook_deliveries_received_email_id_unique";
+DROP INDEX "webhook_deliveries_event_id_unique";
+ALTER TABLE "webhook_deliveries" DROP COLUMN "received_email_id";
+ALTER TABLE "webhook_deliveries" ALTER COLUMN "event_id" SET NOT NULL;
+CREATE UNIQUE INDEX "webhook_deliveries_event_id_unique" ON "webhook_deliveries" USING btree ("event_id");
+ALTER TABLE "messages" DROP CONSTRAINT "messages_reply_to_array_check";
+ALTER TABLE "messages" DROP COLUMN "reply_to";
+DROP TABLE "received_emails";

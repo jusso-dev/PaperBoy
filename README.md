@@ -149,7 +149,9 @@ curl https://paperboy.example/api/v1/emails \
 {"id":"00000000-0000-4000-8000-000000000000"}
 ```
 
-`to` accepts one address or an array of up to 50. For inline content, provide `subject` and non-empty `html` or `text`. A template send uses `template_id` and optional `data` instead. Tags use `{name, value}` pairs with ASCII letters, numbers, underscores, or dashes. Invalid JSON returns 400. Invalid fields, including missing `from` or `to`, return structured JSON with 422.
+`to` accepts one address or an array of up to 50. Optional `reply_to` uses the same shape and becomes the MIME `Reply-To` header, so a support desk can send from a branded address and still collect answers on `reply+{token}@verified-domain`. For inline content, provide `subject` and non-empty `html` or `text`. A template send uses `template_id` and optional `data` instead. Tags use `{name, value}` pairs with ASCII letters, numbers, underscores, or dashes. Invalid JSON returns 400. Invalid fields, including missing `from` or `to`, return structured JSON with 422.
+
+Inbound receiving is the inverse path for those plus-addresses. `POST /api/v1/received-emails` stores a raw RFC 822 `email` string or parsed `from`/`to`/`subject`/`html`/`text`. Live keys require at least one recipient domain to be a verified organization sending domain. Point MX, Cloudflare Email Routing, or SES receipt at a small forwarder that posts that payload with a PaperBoy API key. Identical content is replayed without a second webhook. A configured organization webhook then receives `email.received` with `email_id`, `to`, `from`, and `subject` only; `GET /api/v1/received-emails/:id` returns the stored body. See [inbound receiving](docs/inbound.md).
 
 Single sends accept up to 100 private attachments as `{content, filename, content_type}`. `content` must be canonical Base64; filenames cannot contain paths or control characters; MIME types use forms such as `application/pdf` or `image/png`. Decoded attachment bytes may total at most 10 MiB per message, with an HTTP 413 response above that limit. The batch endpoint intentionally rejects attachments.
 
@@ -279,7 +281,7 @@ Each event POST carries `webhook-id`, `webhook-timestamp`, and `webhook-signatur
 
 The stable event ID remains unchanged across retries; attempt timestamp and signature change. Any 2xx response completes delivery. Network failures and 5xx responses retry after 1 minute, 5 minutes, 30 minutes, then 2 hours; 3xx and 4xx responses fail without retry, and five attempts exhaust the queue. PostgreSQL leases make abandoned attempts reclaimable, with the same at-least-once caveat as email delivery.
 
-Bodies contain only `type`, UTC `created_at`, and `data.email_id` plus `data.environment`; recipients, subject, message content, attachments, credentials, and provider payloads stay out. SMTP, Cloudflare Email Service, and future adapters emit through the same transactionally queued event path. Production configuration accepts HTTPS only. Plain HTTP is restricted to `localhost`/loopback receivers outside production for local validation.
+Outbound delivery bodies contain only `type`, UTC `created_at`, and `data.email_id` plus `data.environment`. Inbound `email.received` also includes `to`, `from`, and `subject` so a support desk can match `reply+{token}@domain` without receiving the body in the webhook; fetch the stored content with `GET /api/v1/received-emails/:id`. Message content, attachments, credentials, and provider payloads stay out. SMTP, Cloudflare Email Service, and future adapters emit through the same transactionally queued event path. Production configuration accepts HTTPS only. Plain HTTP is restricted to `localhost`/loopback receivers outside production for local validation.
 
 ## Email templates
 

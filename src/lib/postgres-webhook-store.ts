@@ -88,10 +88,22 @@ export const postgresWebhookStore: WebhookStore = {
           eventId: webhookDeliveries.eventId,
           id: webhookDeliveries.id,
           orgId: webhookDeliveries.orgId,
+          receivedEmailId: webhookDeliveries.receivedEmailId,
           url: webhookDeliveries.url,
         });
 
-      return claimed ?? null;
+      if (!claimed) return null;
+
+      return {
+        attemptCount: claimed.attemptCount,
+        body: claimed.body,
+        encryptedSecret: claimed.encryptedSecret,
+        endpointId: claimed.endpointId,
+        eventId: claimed.eventId ?? claimed.receivedEmailId ?? claimed.id,
+        id: claimed.id,
+        orgId: claimed.orgId,
+        url: claimed.url,
+      };
     });
   },
 

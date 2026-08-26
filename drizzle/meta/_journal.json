@@ -183,6 +183,13 @@
       "when": 1787628021175,
       "tag": "0025_remove_legacy_chunked_broadcasts",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787702889990,
+      "tag": "0026_powerful_mysterio",
+      "breakpoints": true
     }
   ]
 }

@@ -100,7 +100,7 @@ SES events are correlated to exactly one message in the same organization and re
 
 ### Webhooks and outbound requests
 
-An attacker may forge, replay, or alter a webhook. PaperBoy signs the exact raw body with HMAC-SHA256, includes an event ID and Unix timestamp, compares signatures in constant time, and documents a five-minute verification tolerance. The generated `whsec_...` value is returned only once; the database stores an AES-256-GCM envelope bound to the organization/endpoint context. Event bodies exclude recipients, subjects, message bodies, attachments, credentials, and provider payloads.
+An attacker may forge, replay, or alter a webhook. PaperBoy signs the exact raw body with HMAC-SHA256, includes an event ID and Unix timestamp, compares signatures in constant time, and documents a five-minute verification tolerance. The generated `whsec_...` value is returned only once; the database stores an AES-256-GCM envelope bound to the organization/endpoint context. Outbound event bodies exclude recipients, subjects, message bodies, attachments, credentials, and provider payloads. Inbound `email.received` includes `to`, `from`, and `subject` so a receiver can route a plus-address without receiving the body; the stored body is fetched over the authenticated receiving API.
 
 Production endpoints require HTTPS, redirects are not followed automatically, requests time out, and retry behavior is bounded. HTTPS alone does not prevent a configured URL from resolving to a private/reserved address or rebinding between validation and connection. Until application-level address pinning exists, operators must enforce outbound DNS and network policy and treat webhook configuration as an egress/SSRF-capable privilege.
 

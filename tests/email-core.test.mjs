@@ -24,6 +24,7 @@ test("Resend-shaped email input is normalized without building MIME", () => {
     fromAddress: "News@xn--mnchen-3ya.example",
     fromDomain: "xn--mnchen-3ya.example",
     html: "<p>Hello</p>",
+    replyTo: [],
     subject: "Morning edition",
     tags: [{ name: "edition", value: "morning_1" }],
     text: "Hello",
@@ -35,6 +36,7 @@ test("Resend-shaped email input is normalized without building MIME", () => {
     "fromAddress",
     "fromDomain",
     "html",
+    "replyTo",
     "subject",
     "tags",
     "text",
@@ -107,6 +109,7 @@ test("idempotency keys and canonical request hashes are deterministic", () => {
         JSON.stringify({
           from: first.from,
           html: first.html,
+          replyTo: first.replyTo,
           subject: first.subject,
           tags: first.tags,
           text: first.text,
@@ -117,4 +120,16 @@ test("idempotency keys and canonical request hashes are deterministic", () => {
   );
   assert.match(emailRequestHash(first), /^[0-9a-f]{64}$/);
   assert.throws(() => normalizeIdempotencyKey("contains a space"), EmailError);
+});
+
+test("reply_to accepts a plus-address used by support desks", () => {
+  const parsed = parseSendEmailInput({
+    from: "Acme <hello@snagspot.app>",
+    reply_to: "reply+abc123@mail.snagspot.test",
+    subject: "Re: ticket",
+    text: "We are looking into it.",
+    to: "jane@example.com",
+  });
+
+  assert.deepEqual(parsed.replyTo, ["reply+abc123@mail.snagspot.test"]);
 });

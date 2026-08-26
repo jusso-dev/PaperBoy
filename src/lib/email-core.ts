@@ -31,6 +31,7 @@ export type SendEmailInput = {
   fromAddress: string;
   fromDomain: string;
   html: string | null;
+  replyTo: string[];
   subject: string;
   tags: EmailTag[];
   text: string | null;
@@ -70,6 +71,7 @@ const SEND_FIELDS = new Set([
   "attachments",
   "from",
   "to",
+  "reply_to",
   "subject",
   "html",
   "text",
@@ -142,6 +144,46 @@ function parseAddress(value: unknown) {
 
 export function normalizeEmailAddress(value: unknown): string | null {
   return parseAddress(value)?.address.toLowerCase() ?? null;
+}
+
+export function parseEmailAddressField(value: unknown) {
+  return parseAddress(value);
+}
+
+function parseAddressList(
+  value: unknown,
+  field: string,
+  issues: EmailValidationIssue[],
+): string[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  const values = typeof value === "string" ? [value] : Array.isArray(value) ? value : null;
+
+  if (!values) {
+    issues.push({ field, message: "Enter one address or an array of addresses." });
+    return [];
+  }
+
+  if (values.length > MAX_RECIPIENTS) {
+    issues.push({ field, message: "Provide at most 50 addresses." });
+    return [];
+  }
+
+  return values.flatMap((candidate, index) => {
+    const parsed = parseAddress(candidate);
+
+    if (!parsed) {
+      issues.push({
+        field: `${field}.${index}`,
+        message: "Enter a valid email address.",
+      });
+      return [];
+    }
+
+    return [parsed.formatted];
+  });
 }
 
 function bodyValue(
@@ -444,6 +486,7 @@ export function parseSendEmailInput(
   }
 
   const tags = parseTags(value.tags, issues);
+  const replyTo = parseAddressList(value.reply_to, "reply_to", issues);
 
   if (issues.length > 0 || !parsedFrom || typeof subject !== "string") {
     throw new EmailError("VALIDATION_ERROR", issues);
@@ -455,6 +498,7 @@ export function parseSendEmailInput(
     fromAddress: parsedFrom.address,
     fromDomain: parsedFrom.domain,
     html,
+    replyTo,
     subject,
     tags,
     text,
@@ -493,6 +537,7 @@ export function emailRequestHash(input: SendEmailInput): string {
       JSON.stringify({
         from: input.from,
         html: input.html,
+        replyTo: input.replyTo,
         subject: input.subject,
         tags: input.tags,
         text: input.text,

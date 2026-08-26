@@ -166,6 +166,75 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /api/v1/received-emails:
+    post:
+      operationId: receiveInboundEmail
+      tags: [Emails]
+      summary: Store one inbound email
+      description: >-
+        Accepts a raw RFC 822 `email` string or parsed from/to/subject/html/text
+        fields. Live keys require at least one recipient domain to be a verified
+        organization sending domain, including plus-addresses used by support
+        desks. A configured organization webhook receives `email.received` with
+        routing metadata only; fetch the body with GET /api/v1/received-emails/{emailId}.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiveInboundEmailInput'
+      responses:
+        '201':
+          description: Inbound email stored.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceivedEmailAccepted'
+        '200':
+          description: Identical inbound email replayed.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceivedEmailAccepted'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/received-emails/{emailId}:
+    parameters:
+      - $ref: '#/components/parameters/EmailId'
+    get:
+      operationId: getReceivedEmail
+      tags: [Emails]
+      summary: Get one inbound email
+      description: >-
+        Returns the stored inbound email for the organization and environment
+        selected by the bearer key. Support desks use this after `email.received`
+        to read the customer reply body.
+      responses:
+        '200':
+          description: Stored inbound email.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceivedEmail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/emails/{emailId}:
     parameters:
       - $ref: '#/components/parameters/EmailId'
@@ -2078,6 +2147,8 @@ components:
           $ref: '#/components/schemas/EmailTags'
         attachments:
           $ref: '#/components/schemas/EmailAttachments'
+        reply_to:
+          $ref: '#/components/schemas/Recipients'
     TemplateEmailInput:
       type: object
       additionalProperties: false
@@ -2100,6 +2171,8 @@ components:
           $ref: '#/components/schemas/EmailTags'
         attachments:
           $ref: '#/components/schemas/EmailAttachments'
+        reply_to:
+          $ref: '#/components/schemas/Recipients'
     Sender:
       type: string
       minLength: 3
@@ -2174,6 +2247,84 @@ components:
         id:
           type: string
           format: uuid
+    ReceiveInboundEmailInput:
+      type: object
+      additionalProperties: false
+      description: Raw RFC 822 or parsed inbound fields used by support desks.
+      properties:
+        email:
+          type: string
+          minLength: 1
+          maxLength: 2097152
+        from:
+          $ref: '#/components/schemas/Sender'
+        to:
+          $ref: '#/components/schemas/Recipients'
+        cc:
+          $ref: '#/components/schemas/Recipients'
+        bcc:
+          $ref: '#/components/schemas/Recipients'
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 998
+        html:
+          type: string
+          maxLength: 2097152
+        text:
+          type: string
+          maxLength: 2097152
+        message_id:
+          type: string
+          minLength: 3
+          maxLength: 998
+    ReceivedEmailAccepted:
+      type: object
+      additionalProperties: false
+      required: [id, object]
+      properties:
+        id:
+          type: string
+          format: uuid
+        object:
+          type: string
+          const: email
+    ReceivedEmail:
+      type: object
+      additionalProperties: false
+      required: [id, object, from, to, subject, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        object:
+          type: string
+          const: email
+        from:
+          type: string
+        to:
+          type: array
+          items:
+            type: string
+        cc:
+          type: array
+          items:
+            type: string
+        bcc:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        html:
+          type: [string, 'null']
+        text:
+          type: [string, 'null']
+        message_id:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
     IdempotencyKeyValue:
       type: string
       minLength: 1

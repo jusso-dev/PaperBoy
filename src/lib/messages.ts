@@ -323,6 +323,7 @@ export async function queueEmail(input: {
           environment: input.principal.environment,
           from: email.from,
           html,
+          replyTo: email.replyTo,
           id: messageId,
           idempotencyKey,
           openTrackingEnabled,

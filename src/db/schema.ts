@@ -782,6 +782,7 @@ export const messages = pgTable(
     }),
     from: text("from").notNull(),
     to: bunJsonb("to").$type<string[]>().notNull(),
+    replyTo: bunJsonb("reply_to").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
     subject: text("subject").notNull(),
     html: text("html"),
     textBody: text("text"),
@@ -877,6 +878,10 @@ export const messages = pgTable(
     check(
       "messages_to_array_check",
       sql`jsonb_typeof(${table.to}) = 'array'`,
+    ),
+    check(
+      "messages_reply_to_array_check",
+      sql`jsonb_typeof(${table.replyTo}) = 'array'`,
     ),
     check(
       "messages_tags_array_check",
@@ -1230,6 +1235,81 @@ export const webhookEndpoints = pgTable(
   ],
 );
 
+export const receivedEmails = pgTable(
+  "received_emails",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    apiKeyId: uuid("api_key_id").references(() => apiKeys.id, {
+      onDelete: "set null",
+    }),
+    domainId: uuid("domain_id").references(() => domains.id, {
+      onDelete: "set null",
+    }),
+    environment: text("environment").default("test").notNull(),
+    from: text("from").notNull(),
+    to: bunJsonb("to").$type<string[]>().notNull(),
+    cc: bunJsonb("cc").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+    bcc: bunJsonb("bcc").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+    subject: text("subject").notNull(),
+    html: text("html"),
+    textBody: text("text"),
+    rfc822MessageId: text("rfc822_message_id"),
+    contentSha256: text("content_sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("received_emails_org_id_content_sha256_unique").on(
+      table.orgId,
+      table.contentSha256,
+    ),
+    uniqueIndex("received_emails_org_id_rfc822_message_id_unique")
+      .on(table.orgId, table.rfc822MessageId)
+      .where(sql`${table.rfc822MessageId} is not null`),
+    index("received_emails_org_id_created_at_id_idx").on(
+      table.orgId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      "received_emails_environment_check",
+      sql`${table.environment} in ('live', 'test')`,
+    ),
+    check(
+      "received_emails_to_array_check",
+      sql`jsonb_typeof(${table.to}) = 'array'`,
+    ),
+    check(
+      "received_emails_cc_array_check",
+      sql`jsonb_typeof(${table.cc}) = 'array'`,
+    ),
+    check(
+      "received_emails_bcc_array_check",
+      sql`jsonb_typeof(${table.bcc}) = 'array'`,
+    ),
+    check(
+      "received_emails_body_check",
+      sql`${table.html} is not null or ${table.textBody} is not null`,
+    ),
+    check(
+      "received_emails_content_sha256_check",
+      sql`${table.contentSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "received_emails_rfc822_message_id_check",
+      sql`${table.rfc822MessageId} is null or (char_length(${table.rfc822MessageId}) between 3 and 998 and ${table.rfc822MessageId} !~ '[[:cntrl:]]')`,
+    ),
+  ],
+);
+
 export const webhookDeliveries = pgTable(
   "webhook_deliveries",
   {
@@ -1238,9 +1318,13 @@ export const webhookDeliveries = pgTable(
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
     endpointId: uuid("endpoint_id").notNull(),
-    eventId: uuid("event_id")
-      .notNull()
-      .references(() => events.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id").references(() => events.id, {
+      onDelete: "cascade",
+    }),
+    receivedEmailId: uuid("received_email_id").references(
+      () => receivedEmails.id,
+      { onDelete: "cascade" },
+    ),
     url: text("url").notNull(),
     encryptedSecret: text("encrypted_secret").notNull(),
     body: text("body").notNull(),
@@ -1269,7 +1353,12 @@ export const webhookDeliveries = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("webhook_deliveries_event_id_unique").on(table.eventId),
+    uniqueIndex("webhook_deliveries_event_id_unique")
+      .on(table.eventId)
+      .where(sql`${table.eventId} is not null`),
+    uniqueIndex("webhook_deliveries_received_email_id_unique")
+      .on(table.receivedEmailId)
+      .where(sql`${table.receivedEmailId} is not null`),
     index("webhook_deliveries_org_id_created_at_idx").on(
       table.orgId,
       table.createdAt,
@@ -1278,6 +1367,10 @@ export const webhookDeliveries = pgTable(
       table.status,
       table.nextAttemptAt,
       table.createdAt,
+    ),
+    check(
+      "webhook_deliveries_source_check",
+      sql`(${table.eventId} is not null and ${table.receivedEmailId} is null) or (${table.eventId} is null and ${table.receivedEmailId} is not null)`,
     ),
     check(
       "webhook_deliveries_status_check",

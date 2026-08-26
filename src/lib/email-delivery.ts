@@ -12,6 +12,7 @@ export type DeliveryMessage = {
   attachments: DeliveryAttachment[];
   from: string;
   html: string | null;
+  replyTo?: string[];
   subject: string;
   text: string | null;
   to: string[];
@@ -45,6 +46,7 @@ export async function buildSmtpMimeMessage(
     headers: message.headers,
     html: message.html ?? undefined,
     messageId: message.messageId,
+    replyTo: message.replyTo && message.replyTo.length > 0 ? message.replyTo : undefined,
     subject: message.subject,
     text: message.text ?? undefined,
     to: message.to,
@@ -63,6 +65,9 @@ export function prepareCloudflareEmailMessage(message: DeliveryMessage) {
     })),
     from: message.from,
     ...(message.html === null ? {} : { html: message.html }),
+    ...(message.replyTo && message.replyTo.length > 0
+      ? { reply_to: message.replyTo }
+      : {}),
     subject: message.subject,
     ...(message.text === null ? {} : { text: message.text }),
     to: message.to,

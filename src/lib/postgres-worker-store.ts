@@ -102,6 +102,7 @@ export const postgresWorkerStore: WorkerStore = {
           from: messages.from,
           html: messages.html,
           id: messages.id,
+          replyTo: messages.replyTo,
           orgId: messages.orgId,
           provider: messages.outboundProvider,
           subject: messages.subject,

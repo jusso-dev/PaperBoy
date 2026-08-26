@@ -124,6 +124,7 @@ const sendEmailPayloadSchema = z
     data: templateData.optional(),
     from: address,
     html: z.string().max(2 * 1024 * 1024).optional(),
+    reply_to: z.union([address, z.array(address).min(1).max(50)]).optional(),
     subject: z.string().min(1).max(998).optional(),
     tags: z.array(tag).max(75).optional(),
     template_id: z.string().uuid().optional(),
@@ -139,6 +140,7 @@ const sendEmailInputSchema = z
     data: templateData.optional(),
     from: address,
     html: z.string().max(2 * 1024 * 1024).optional(),
+    reply_to: z.union([address, z.array(address).min(1).max(50)]).optional(),
     idempotencyKey: z
       .string()
       .min(1)

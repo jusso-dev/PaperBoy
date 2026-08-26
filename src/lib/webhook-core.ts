@@ -5,7 +5,12 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
+import { parseEmailAddressField } from "@/lib/email-core";
 import type { MessageEventType } from "@/lib/message-event-core";
+
+function webhookAddress(value: string): string {
+  return parseEmailAddressField(value)?.address ?? value;
+}
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 const ENCRYPTION_VERSION = "v1";
@@ -251,6 +256,29 @@ export function webhookEventBody(input: {
       environment: input.environment,
     },
     type: `email.${input.type}`,
+  });
+}
+
+export function receivedEmailWebhookBody(input: {
+  createdAt: Date;
+  environment: "live" | "test";
+  from: string;
+  messageId: string | null;
+  receivedEmailId: string;
+  subject: string;
+  to: string[];
+}): string {
+  return JSON.stringify({
+    created_at: input.createdAt.toISOString(),
+    data: {
+      email_id: input.receivedEmailId,
+      environment: input.environment,
+      from: webhookAddress(input.from),
+      message_id: input.messageId,
+      subject: input.subject,
+      to: input.to.map(webhookAddress),
+    },
+    type: "email.received",
   });
 }
 
