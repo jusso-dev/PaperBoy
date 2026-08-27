@@ -401,12 +401,15 @@ async function finishRecipient(input: {
     .where(eq(broadcasts.id, input.broadcastId));
 }
 
-async function pauseRateLimitedRecipient(input: {
+async function deferRateLimitedBroadcast(input: {
   broadcastId: string;
   now: Date;
   recipientId: string;
+  retryAfterSeconds: number;
 }) {
-  await db.transaction(async (tx) => {
+  const delaySeconds = Math.max(1, input.retryAfterSeconds);
+  const runAt = new Date(input.now.getTime() + delaySeconds * 1000);
+  const [updated] = await db.transaction(async (tx) => {
     await tx
       .update(broadcastRecipients)
       .set({
@@ -420,20 +423,24 @@ async function pauseRateLimitedRecipient(input: {
           eq(broadcastRecipients.status, "processing"),
         ),
       );
-    await tx
+    return tx
       .update(broadcasts)
       .set({
-        pausedAt: input.now,
-        status: "paused",
+        pausedAt: null,
+        scheduledFor: runAt,
+        status: "scheduled",
         updatedAt: input.now,
       })
-      .where(
-        and(
-          eq(broadcasts.id, input.broadcastId),
-          eq(broadcasts.status, "running"),
-        ),
-      );
+      .where(eq(broadcasts.id, input.broadcastId))
+      .returning({ id: broadcasts.id, orgId: broadcasts.orgId });
   });
+  if (updated) {
+    requestBroadcastJob({
+      broadcastId: updated.id,
+      orgId: updated.orgId,
+      runAt,
+    });
+  }
 }
 
 export async function processBroadcast(
@@ -512,10 +519,11 @@ export async function processBroadcast(
       });
     } catch (error) {
       if (error instanceof RateLimitError) {
-        await pauseRateLimitedRecipient({
+        await deferRateLimitedBroadcast({
           broadcastId: broadcast.id,
           now: now(),
           recipientId: recipient.id,
+          retryAfterSeconds: error.retryAfterSeconds,
         });
         return;
       }

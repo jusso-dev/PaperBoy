@@ -229,7 +229,12 @@ test(
           unsubscribeUrl: () => "https://paperboy.example/unsubscribe?token=test",
         },
       );
-      assert.equal(cappedBroadcast.status, "paused");
+      assert.equal(cappedBroadcast.status, "scheduled");
+      assert.equal(
+        cappedBroadcast.scheduledFor?.toISOString(),
+        new Date(fixedNow.getTime() + 49_000).toISOString(),
+      );
+      assert.equal(cappedBroadcast.pausedAt, null);
       assert.equal(cappedBroadcast.progress.pending, 1);
       assert.equal(cappedBroadcast.progress.failed, 0);
       assert.equal(cappedBroadcast.progress.queued, 0);

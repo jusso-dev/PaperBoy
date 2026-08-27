@@ -20,3 +20,15 @@ test("queued dispatch goes to BullMQ instead of the web process", async () => {
   assert.match(queue, /replaceFinishedVersionedJob/);
   assert.match(queue, /existing.remove/);
 });
+
+test("rate-limited broadcasts stay on the jobs worker instead of pausing", async () => {
+  const source = await readFile(
+    new URL("../src/lib/broadcasts.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /deferRateLimitedBroadcast/);
+  assert.match(source, /retryAfterSeconds: error.retryAfterSeconds/);
+  assert.match(source, /status: "scheduled"/);
+  assert.match(source, /requestBroadcastJob/);
+  assert.doesNotMatch(source, /pauseRateLimitedRecipient/);
+});

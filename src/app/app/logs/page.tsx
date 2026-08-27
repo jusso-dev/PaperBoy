@@ -272,7 +272,7 @@ export default async function Logs({ searchParams }: LogsPageProps) {
         <div className="form-error delivery-jobs-alert" role="alert">
           <p>
             The dedicated BullMQ jobs worker is not heartbeating. Queued mail
-            stays queued until that AWS service is up with{" "}
+            stays queued until the Coolify PaperBoy Jobs service is up with{" "}
             <code>PAPERBOY_PROCESS_TYPE=jobs</code> and the same{" "}
             <code>DATABASE_URL</code>, <code>REDIS_URL</code>, and SES
             credentials as web.
