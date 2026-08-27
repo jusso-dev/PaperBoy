@@ -197,6 +197,29 @@ export async function closeJobQueues(
   }
 }
 
+type VersionedJobHandle = {
+  changeDelay: (delay: number) => Promise<unknown>;
+  getState: () => Promise<string>;
+  remove: () => Promise<unknown>;
+};
+
+async function replaceFinishedVersionedJob(input: {
+  delay: number;
+  existing: VersionedJobHandle | undefined;
+}): Promise<"reuse" | "replaced" | "missing"> {
+  if (!input.existing) return "missing";
+  const state = await input.existing.getState();
+  if (state === "delayed") {
+    await input.existing.changeDelay(input.delay);
+    return "reuse";
+  }
+  if (["active", "waiting", "waiting-children", "prioritized"].includes(state)) {
+    return "reuse";
+  }
+  await input.existing.remove();
+  return "replaced";
+}
+
 export async function enqueueMessageJob(input: {
   attemptCount: number;
   messageId: string;
@@ -204,18 +227,23 @@ export async function enqueueMessageJob(input: {
 }): Promise<void> {
   requireUuid(input.messageId, "Message ID");
   const queues = await getJobQueues();
+  const jobId = versionedJobId({
+    attemptCount: input.attemptCount,
+    entityId: input.messageId,
+    kind: "message",
+    runAt: input.runAt,
+  });
+  const delay = delayUntil(input.runAt);
+  const existing = await queues.messages.getJob(jobId);
+  if (
+    (await replaceFinishedVersionedJob({ delay, existing })) === "reuse"
+  ) {
+    return;
+  }
   await queues.messages.add(
     "deliver",
     { messageId: input.messageId },
-    {
-      delay: delayUntil(input.runAt),
-      jobId: versionedJobId({
-        attemptCount: input.attemptCount,
-        entityId: input.messageId,
-        kind: "message",
-        runAt: input.runAt,
-      }),
-    },
+    { delay, jobId },
   );
 }
 
@@ -258,18 +286,23 @@ export async function enqueueWebhookJob(input: {
 }): Promise<void> {
   requireUuid(input.deliveryId, "Webhook delivery ID");
   const queues = await getJobQueues();
+  const jobId = versionedJobId({
+    attemptCount: input.attemptCount,
+    entityId: input.deliveryId,
+    kind: "webhook",
+    runAt: input.runAt,
+  });
+  const delay = delayUntil(input.runAt);
+  const existing = await queues.webhooks.getJob(jobId);
+  if (
+    (await replaceFinishedVersionedJob({ delay, existing })) === "reuse"
+  ) {
+    return;
+  }
   await queues.webhooks.add(
     "deliver",
     { deliveryId: input.deliveryId },
-    {
-      delay: delayUntil(input.runAt),
-      jobId: versionedJobId({
-        attemptCount: input.attemptCount,
-        entityId: input.deliveryId,
-        kind: "webhook",
-        runAt: input.runAt,
-      }),
-    },
+    { delay, jobId },
   );
 }
 

@@ -27,7 +27,8 @@ test("emails log shows subject in the list and body in the drawer", async () => 
   assert.match(page, /sendQueuedMessagesAction/);
   assert.match(page, /jobsWorkerIsLive/);
   assert.match(page, /Send queued now/);
-  assert.match(actions, /deliverQueuedOrganizationMessages/);
+  assert.match(page, /BullMQ jobs worker/);
+  assert.match(actions, /dispatchQueuedOrganizationMessages/);
   assert.match(table, /message-log-subject/);
   assert.match(table, /row\.subject\.trim\(\) \|\| "\(no subject\)"/);
   assert.match(table, /SandboxedHtmlPreview/);

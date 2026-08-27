@@ -339,7 +339,7 @@ const broadcastDocument = `# PaperBoy broadcasts
 
 const jobsDocument = `# PaperBoy BullMQ jobs
 
-- Run 'bun run jobs' beside every web deployment. REDIS_URL is required by both web and jobs. Redis carries BullMQ dispatch, delays, and concurrency; PostgreSQL remains authoritative state.
+- Run 'bun run jobs' as a dedicated worker service beside every web deployment. REDIS_URL is required by both web and jobs. Redis carries BullMQ dispatch, delays, and concurrency; PostgreSQL remains authoritative state. Message and webhook job IDs are replaced after a finished Redis job so reconciliation can send rows that already had a completed or failed job.
 - Configure persistent Redis storage and maxmemory-policy=noeviction. A recurring reconciliation job restores exact message, broadcast, and webhook jobs from PostgreSQL after Redis loss or enqueue failure.
 - PAPERBOY_MESSAGE_JOB_CONCURRENCY, PAPERBOY_BROADCAST_JOB_CONCURRENCY, and PAPERBOY_WEBHOOK_JOB_CONCURRENCY default to 5, 1, and 5. PAPERBOY_JOB_RECONCILE_MS defaults to 5000.
 - SMTP_URL supplies the operator-default SMTP secret. Per-organization SMTP, Cloudflare Email Service, and Amazon SES variables use a normalized organization UUID suffix. Credentials stay in operator injection and never enter MCP arguments or output.

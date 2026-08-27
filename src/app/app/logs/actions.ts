@@ -8,7 +8,7 @@ import {
 } from "@/lib/message-events";
 import { MessageStatusError } from "@/lib/message-status-core";
 import { getMessageDeliveryStatus } from "@/lib/message-statuses";
-import { deliverQueuedOrganizationMessages } from "@/lib/queued-delivery";
+import { dispatchQueuedOrganizationMessages } from "@/lib/queued-delivery";
 import { requireOrganization } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
 
@@ -144,20 +144,17 @@ export async function sendQueuedMessagesAction(): Promise<void> {
 
   let result;
   try {
-    result = await deliverQueuedOrganizationMessages({
+    result = await dispatchQueuedOrganizationMessages({
       orgId: organization.id,
-      workerId: `console:${session.user.id}`,
     });
   } catch {
-    console.error("PaperBoy console queued send failed.");
+    console.error("PaperBoy console queued dispatch failed.");
     redirect("/app/logs?status=queued&error=send");
   }
 
   const query = new URLSearchParams({
-    failed: String(result.failed),
+    dispatched: String(result.dispatched),
     remaining: String(result.remaining),
-    retried: String(result.retried),
-    sent: String(result.delivered),
     status: "queued",
   });
   redirect(`/app/logs?${query.toString()}`);

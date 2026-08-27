@@ -1,47 +1,22 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-process.env.DATABASE_URL ??= "postgres://paperboy@127.0.0.1:5433/paperboy";
+test("queued dispatch goes to BullMQ instead of the web process", async () => {
+  const [delivery, actions, jobs, queue] = await Promise.all([
+    readFile(new URL("../src/lib/queued-delivery.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/app/app/logs/actions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/jobs.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/lib/job-queue.ts", import.meta.url), "utf8"),
+  ]);
 
-test("web fallback skips delivery when the jobs worker is live", async () => {
-  const { deliverQueuedMessageIfJobsDown } = await import(
-    "../src/lib/queued-delivery.ts"
-  );
-  const calls = [];
-  const result = await deliverQueuedMessageIfJobsDown(
-    "11111111-1111-4111-8111-111111111111",
-    {
-      deliver: async (input) => {
-        calls.push(input.messageId);
-        return { state: "sent", messageId: input.messageId };
-      },
-      jobsLive: async () => true,
-    },
-  );
-
-  assert.deepEqual(result, { state: "skipped" });
-  assert.deepEqual(calls, []);
-});
-
-test("web fallback delivers the queued message when the jobs worker is down", async () => {
-  const { deliverQueuedMessageIfJobsDown } = await import(
-    "../src/lib/queued-delivery.ts"
-  );
-  const calls = [];
-  const result = await deliverQueuedMessageIfJobsDown(
-    "11111111-1111-4111-8111-111111111111",
-    {
-      deliver: async (input) => {
-        calls.push(input.messageId);
-        return { state: "sent", messageId: input.messageId };
-      },
-      jobsLive: async () => false,
-    },
-  );
-
-  assert.deepEqual(result, {
-    messageId: "11111111-1111-4111-8111-111111111111",
-    state: "sent",
-  });
-  assert.deepEqual(calls, ["11111111-1111-4111-8111-111111111111"]);
+  assert.match(delivery, /enqueuePendingMessage/);
+  assert.match(delivery, /dispatchQueuedOrganizationMessages/);
+  assert.doesNotMatch(delivery, /processNextMessage/);
+  assert.doesNotMatch(delivery, /web-fallback/);
+  assert.match(actions, /dispatchQueuedOrganizationMessages/);
+  assert.match(jobs, /result.state === "idle"/);
+  assert.match(jobs, /enqueuePendingMessage\(job.data.messageId\)/);
+  assert.match(queue, /replaceFinishedVersionedJob/);
+  assert.match(queue, /existing.remove/);
 });

@@ -97,6 +97,8 @@ async function main() {
         });
         if (result.state === "retry") {
           await enqueuePendingMessage(result.messageId);
+        } else if (result.state === "idle") {
+          await enqueuePendingMessage(job.data.messageId);
         }
       },
       {

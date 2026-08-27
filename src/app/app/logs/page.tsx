@@ -30,16 +30,14 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type LogsQuery = {
+  dispatched?: string;
   domain?: string;
   error?: string;
-  failed?: string;
   from?: string;
   order?: string;
   page?: string;
   q?: string;
   remaining?: string;
-  retried?: string;
-  sent?: string;
   sort?: string;
   status?: string;
   to?: string;
@@ -273,11 +271,11 @@ export default async function Logs({ searchParams }: LogsPageProps) {
       {!jobsLive ? (
         <div className="form-error delivery-jobs-alert" role="alert">
           <p>
-            The jobs worker is not running. Queued mail stays queued until a
-            process with <code>PAPERBOY_PROCESS_TYPE=jobs</code> is up on AWS,
-            with the same <code>DATABASE_URL</code>, <code>REDIS_URL</code>, and
-            SES credentials as web. New sends now deliver from this web process
-            as a fallback.
+            The dedicated BullMQ jobs worker is not heartbeating. Queued mail
+            stays queued until that AWS service is up with{" "}
+            <code>PAPERBOY_PROCESS_TYPE=jobs</code> and the same{" "}
+            <code>DATABASE_URL</code>, <code>REDIS_URL</code>, and SES
+            credentials as web.
           </p>
         </div>
       ) : null}
@@ -289,15 +287,16 @@ export default async function Logs({ searchParams }: LogsPageProps) {
       ) : null}
       {query.error === "send" ? (
         <p className="form-error" role="alert">
-          Queued mail could not be sent from the console. Check SES credentials
+          Queued mail could not be dispatched to the jobs worker. Check Redis
           and try again.
         </p>
       ) : null}
-      {integerParam(query.sent) !== null ? (
+      {integerParam(query.dispatched) !== null ? (
         <p className="form-success" role="status">
-          Sent {query.sent}, retried {query.retried ?? "0"}, failed{" "}
-          {query.failed ?? "0"}. {query.remaining ?? "0"} still queued
-          {Number(query.remaining) > 0 ? " — send again to continue." : "."}
+          Dispatched {query.dispatched} queued message
+          {query.dispatched === "1" ? "" : "s"} to the BullMQ worker.{" "}
+          {query.remaining ?? "0"} still queued
+          {Number(query.remaining) > 0 ? " — dispatch again to continue." : "."}
         </p>
       ) : null}
 
@@ -305,8 +304,8 @@ export default async function Logs({ searchParams }: LogsPageProps) {
         <form action={sendQueuedMessagesAction} className="delivery-send-queued">
           <p>
             {firstPage.counts.queued} message
-            {firstPage.counts.queued === 1 ? "" : "s"} queued. Send up to 25 now
-            through the same SES path the jobs worker uses.
+            {firstPage.counts.queued === 1 ? "" : "s"} queued. Dispatch up to 25
+            to the dedicated BullMQ jobs worker now.
           </p>
           <button className="btn btn-primary" type="submit">
             Send queued now

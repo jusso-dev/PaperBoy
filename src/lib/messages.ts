@@ -28,7 +28,6 @@ import { authorizeSendingDomain } from "@/lib/domains";
 import type { providerVerifiedSenderDomains } from "@/lib/provider-sender-identities";
 import { insertMessageEvent } from "@/lib/message-events";
 import { requestMessageJob } from "@/lib/job-queue";
-import { requestQueuedDelivery } from "@/lib/queued-delivery";
 import {
   appendOpenTrackingPixel,
   createOpenTrackingUrl,
@@ -392,7 +391,6 @@ export async function queueEmail(input: {
       messageId: created.id,
       runAt: created.nextAttemptAt,
     });
-    requestQueuedDelivery(created.id);
 
     return {
       createdAt: created.createdAt,
