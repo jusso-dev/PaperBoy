@@ -53,6 +53,7 @@ async function main() {
     { processNextWebhook },
     { parseInboundS3Config },
     { processInboundS3Queue },
+    { touchJobHeartbeat },
   ] = await Promise.all([
     getJobQueues(),
     import("@/db"),
@@ -66,6 +67,7 @@ async function main() {
     import("@/lib/webhook-worker-core"),
     import("@/lib/inbound-s3-core"),
     import("@/lib/inbound-s3"),
+    import("@/lib/job-heartbeat"),
   ]);
   const inboundS3Enabled = Boolean(parseInboundS3Config());
   const workerId = workerIdentity();
@@ -126,6 +128,7 @@ async function main() {
       JOB_QUEUE_NAMES.maintenance,
       async () => {
         await reconcilePendingJobs();
+        await touchJobHeartbeat({ workerId });
         if (inboundS3Enabled) {
           try {
             await processInboundS3Queue();
@@ -200,6 +203,7 @@ async function main() {
     },
   );
   await reconcilePendingJobs();
+  await touchJobHeartbeat({ workerId });
   if (inboundS3Enabled) {
     try {
       await processInboundS3Queue();

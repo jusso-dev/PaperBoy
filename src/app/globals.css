@@ -2180,6 +2180,26 @@ body:has(.broadcast-workspace) {
 
 /* ---- Delivery worker ------------------------------------------------- */
 
+.delivery-send-queued {
+  align-items: center;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+}
+
+.delivery-send-queued p {
+  margin: 0;
+}
+
+.delivery-jobs-alert {
+  margin-bottom: 18px;
+}
+
 .delivery-counts {
   display: grid;
   gap: 12px;

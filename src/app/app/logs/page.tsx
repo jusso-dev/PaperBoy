@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { sendQueuedMessagesAction } from "./actions";
 import {
   MessageLogTable,
   type MessageLogRow,
@@ -6,6 +7,7 @@ import {
 import { can } from "@/lib/authorization";
 import { listDomains } from "@/lib/domains";
 import { MESSAGE_STATUSES, type MessageStatus } from "@/lib/email-core";
+import { jobsWorkerIsLive } from "@/lib/job-heartbeat";
 import {
   MESSAGE_LOG_PAGE_SIZE,
   MESSAGE_LOG_SORTS,
@@ -29,14 +31,24 @@ const UUID_PATTERN =
 
 type LogsQuery = {
   domain?: string;
+  error?: string;
+  failed?: string;
   from?: string;
   order?: string;
   page?: string;
   q?: string;
+  remaining?: string;
+  retried?: string;
+  sent?: string;
   sort?: string;
   status?: string;
   to?: string;
 };
+
+function integerParam(value: string | undefined): number | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  return Number(value);
+}
 
 type LogsPageProps = {
   searchParams: Promise<LogsQuery>;
@@ -111,6 +123,7 @@ export default async function Logs({ searchParams }: LogsPageProps) {
     searchParams,
   ]);
   const canRead = can(organization.role, "messages.read");
+  const canSend = can(organization.role, "messages.send");
 
   if (!canRead) {
     return (
@@ -178,7 +191,7 @@ export default async function Logs({ searchParams }: LogsPageProps) {
     sortDirection: order,
     status,
   };
-  const [domains, firstPage] = await Promise.all([
+  const [domains, firstPage, jobsLive] = await Promise.all([
     listDomains({
       actorUserId: session.user.id,
       orgId: organization.id,
@@ -187,6 +200,7 @@ export default async function Logs({ searchParams }: LogsPageProps) {
       ...overviewInput,
       offset: (requestedPage - 1) * MESSAGE_LOG_PAGE_SIZE,
     }),
+    jobsWorkerIsLive(),
   ]);
   const totalPages = Math.max(
     1,
@@ -255,6 +269,50 @@ export default async function Logs({ searchParams }: LogsPageProps) {
         filters and timestamps use <code>{session.user.timezone}</code>; storage
         remains UTC.
       </p>
+
+      {!jobsLive ? (
+        <div className="form-error delivery-jobs-alert" role="alert">
+          <p>
+            The jobs worker is not running. Queued mail stays queued until a
+            process with <code>PAPERBOY_PROCESS_TYPE=jobs</code> is up on AWS,
+            with the same <code>DATABASE_URL</code>, <code>REDIS_URL</code>, and
+            SES credentials as web. New sends now deliver from this web process
+            as a fallback.
+          </p>
+        </div>
+      ) : null}
+
+      {query.error === "forbidden" ? (
+        <p className="form-error" role="alert">
+          Your role cannot send queued mail.
+        </p>
+      ) : null}
+      {query.error === "send" ? (
+        <p className="form-error" role="alert">
+          Queued mail could not be sent from the console. Check SES credentials
+          and try again.
+        </p>
+      ) : null}
+      {integerParam(query.sent) !== null ? (
+        <p className="form-success" role="status">
+          Sent {query.sent}, retried {query.retried ?? "0"}, failed{" "}
+          {query.failed ?? "0"}. {query.remaining ?? "0"} still queued
+          {Number(query.remaining) > 0 ? " — send again to continue." : "."}
+        </p>
+      ) : null}
+
+      {canSend && firstPage.counts.queued > 0 ? (
+        <form action={sendQueuedMessagesAction} className="delivery-send-queued">
+          <p>
+            {firstPage.counts.queued} message
+            {firstPage.counts.queued === 1 ? "" : "s"} queued. Send up to 25 now
+            through the same SES path the jobs worker uses.
+          </p>
+          <button className="btn btn-primary" type="submit">
+            Send queued now
+          </button>
+        </form>
+      ) : null}
 
       {filterErrors.length > 0 ? (
         <div className="form-error" role="alert">

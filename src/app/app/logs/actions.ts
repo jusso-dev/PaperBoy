@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { AuthorizationError, can } from "@/lib/authorization";
 import {
   getMessageDetail,
@@ -7,6 +8,7 @@ import {
 } from "@/lib/message-events";
 import { MessageStatusError } from "@/lib/message-status-core";
 import { getMessageDeliveryStatus } from "@/lib/message-statuses";
+import { deliverQueuedOrganizationMessages } from "@/lib/queued-delivery";
 import { requireOrganization } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
 
@@ -132,4 +134,31 @@ export async function getMessageDrawerAction(
   } catch (error) {
     return safeError(error);
   }
+}
+
+export async function sendQueuedMessagesAction(): Promise<void> {
+  const { organization, session } = await requireOrganization();
+  if (!can(organization.role, "messages.send")) {
+    redirect("/app/logs?status=queued&error=forbidden");
+  }
+
+  let result;
+  try {
+    result = await deliverQueuedOrganizationMessages({
+      orgId: organization.id,
+      workerId: `console:${session.user.id}`,
+    });
+  } catch {
+    console.error("PaperBoy console queued send failed.");
+    redirect("/app/logs?status=queued&error=send");
+  }
+
+  const query = new URLSearchParams({
+    failed: String(result.failed),
+    remaining: String(result.remaining),
+    retried: String(result.retried),
+    sent: String(result.delivered),
+    status: "queued",
+  });
+  redirect(`/app/logs?${query.toString()}`);
 }
