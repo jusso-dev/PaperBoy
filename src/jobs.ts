@@ -51,6 +51,8 @@ async function main() {
     { createEnvironmentOutboundRouter },
     { configuredWebhookEncryptionKey },
     { processNextWebhook },
+    { parseInboundS3Config },
+    { processInboundS3Queue },
   ] = await Promise.all([
     getJobQueues(),
     import("@/db"),
@@ -62,7 +64,10 @@ async function main() {
     import("@/lib/outbound-provider-runtime"),
     import("@/lib/webhook-core"),
     import("@/lib/webhook-worker-core"),
+    import("@/lib/inbound-s3-core"),
+    import("@/lib/inbound-s3"),
   ]);
+  const inboundS3Enabled = Boolean(parseInboundS3Config());
   const workerId = workerIdentity();
   const adapter = createEnvironmentOutboundRouter({
     awsSesQuotaGuard: postgresAwsSesQuotaGuard,
@@ -121,6 +126,15 @@ async function main() {
       JOB_QUEUE_NAMES.maintenance,
       async () => {
         await reconcilePendingJobs();
+        if (inboundS3Enabled) {
+          try {
+            await processInboundS3Queue();
+          } catch {
+            console.error(
+              "PaperBoy inbound S3 poll failed; the next reconcile will retry.",
+            );
+          }
+        }
       },
       {
         ...common,
@@ -186,10 +200,19 @@ async function main() {
     },
   );
   await reconcilePendingJobs();
+  if (inboundS3Enabled) {
+    try {
+      await processInboundS3Queue();
+    } catch {
+      console.error(
+        "PaperBoy inbound S3 poll failed; the next reconcile will retry.",
+      );
+    }
+  }
   await Promise.all(workers.map((worker) => worker.waitUntilReady()));
 
   console.error(
-    `PaperBoy BullMQ jobs ${workerId} ready; message concurrency ${positiveInteger("PAPERBOY_MESSAGE_JOB_CONCURRENCY", 5, 100)}, broadcast concurrency ${positiveInteger("PAPERBOY_BROADCAST_JOB_CONCURRENCY", 1, 10)}, signed webhooks ${webhookEncryptionKey ? "enabled" : "disabled"}.`,
+    `PaperBoy BullMQ jobs ${workerId} ready; message concurrency ${positiveInteger("PAPERBOY_MESSAGE_JOB_CONCURRENCY", 5, 100)}, broadcast concurrency ${positiveInteger("PAPERBOY_BROADCAST_JOB_CONCURRENCY", 1, 10)}, signed webhooks ${webhookEncryptionKey ? "enabled" : "disabled"}, inbound S3 ${inboundS3Enabled ? "enabled" : "disabled"}.`,
   );
 
   await new Promise<void>((resolve) => {

@@ -20,7 +20,9 @@ PaperBoy writes that address to the MIME `Reply-To` header on SMTP, Amazon SES, 
 
 ## Receive
 
-Point MX, Cloudflare Email Routing, or an SES receipt rule at a forwarder you control. That forwarder posts the accepted message to PaperBoy with the same organization API key used for sending:
+The jobs process can poll a private S3 prefix the same way Autmin does: list objects, parse each raw RFC 822 message, store it for the unique live organization that owns a recipient domain, then delete the object. Leave `PAPERBOY_INBOUND_S3_BUCKET` and `PAPERBOY_INBOUND_S3_REGION` unset to disable polling. SES setup notifications stay in the bucket. Unmatched or unreadable objects stay for the next poll.
+
+Point MX or an SES receipt rule at that bucket. A forwarder that posts to PaperBoy with an API key still works:
 
 ```sh
 curl https://paperboy.example/api/v1/received-emails \

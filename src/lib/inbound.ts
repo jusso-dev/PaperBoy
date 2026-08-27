@@ -165,9 +165,37 @@ async function enqueueReceivedEmailWebhook(input: {
   }
 }
 
+export async function findLiveOrgForInboundRecipients(
+  to: string[],
+): Promise<string | null> {
+  const organizations = await db.select({ id: orgs.id }).from(orgs);
+  const matches: string[] = [];
+
+  for (const organization of organizations) {
+    try {
+      await authorizeInboundRecipient({
+        environment: "live",
+        orgId: organization.id,
+        to,
+      });
+      matches.push(organization.id);
+    } catch {
+      continue;
+    }
+
+    if (matches.length > 1) {
+      return null;
+    }
+  }
+
+  return matches[0] ?? null;
+}
+
 export async function receiveInboundEmail(input: {
   payload: unknown;
-  principal: ApiKeyPrincipal;
+  principal: Pick<ApiKeyPrincipal, "environment" | "orgId"> & {
+    apiKeyId?: string | null;
+  };
 }): Promise<ReceivedEmailRecord> {
   const email = await parseInboundEmailInput(input.payload);
   const domain = await authorizeInboundRecipient({
@@ -187,7 +215,7 @@ export async function receiveInboundEmail(input: {
       const [inserted] = await tx
         .insert(receivedEmails)
         .values({
-          apiKeyId: input.principal.apiKeyId,
+          apiKeyId: input.principal.apiKeyId ?? null,
           domainId: domain.domainId,
           environment: input.principal.environment,
           from: email.from,
