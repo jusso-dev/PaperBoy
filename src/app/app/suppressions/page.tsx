@@ -70,7 +70,7 @@ export default async function SuppressionsPage({
             : null;
 
   return (
-    <section>
+    <section className="dashboard-wide">
       <h1 className="page-title">Suppressions</h1>
       <p className="page-sub">
         Organization blocklist for {organization.name}. The gate runs before

@@ -5,7 +5,7 @@ export default async function ApiDocsPage() {
   const document = parseOpenApiDocument(await readOpenApiSpec());
 
   return (
-    <section>
+    <section className="dashboard-wide">
       <h1 className="page-title">API reference</h1>
       <p className="page-sub">
         {document.title} {document.version}. Bearer keys select one organization

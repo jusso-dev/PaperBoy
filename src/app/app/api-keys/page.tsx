@@ -32,7 +32,7 @@ export default async function ApiKeysPage({ searchParams }: ApiKeysPageProps) {
     : [];
 
   return (
-    <section>
+    <section className="dashboard-wide">
       <h1 className="page-title">API keys</h1>
       <p className="page-sub">
         Bearer credentials for {organization.name}.

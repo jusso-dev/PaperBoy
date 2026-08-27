@@ -42,7 +42,7 @@ export default async function TemplatesPage({
     : [];
 
   return (
-    <section>
+    <section className="dashboard-wide">
       <h1 className="page-title">Email templates</h1>
       <p className="page-sub">
         Reusable subject, HTML, and plain-text content for {organization.name}.

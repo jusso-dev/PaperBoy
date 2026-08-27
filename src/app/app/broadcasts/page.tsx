@@ -105,7 +105,7 @@ export default async function BroadcastsPage({
     : records.filter((record) => record.status === selectedStatus);
 
   return (
-    <section>
+    <section className="dashboard-wide">
       <h1 className="page-title">Broadcasts</h1>
       <p className="page-sub">
         Send now or schedule stored audience snapshots from console, REST, or MCP.

@@ -9,7 +9,7 @@ import {
 } from "../src/lib/message-status-core.ts";
 
 test("emails log shows subject in the list and body in the drawer", async () => {
-  const [page, table, actions, statuses] = await Promise.all([
+  const [page, table, actions, statuses, css] = await Promise.all([
     readFile(new URL("../src/app/app/logs/page.tsx", import.meta.url), "utf8"),
     readFile(
       new URL("../src/app/app/logs/message-log-table.tsx", import.meta.url),
@@ -17,6 +17,7 @@ test("emails log shows subject in the list and body in the drawer", async () => 
     ),
     readFile(new URL("../src/app/app/logs/actions.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/lib/message-statuses.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/app/globals.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /subject: message\.subject/);
@@ -28,6 +29,10 @@ test("emails log shows subject in the list and body in the drawer", async () => 
   assert.match(page, /jobsWorkerIsLive/);
   assert.match(page, /Send queued now/);
   assert.match(page, /BullMQ jobs worker/);
+  assert.match(page, /className="dashboard-wide"/);
+  assert.match(page, /Newest first/);
+  assert.match(page, /message-log-toolbar/);
+  assert.match(page, /Delivery pages \(end\)/);
   assert.match(actions, /dispatchQueuedOrganizationMessages/);
   assert.match(table, /message-log-subject/);
   assert.match(table, /row\.subject\.trim\(\) \|\| "\(no subject\)"/);
@@ -48,6 +53,12 @@ test("emails log shows subject in the list and body in the drawer", async () => 
   );
   assert.doesNotMatch(page, /limited to the most recent 50/);
   assert.doesNotMatch(table, /Up to 50 matching messages/);
+  assert.match(css, /\.dashboard-main > \.dashboard-wide \{/);
+  assert.match(css, /minmax\(16rem, 2fr\)/);
+  assert.doesNotMatch(
+    css,
+    /grid-template-columns: minmax\(220px, 1\.5fr\) 140px minmax\(160px, 1fr\) 140px 140px 140px 150px auto/,
+  );
 });
 
 test("delivery log query params parse search, sort, and page", () => {

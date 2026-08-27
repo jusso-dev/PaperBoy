@@ -125,7 +125,7 @@ export default async function Logs({ searchParams }: LogsPageProps) {
 
   if (!canRead) {
     return (
-      <section>
+      <section className="dashboard-wide">
         <h1 className="page-title">Delivery</h1>
         <p className="page-sub">
           Durable queue and worker outcomes. Times use{" "}
@@ -258,8 +258,31 @@ export default async function Logs({ searchParams }: LogsPageProps) {
     ]),
   ) as Record<MessageLogSort, string>;
 
+  const pager = (label: string) =>
+    overview.total > MESSAGE_LOG_PAGE_SIZE ? (
+      <nav aria-label={label} className="message-log-pager">
+        {page > 1 ? (
+          <Link href={logsHref({ ...currentFilters, page: page - 1 })}>
+            Previous
+          </Link>
+        ) : (
+          <span>Previous</span>
+        )}
+        <span>
+          Page {page} of {totalPages}
+        </span>
+        {page < totalPages ? (
+          <Link href={logsHref({ ...currentFilters, page: page + 1 })}>
+            Next
+          </Link>
+        ) : (
+          <span>Next</span>
+        )}
+      </nav>
+    ) : null;
+
   return (
-    <section>
+    <section className="dashboard-wide">
       <h1 className="page-title">Delivery</h1>
       <p className="page-sub">
         Durable queue and worker outcomes. Search, filter, and sort every
@@ -382,11 +405,11 @@ export default async function Logs({ searchParams }: LogsPageProps) {
             ))}
           </select>
         </div>
-        <div className="field">
+        <div className="field message-log-order">
           <label htmlFor="log-order">Order</label>
           <select defaultValue={order} id="log-order" name="order">
-            <option value="desc">Newest / high first</option>
-            <option value="asc">Oldest / low first</option>
+            <option value="desc">Newest first</option>
+            <option value="asc">Oldest first</option>
           </select>
         </div>
         <div className="message-log-filter-actions">
@@ -406,38 +429,25 @@ export default async function Logs({ searchParams }: LogsPageProps) {
         ))}
       </dl>
 
-      <p className="message-log-result-count">
-        {overview.total === 0
-          ? "No matching messages."
-          : `Showing ${rangeStart}–${rangeEnd} of ${overview.total} matching message${overview.total === 1 ? "" : "s"}.`}
-      </p>
-      {overview.total > MESSAGE_LOG_PAGE_SIZE ? (
-        <nav aria-label="Delivery pages" className="message-log-pager">
-          {page > 1 ? (
-            <Link href={logsHref({ ...currentFilters, page: page - 1 })}>
-              Previous
-            </Link>
-          ) : (
-            <span>Previous</span>
-          )}
-          <span>
-            Page {page} of {totalPages}
-          </span>
-          {page < totalPages ? (
-            <Link href={logsHref({ ...currentFilters, page: page + 1 })}>
-              Next
-            </Link>
-          ) : (
-            <span>Next</span>
-          )}
-        </nav>
-      ) : null}
+      <div className="message-log-toolbar">
+        <p className="message-log-result-count">
+          {overview.total === 0
+            ? "No matching messages."
+            : `Showing ${rangeStart}–${rangeEnd} of ${overview.total} matching message${overview.total === 1 ? "" : "s"}.`}
+        </p>
+        {pager("Delivery pages")}
+      </div>
       <MessageLogTable
         order={order}
         rows={rows}
         sort={sort}
         sortLinks={sortLinks}
       />
+      {overview.total > MESSAGE_LOG_PAGE_SIZE ? (
+        <div className="message-log-toolbar message-log-pager-after">
+          {pager("Delivery pages (end)")}
+        </div>
+      ) : null}
     </section>
   );
 }

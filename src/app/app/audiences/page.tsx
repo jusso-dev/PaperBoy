@@ -63,7 +63,7 @@ export default async function AudiencesPage({ searchParams }: Props) {
                     : null;
 
   return (
-    <section>
+    <section className="dashboard-wide">
       <h1 className="page-title">Audiences</h1>
       <p className="page-sub">
         Permission-based contacts for {organization.name}. Broadcasts snapshot

@@ -26,8 +26,9 @@ test("broadcast workspace owns the viewport and uses PaperBoy postal styling", a
   assert.match(css, /\.broadcast-workspace \{[\s\S]*width: 100%/);
   assert.match(
     css,
-    /\.dashboard-main > section:not\(\.dashboard-overview\):not\(\.broadcast-workspace\)/,
+    /\.dashboard-main > \.broadcast-workspace,/,
   );
+  assert.match(css, /\.dashboard-main > \.dashboard-wide \{/);
   assert.match(css, /\/\* PaperBoy broadcast dispatch desk\. \*\//);
   assert.doesNotMatch(css, /\/\* Resend-style broadcast inspection workspace\. \*\//);
   assert.match(component, />PaperBoy<\/Link>/);

@@ -183,7 +183,7 @@ export default async function OrganizationPage({
   }
 
   return (
-    <section>
+    <section className="dashboard-wide">
       <h1 className="page-title">Organization</h1>
       <p className="page-sub">
         Membership and permissions for {organization.name}.
