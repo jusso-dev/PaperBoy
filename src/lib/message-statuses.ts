@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { messages, orgMembers } from "@/db/schema";
 import {
@@ -11,6 +11,8 @@ import {
   type MessageDeliveryCounts,
   type MessageDeliveryOverviewRecord,
   type MessageDeliveryStatusRecord,
+  type MessageLogOrder,
+  type MessageLogSort,
 } from "@/lib/message-status-core";
 import { isOutboundProvider } from "@/lib/outbound-provider-core";
 
@@ -134,11 +136,18 @@ function boundedLimit(limit: number | undefined): number {
     : 50;
 }
 
+function searchPattern(query: string): string {
+  return `%${query.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
 function messageFilters(
   orgId: string,
   environment?: "live" | "test",
   filters: MessageDeliveryStatusFilters = {},
 ) {
+  const query = filters.query?.trim();
+  const pattern = query ? searchPattern(query) : null;
+
   return and(
     eq(messages.orgId, orgId),
     environment ? eq(messages.environment, environment) : undefined,
@@ -150,7 +159,49 @@ function messageFilters(
     filters.createdAtBefore
       ? lt(messages.createdAt, filters.createdAtBefore)
       : undefined,
+    pattern
+      ? or(
+          sql`${messages.subject} ilike ${pattern} escape '\\'`,
+          sql`${messages.from} ilike ${pattern} escape '\\'`,
+          sql`${messages.to}::text ilike ${pattern} escape '\\'`,
+        )
+      : undefined,
   );
+}
+
+function orderColumns(
+  sort: MessageLogSort | undefined,
+  order: MessageLogOrder | undefined,
+) {
+  const direction = order === "asc" ? asc : desc;
+  switch (sort) {
+    case "status":
+      return [
+        direction(messages.status),
+        desc(messages.createdAt),
+        desc(messages.id),
+      ];
+    case "subject":
+      return [
+        direction(messages.subject),
+        desc(messages.createdAt),
+        desc(messages.id),
+      ];
+    case "attempts":
+      return [
+        direction(messages.attemptCount),
+        desc(messages.createdAt),
+        desc(messages.id),
+      ];
+    default:
+      return [direction(messages.createdAt), desc(messages.id)];
+  }
+}
+
+function boundedOffset(offset: number | undefined): number {
+  return Number.isInteger(offset) && offset !== undefined && offset >= 0
+    ? offset
+    : 0;
 }
 
 async function listRows(
@@ -170,14 +221,30 @@ async function listRows(
 async function listOverviewRows(
   orgId: string,
   limit?: number,
-  filters: MessageDeliveryStatusFilters = {},
+  filters: MessageDeliveryStatusFilters & {
+    offset?: number;
+    sort?: MessageLogSort;
+    sortDirection?: MessageLogOrder;
+  } = {},
 ) {
   return db
     .select(overviewSelection)
     .from(messages)
     .where(messageFilters(orgId, undefined, filters))
-    .orderBy(desc(messages.createdAt), desc(messages.id))
-    .limit(boundedLimit(limit));
+    .orderBy(...orderColumns(filters.sort, filters.sortDirection))
+    .limit(boundedLimit(limit))
+    .offset(boundedOffset(filters.offset));
+}
+
+async function countMatchingRows(
+  orgId: string,
+  filters: MessageDeliveryStatusFilters = {},
+) {
+  const [row] = await db
+    .select({ count: count() })
+    .from(messages)
+    .where(messageFilters(orgId, undefined, filters));
+  return Number(row?.count ?? 0);
 }
 
 async function countRows(orgId: string) {
@@ -243,16 +310,22 @@ export async function getMessageDeliveryOverview(input: {
   createdAtFrom?: Date;
   domainId?: string;
   limit?: number;
+  offset?: number;
   orgId: string;
+  query?: string;
+  sort?: MessageLogSort;
+  sortDirection?: MessageLogOrder;
   status?: MessageDeliveryStatusRecord["status"];
 }): Promise<{
   counts: MessageDeliveryCounts;
   messages: MessageDeliveryOverviewRecord[];
+  total: number;
 }> {
   await requireMessageRead(input);
-  const [rows, groupedCounts] = await Promise.all([
+  const [rows, groupedCounts, total] = await Promise.all([
     listOverviewRows(input.orgId, input.limit, input),
     countRows(input.orgId),
+    countMatchingRows(input.orgId, input),
   ]);
   const counts: MessageDeliveryCounts = {
     failed: 0,
@@ -268,5 +341,6 @@ export async function getMessageDeliveryOverview(input: {
   return {
     counts,
     messages: rows.map(overviewFromRow),
+    total,
   };
 }

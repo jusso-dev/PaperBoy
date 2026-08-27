@@ -120,7 +120,7 @@ This is a real provider check rather than isolated test-sink traffic. A developm
 
 ## Message logs
 
-The signed-in console at `/app/logs` lists the 50 most recent matching messages with status, sending-domain, and inclusive calendar-date filters. Calendar dates are interpreted in fixed `Australia/Sydney` time before indexed tenant-safe PostgreSQL queries receive UTC boundaries. Selecting a row opens its safe metadata and ordered event timeline in a drawer without a page reload; message HTML, plain text, attachment bytes, event data, and provider payloads are not rendered there.
+The signed-in console at `/app/logs` lists every matching message with search, status, sending-domain, inclusive calendar-date, and sort controls. Results page in hundreds; the matching total is always shown. Search matches subject, sender, and recipients. Calendar dates are interpreted in fixed `Australia/Sydney` time before indexed tenant-safe PostgreSQL queries receive UTC boundaries. Selecting a row opens its safe metadata and ordered event timeline in a drawer without a page reload; message HTML, plain text, attachment bytes, event data, and provider payloads are not rendered there.
 
 Only organization owners can click **Download MIME (.eml)**. The file is an unsigned reconstruction from the stored semantic message and verified private attachment bytes, not a captured provider transmission. PaperBoy never stores Cloudflare's provider-owned DKIM or ARC headers, so those signatures are intentionally absent; Cloudflare Email Service remains the signing authority when it submits the live message. Admins and members can inspect logs and events but cannot download reconstructed MIME.
 

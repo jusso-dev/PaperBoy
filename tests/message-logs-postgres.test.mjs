@@ -47,7 +47,7 @@ test(
       { domains, messageAttachments, messages, orgMembers, orgs, users },
       { listMessageEvents, recordMessageEvent },
       { buildOwnerMessageMime },
-      { listMessageDeliveryStatuses },
+      { getMessageDeliveryOverview, listMessageDeliveryStatuses },
     ] = await Promise.all([
       import("drizzle-orm"),
       import("../src/db/index.ts"),
@@ -214,6 +214,46 @@ test(
         orgId: otherOrgId,
       });
       assert.deepEqual(otherTenant.map((message) => message.id), [otherMessage.id]);
+
+      const searched = await getMessageDeliveryOverview({
+        actorUserId: memberId,
+        orgId,
+        query: "Edition 118",
+      });
+      assert.equal(searched.total, 1);
+      assert.equal(searched.messages[0].id, rows[118].id);
+
+      const recipientSearch = await getMessageDeliveryOverview({
+        actorUserId: memberId,
+        orgId,
+        query: "reader-7@",
+      });
+      assert.equal(recipientSearch.total, 1);
+      assert.equal(recipientSearch.messages[0].id, rows[7].id);
+
+      const paged = await getMessageDeliveryOverview({
+        actorUserId: memberId,
+        limit: 50,
+        offset: 50,
+        orgId,
+      });
+      assert.equal(paged.total, 120);
+      assert.equal(paged.messages.length, 50);
+      assert.equal(paged.messages[0].id, rows[69].id);
+      assert.equal(paged.messages[49].id, rows[20].id);
+
+      const sorted = await getMessageDeliveryOverview({
+        actorUserId: memberId,
+        limit: 20,
+        orgId,
+        sort: "subject",
+        sortDirection: "asc",
+      });
+      const subjects = sorted.messages.map((message) => message.subject);
+      assert.deepEqual(
+        subjects,
+        [...subjects].sort((left, right) => left.localeCompare(right)),
+      );
 
       const timeline = await listMessageEvents({
         actorUserId: memberId,

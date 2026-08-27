@@ -6,6 +6,16 @@ import {
 import { can } from "@/lib/authorization";
 import { listDomains } from "@/lib/domains";
 import { MESSAGE_STATUSES, type MessageStatus } from "@/lib/email-core";
+import {
+  MESSAGE_LOG_PAGE_SIZE,
+  MESSAGE_LOG_SORTS,
+  parseMessageLogOrder,
+  parseMessageLogPage,
+  parseMessageLogQuery,
+  parseMessageLogSort,
+  type MessageLogOrder,
+  type MessageLogSort,
+} from "@/lib/message-status-core";
 import { getMessageDeliveryOverview } from "@/lib/message-statuses";
 import { requireOrganization } from "@/lib/session";
 import {
@@ -17,13 +27,19 @@ import {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+type LogsQuery = {
+  domain?: string;
+  from?: string;
+  order?: string;
+  page?: string;
+  q?: string;
+  sort?: string;
+  status?: string;
+  to?: string;
+};
+
 type LogsPageProps = {
-  searchParams: Promise<{
-    domain?: string;
-    from?: string;
-    status?: string;
-    to?: string;
-  }>;
+  searchParams: Promise<LogsQuery>;
 };
 
 function messageStatus(value: string | undefined): MessageStatus | undefined {
@@ -50,6 +66,45 @@ function eventLabel(status: string): string {
   return "Next attempt";
 }
 
+function logsHref(params: {
+  domain?: string;
+  from?: string;
+  order?: MessageLogOrder;
+  page?: number;
+  q?: string;
+  sort?: MessageLogSort;
+  status?: string;
+  to?: string;
+}): string {
+  const search = new URLSearchParams();
+  if (params.q) search.set("q", params.q);
+  if (params.status) search.set("status", params.status);
+  if (params.domain) search.set("domain", params.domain);
+  if (params.from) search.set("from", params.from);
+  if (params.to) search.set("to", params.to);
+  if (params.sort && params.sort !== "created") search.set("sort", params.sort);
+  if (params.order && params.order !== "desc") search.set("order", params.order);
+  if (params.page && params.page > 1) search.set("page", String(params.page));
+  const query = search.toString();
+  return query ? `/app/logs?${query}` : "/app/logs";
+}
+
+function nextOrder(
+  currentSort: MessageLogSort,
+  currentOrder: MessageLogOrder,
+  nextSort: MessageLogSort,
+): MessageLogOrder {
+  if (currentSort === nextSort) return currentOrder === "asc" ? "desc" : "asc";
+  return nextSort === "subject" || nextSort === "status" ? "asc" : "desc";
+}
+
+const SORT_LABELS: Record<MessageLogSort, string> = {
+  attempts: "Attempts",
+  created: "Queued time",
+  status: "Status",
+  subject: "Subject",
+};
+
 export default async function Logs({ searchParams }: LogsPageProps) {
   const [{ organization, session }, query] = await Promise.all([
     requireOrganization(),
@@ -75,6 +130,10 @@ export default async function Logs({ searchParams }: LogsPageProps) {
     typeof query.domain === "string" && UUID_PATTERN.test(query.domain)
       ? query.domain
       : undefined;
+  const search = parseMessageLogQuery(query.q);
+  const sort = parseMessageLogSort(query.sort);
+  const order = parseMessageLogOrder(query.order);
+  const requestedPage = parseMessageLogPage(query.page);
   let createdAtFrom = query.from
     ? startOfCalendarDate(query.from, session.user.timezone)
     : null;
@@ -97,21 +156,50 @@ export default async function Logs({ searchParams }: LogsPageProps) {
     createdAtBefore = null;
   }
 
-  const [domains, overview] = await Promise.all([
+  const currentFilters = {
+    domain: domainId,
+    from: createdAtFrom ? query.from : undefined,
+    order,
+    q: search,
+    sort,
+    status,
+    to: createdAtBefore ? query.to : undefined,
+  };
+
+  const overviewInput = {
+    actorUserId: session.user.id,
+    createdAtBefore: createdAtBefore ?? undefined,
+    createdAtFrom: createdAtFrom ?? undefined,
+    domainId,
+    limit: MESSAGE_LOG_PAGE_SIZE,
+    orgId: organization.id,
+    query: search,
+    sort,
+    sortDirection: order,
+    status,
+  };
+  const [domains, firstPage] = await Promise.all([
     listDomains({
       actorUserId: session.user.id,
       orgId: organization.id,
     }),
     getMessageDeliveryOverview({
-      actorUserId: session.user.id,
-      createdAtBefore: createdAtBefore ?? undefined,
-      createdAtFrom: createdAtFrom ?? undefined,
-      domainId,
-      limit: 50,
-      orgId: organization.id,
-      status,
+      ...overviewInput,
+      offset: (requestedPage - 1) * MESSAGE_LOG_PAGE_SIZE,
     }),
   ]);
+  const totalPages = Math.max(
+    1,
+    Math.ceil(firstPage.total / MESSAGE_LOG_PAGE_SIZE),
+  );
+  const page = Math.min(requestedPage, totalPages);
+  const overview =
+    page === requestedPage
+      ? firstPage
+      : await getMessageDeliveryOverview({
+          ...overviewInput,
+          offset: (page - 1) * MESSAGE_LOG_PAGE_SIZE,
+        });
   const domainNames = new Map(domains.map((domain) => [domain.id, domain.name]));
   const selectedDomain = domainId && domainNames.has(domainId) ? domainId : "";
   if (domainId && !selectedDomain) {
@@ -142,16 +230,30 @@ export default async function Logs({ searchParams }: LogsPageProps) {
     };
   });
   const hasFilters = Boolean(
-    query.status || query.domain || query.from || query.to,
+    search || query.status || query.domain || query.from || query.to,
   );
+  const rangeStart =
+    overview.total === 0 ? 0 : (page - 1) * MESSAGE_LOG_PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * MESSAGE_LOG_PAGE_SIZE, overview.total);
+  const sortLinks = Object.fromEntries(
+    MESSAGE_LOG_SORTS.map((key) => [
+      key,
+      logsHref({
+        ...currentFilters,
+        order: nextOrder(sort, order, key),
+        sort: key,
+      }),
+    ]),
+  ) as Record<MessageLogSort, string>;
 
   return (
     <section>
       <h1 className="page-title">Delivery</h1>
       <p className="page-sub">
-        Durable queue and worker outcomes. Open a row to read the subject and
-        body. Calendar filters and timestamps use{" "}
-        <code>{session.user.timezone}</code>; storage remains UTC.
+        Durable queue and worker outcomes. Search, filter, and sort every
+        matching message. Open a row to read the subject and body. Calendar
+        filters and timestamps use <code>{session.user.timezone}</code>; storage
+        remains UTC.
       </p>
 
       {filterErrors.length > 0 ? (
@@ -163,6 +265,16 @@ export default async function Logs({ searchParams }: LogsPageProps) {
       ) : null}
 
       <form className="card message-log-filters" method="get">
+        <div className="field message-log-search">
+          <label htmlFor="log-query">Search</label>
+          <input
+            defaultValue={search ?? ""}
+            id="log-query"
+            name="q"
+            placeholder="Subject, recipient, or sender"
+            type="search"
+          />
+        </div>
         <div className="field">
           <label htmlFor="log-status">Status</label>
           <select defaultValue={status ?? ""} id="log-status" name="status">
@@ -203,9 +315,26 @@ export default async function Logs({ searchParams }: LogsPageProps) {
             type="date"
           />
         </div>
+        <div className="field">
+          <label htmlFor="log-sort">Sort</label>
+          <select defaultValue={sort} id="log-sort" name="sort">
+            {MESSAGE_LOG_SORTS.map((value) => (
+              <option key={value} value={value}>
+                {SORT_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="log-order">Order</label>
+          <select defaultValue={order} id="log-order" name="order">
+            <option value="desc">Newest / high first</option>
+            <option value="asc">Oldest / low first</option>
+          </select>
+        </div>
         <div className="message-log-filter-actions">
           <button className="btn btn-primary" type="submit">
-            Apply filters
+            Apply
           </button>
           {hasFilters ? <Link href="/app/logs">Clear</Link> : null}
         </div>
@@ -221,10 +350,37 @@ export default async function Logs({ searchParams }: LogsPageProps) {
       </dl>
 
       <p className="message-log-result-count">
-        Showing {rows.length} matching message{rows.length === 1 ? "" : "s"}
-        {rows.length === 50 ? " · limited to the most recent 50" : ""}.
+        {overview.total === 0
+          ? "No matching messages."
+          : `Showing ${rangeStart}–${rangeEnd} of ${overview.total} matching message${overview.total === 1 ? "" : "s"}.`}
       </p>
-      <MessageLogTable rows={rows} />
+      {overview.total > MESSAGE_LOG_PAGE_SIZE ? (
+        <nav aria-label="Delivery pages" className="message-log-pager">
+          {page > 1 ? (
+            <Link href={logsHref({ ...currentFilters, page: page - 1 })}>
+              Previous
+            </Link>
+          ) : (
+            <span>Previous</span>
+          )}
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          {page < totalPages ? (
+            <Link href={logsHref({ ...currentFilters, page: page + 1 })}>
+              Next
+            </Link>
+          ) : (
+            <span>Next</span>
+          )}
+        </nav>
+      ) : null}
+      <MessageLogTable
+        order={order}
+        rows={rows}
+        sort={sort}
+        sortLinks={sortLinks}
+      />
     </section>
   );
 }

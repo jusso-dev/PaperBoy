@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { SandboxedHtmlPreview } from "@/components/broadcasts/sandboxed-html-preview";
+import type { MessageLogOrder, MessageLogSort } from "@/lib/message-status-core";
 import { templateBrowserPreviewDocument } from "@/lib/template-browser-preview";
 import {
   getMessageDrawerAction,
@@ -36,7 +37,38 @@ function byteSize(value: number): string {
   return `${(value / 1_048_576).toFixed(1)} MiB`;
 }
 
-export function MessageLogTable({ rows }: { rows: MessageLogRow[] }) {
+function SortHeader({
+  active,
+  children,
+  href,
+  order,
+}: {
+  active: boolean;
+  children: string;
+  href: string;
+  order: MessageLogOrder;
+}) {
+  return (
+    <th aria-sort={active ? (order === "asc" ? "ascending" : "descending") : "none"} scope="col">
+      <a className={active ? "message-log-sort is-active" : "message-log-sort"} href={href}>
+        {children}
+        {active ? (order === "asc" ? " ↑" : " ↓") : ""}
+      </a>
+    </th>
+  );
+}
+
+export function MessageLogTable({
+  order,
+  rows,
+  sort,
+  sortLinks,
+}: {
+  order: MessageLogOrder;
+  rows: MessageLogRow[];
+  sort: MessageLogSort;
+  sortLinks: Record<MessageLogSort, string>;
+}) {
   const [selected, setSelected] = useState<MessageLogRow | null>(null);
   const [result, setResult] = useState<MessageDrawerResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -90,16 +122,40 @@ export function MessageLogTable({ rows }: { rows: MessageLogRow[] }) {
       <div className="table-scroll">
         <table className="table delivery-table message-log-table">
           <caption>
-            Up to 50 matching messages. Select a row to read the subject, body,
-            and event timeline without leaving this page.
+            Matching messages. Select a row to read the subject, body, and event
+            timeline without leaving this page. Column headers change sort order.
           </caption>
           <thead>
             <tr>
-              <th scope="col">Email</th>
-              <th scope="col">State</th>
+              <SortHeader
+                active={sort === "subject"}
+                href={sortLinks.subject}
+                order={order}
+              >
+                Email
+              </SortHeader>
+              <SortHeader
+                active={sort === "status"}
+                href={sortLinks.status}
+                order={order}
+              >
+                State
+              </SortHeader>
               <th scope="col">Domain</th>
-              <th scope="col">Attempts</th>
-              <th scope="col">Queued</th>
+              <SortHeader
+                active={sort === "attempts"}
+                href={sortLinks.attempts}
+                order={order}
+              >
+                Attempts
+              </SortHeader>
+              <SortHeader
+                active={sort === "created"}
+                href={sortLinks.created}
+                order={order}
+              >
+                Queued
+              </SortHeader>
               <th scope="col">State time</th>
               <th scope="col">Failure</th>
             </tr>

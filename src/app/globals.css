@@ -2247,7 +2247,7 @@ body:has(.broadcast-workspace) {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: 140px minmax(180px, 1fr) 150px 150px auto;
+  grid-template-columns: minmax(220px, 1.5fr) 140px minmax(160px, 1fr) 140px 140px 140px 150px auto;
   margin-bottom: 18px;
 }
 
@@ -2265,6 +2265,30 @@ body:has(.broadcast-workspace) {
   color: var(--ink-soft);
   font-size: 13px;
   margin-bottom: 8px;
+}
+
+.message-log-pager {
+  align-items: center;
+  color: var(--ink-soft);
+  display: flex;
+  font-size: 13px;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.message-log-pager span:first-child,
+.message-log-pager span:last-child {
+  opacity: 0.45;
+}
+
+.message-log-sort {
+  color: inherit;
+  text-decoration: none;
+}
+
+.message-log-sort:hover,
+.message-log-sort.is-active {
+  text-decoration: underline;
 }
 
 .message-log-row {
