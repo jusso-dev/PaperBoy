@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { audiences, contacts, orgMembers } from "@/db/schema";
 import {
@@ -17,6 +17,7 @@ import {
   type OrgPermission,
 } from "@/lib/authorization";
 import { isPostgresErrorCode } from "@/lib/postgres-errors";
+import { containsPattern } from "@/lib/postgres-search";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -141,12 +142,21 @@ async function readContact(input: {
 export async function listAudiences(input: {
   actorUserId: string;
   orgId: string;
+  search?: string | null;
 }): Promise<AudienceRecord[]> {
   await requireOrganizationPermission({ ...input, permission: "audiences.read" });
+  const pattern = input.search ? containsPattern(input.search) : null;
   const rows = await db
     .select(audienceSelection)
     .from(audiences)
-    .where(eq(audiences.orgId, input.orgId))
+    .where(
+      and(
+        eq(audiences.orgId, input.orgId),
+        pattern
+          ? sql`${audiences.name} ilike ${pattern} escape '\\'`
+          : undefined,
+      ),
+    )
     .orderBy(desc(audiences.updatedAt), asc(audiences.name));
   return Promise.all(rows.map(audienceRecord));
 }
@@ -228,13 +238,25 @@ export async function listContacts(input: {
   actorUserId: string;
   audienceId: string;
   orgId: string;
+  search?: string | null;
 }): Promise<ContactRecord[]> {
   await requireOrganizationPermission({ ...input, permission: "audiences.read" });
   await readAudience(input);
+  const pattern = input.search ? containsPattern(input.search) : null;
   return db
     .select(contactSelection)
     .from(contacts)
-    .where(eq(contacts.audienceId, input.audienceId))
+    .where(
+      and(
+        eq(contacts.audienceId, input.audienceId),
+        pattern
+          ? or(
+              sql`${contacts.email} ilike ${pattern} escape '\\'`,
+              sql`${contacts.name} ilike ${pattern} escape '\\'`,
+            )
+          : undefined,
+      ),
+    )
     .orderBy(asc(contacts.email));
 }
 

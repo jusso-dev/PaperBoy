@@ -2079,6 +2079,33 @@ body:has(.broadcast-workspace) {
   text-transform: uppercase;
 }
 
+.audience-search-form {
+  border-bottom: 1px solid var(--rule);
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 12px;
+}
+
+.contact-search-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  margin: 14px 0 18px;
+}
+
+.audience-search-form .field,
+.contact-search-form .field {
+  margin-bottom: 0;
+}
+
+.audience-search-actions,
+.contact-search-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .audience-picker ul {
   list-style: none;
   margin: 0;
@@ -2721,7 +2748,8 @@ body:has(.broadcast-workspace) {
 
   .suppression-create-form,
   .suppression-filter-form,
-  .suppression-import-form {
+  .suppression-import-form,
+  .contact-search-form {
     align-items: stretch;
     grid-template-columns: 1fr;
   }

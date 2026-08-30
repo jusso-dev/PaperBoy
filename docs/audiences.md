@@ -14,6 +14,8 @@ PaperBoy supports permission-based lists. The console and documentation do not o
 
 Cross-organization IDs remain hidden as 404. Audience names are case-insensitively unique per organization. Contact addresses are unique inside an audience. Deleting an audience cascades to its contacts and requires explicit console/MCP confirmation. Console bulk deletion can remove every unsubscribed contact from one audience while retaining organization suppression records, so deleted addresses remain opted out.
 
+The signed-in console at `/app/audiences` searches both lists. `audienceQuery` filters the audience picker by name; `contactQuery` filters the selected audience's contacts by email or name. Both are case-insensitive substring matches evaluated by tenant-scoped PostgreSQL queries, not in the browser, and `%`, `_`, and `\` match literally. A contact search never rescopes the unsubscribed count beside it, which continues to describe the whole audience. Because that bulk deletion always removes every unsubscribed contact in the audience rather than only the rows on screen, it is refused while a contact search is active: the console disables the control, and the server action independently rejects any submission carrying an active search term, redirecting back with an error and the search intact. Clear the search to delete. Selecting an audience keeps it selected even when a picker search excludes it. Search is console-only; the REST contact and audience list endpoints take no query parameter.
+
 CSV must be valid UTF-8 and at most 1 MiB per import. The first column is `email`; an optional second column is `name`. Repeated imports can grow an audience without a PaperBoy contact-count cap.
 
 ```csv

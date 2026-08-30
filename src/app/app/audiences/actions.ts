@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { AudienceError, MAX_CONTACT_CSV_BYTES } from "@/lib/audience-core";
+import {
+  AudienceError,
+  MAX_CONTACT_CSV_BYTES,
+  parseAudienceSearch,
+} from "@/lib/audience-core";
 import {
   createAudience,
   createContact,
@@ -134,6 +138,19 @@ export async function deleteUnsubscribedContactsAction(formData: FormData) {
   const audienceId = String(formData.get("audienceId") ?? "");
   if (formData.get("confirm") !== "yes") {
     redirect(destination(audienceId, { error: "Confirm unsubscribed contact deletion." }));
+  }
+  // This removes every unsubscribed contact in the audience, never only the rows
+  // a search happens to show, so it is refused outright while one is active.
+  // The console also disables the control; this is the authoritative check.
+  const activeSearch = parseAudienceSearch(formData.get("contactQuery"));
+  if (activeSearch) {
+    redirect(
+      destination(audienceId, {
+        contactQuery: activeSearch,
+        error:
+          "Clear the contact search before deleting unsubscribed contacts. This removes every unsubscribed contact in the audience, not only the rows shown.",
+      }),
+    );
   }
   let result: Awaited<ReturnType<typeof deleteUnsubscribedContacts>>;
   try {
