@@ -112,3 +112,32 @@ test("inbound get returns the fields a support desk fetches after email.received
     to: ["reply+abc123@mail.snagspot.test"],
   });
 });
+
+test("inbound receive discards returned auto-replies without storing them", async () => {
+  const { received, services } = dependencies();
+  services.receive = async () => ({ discarded: true, reason: "auto_reply" });
+  const response = await handleReceiveInboundEmailRequest(
+    new Request("http://paperboy.test/api/v1/received-emails", {
+      body: JSON.stringify({
+        from: "jane@example.com",
+        subject: "Automatic reply: Re: My ticket",
+        text: "I am out of the office.",
+        to: "hello@mail.snagspot.test",
+      }),
+      headers: {
+        Authorization: `Bearer ${generated.rawKey}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    }),
+    services,
+  );
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), {
+    discarded: true,
+    object: "email",
+    reason: "auto_reply",
+  });
+  assert.equal(received.length, 0);
+});

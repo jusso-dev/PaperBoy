@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 process.env.DATABASE_URL ??= "postgres://paperboy@127.0.0.1:5433/paperboy";
@@ -72,6 +73,64 @@ test("inbound S3 poll deletes only objects that process successfully", async () 
   assert.equal(result.deleted, 2);
   assert.equal(result.skipped, 1);
   assert.equal(result.failed, 1);
+});
+
+test("inbound S3 poll deletes returned bounce reports without storing them", async () => {
+  const bounce = await readFile(
+    new URL("fixtures/feedback/hard-bounce.eml", import.meta.url),
+    "utf8",
+  );
+  const objects = new Map([["inbound/bounce", Buffer.from(bounce)]]);
+  const received = [];
+  const client = {
+    async send(command) {
+      const name = command.constructor.name;
+      if (name === "ListObjectsV2Command") {
+        return {
+          Contents: [...objects.keys()].map((Key) => ({ Key })),
+          IsTruncated: false,
+        };
+      }
+      if (name === "GetObjectCommand") {
+        const value = objects.get(command.input.Key);
+        if (!value) throw new Error("NoSuchKey");
+        return {
+          Body: {
+            async transformToByteArray() {
+              return new Uint8Array(value);
+            },
+          },
+        };
+      }
+      if (name === "DeleteObjectCommand") {
+        objects.delete(command.input.Key);
+        return {};
+      }
+      throw new Error(name);
+    },
+  };
+
+  const { processInboundS3Queue } = await import("../src/lib/inbound-s3.ts");
+  const result = await processInboundS3Queue({
+    client,
+    environment: {
+      PAPERBOY_INBOUND_S3_BUCKET: "paperboy-inbound",
+      PAPERBOY_INBOUND_S3_REGION: "ap-northeast-1",
+    },
+    receive: async () => {
+      received.push("stored");
+      throw new Error("sinkholed mail must not be stored");
+    },
+    resolveOrg: async () => {
+      received.push("resolved");
+      throw new Error("sinkholed mail must not resolve an organization");
+    },
+  });
+
+  assert.equal(result.deleted, 1);
+  assert.equal(result.failed, 0);
+  assert.deepEqual(received, []);
+  assert.equal(objects.has("inbound/bounce"), false);
 });
 
 test("inbound S3 poll leaves unmatched mail in the bucket", async () => {

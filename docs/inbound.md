@@ -44,6 +44,8 @@ Parsed fields also work:
 
 A live key is accepted only when at least one `to` domain is a verified organization sending domain. Plus-addresses are valid. Test keys store into the test environment without live DNS checks. Identical content returns the original ID.
 
+Returned mail is a sinkhole. Out-of-office auto-replies, vacation notices, DSN bounces, and similar delivery reports are accepted (`202` on HTTP, deleted from the S3 prefix) and never stored. They do not fire `email.received`. Correlate real bounce and complaint reports through the feedback ingest path instead.
+
 ## Webhook and fetch
 
 If the organization has a webhook endpoint, PaperBoy queues `email.received`:

@@ -9,11 +9,12 @@ import {
 import type { ApiKeyPrincipal } from "@/lib/api-key-auth";
 import { DomainError } from "@/lib/domain-core";
 import { authorizeSendingDomain } from "@/lib/domains";
-import { parseEmailAddressField } from "@/lib/email-core";
 import { MessageStatusError } from "@/lib/message-status-core";
 import {
   inboundRecipientDomains,
+  inboundSinkholeReasonFromPayload,
   parseInboundEmailInput,
+  type DiscardedInboundEmail,
 } from "@/lib/inbound-core";
 import { enqueuePendingWebhook } from "@/lib/job-queue";
 import { isPostgresErrorCode } from "@/lib/postgres-errors";
@@ -33,6 +34,8 @@ export type ReceivedEmailRecord = {
   text: string | null;
   to: string[];
 };
+
+export type { DiscardedInboundEmail };
 
 function isUniqueViolation(error: unknown): boolean {
   return isPostgresErrorCode(error, "23505");
@@ -196,7 +199,12 @@ export async function receiveInboundEmail(input: {
   principal: Pick<ApiKeyPrincipal, "environment" | "orgId"> & {
     apiKeyId?: string | null;
   };
-}): Promise<ReceivedEmailRecord> {
+}): Promise<ReceivedEmailRecord | DiscardedInboundEmail> {
+  const discarded = inboundSinkholeReasonFromPayload(input.payload);
+  if (discarded) {
+    return { discarded: true, reason: discarded };
+  }
+
   const email = await parseInboundEmailInput(input.payload);
   const domain = await authorizeInboundRecipient({
     environment: input.principal.environment,
@@ -280,22 +288,5 @@ export async function getReceivedEmail(input: {
   return recordFromRow(row);
 }
 
-export function inboundEmailApiBody(record: ReceivedEmailRecord) {
-  return {
-    bcc: record.bcc,
-    cc: record.cc,
-    created_at: record.createdAt.toISOString(),
-    from: parseEmailAddressField(record.from)?.address ?? record.from,
-    html: record.html,
-    id: record.id,
-    message_id: record.messageId,
-    object: "email" as const,
-    subject: record.subject,
-    text: record.text,
-    to: record.to.map(
-      (address) => parseEmailAddressField(address)?.address ?? address,
-    ),
-  };
-}
-
+export { inboundEmailApiBody } from "@/lib/inbound-core";
 export type { InboundEmailInput } from "@/lib/inbound-core";

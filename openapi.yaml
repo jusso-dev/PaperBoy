@@ -175,8 +175,10 @@ paths:
         Accepts a raw RFC 822 `email` string or parsed from/to/subject/html/text
         fields. Live keys require at least one recipient domain to be a verified
         organization sending domain, including plus-addresses used by support
-        desks. A configured organization webhook receives `email.received` with
-        routing metadata only; fetch the body with GET /api/v1/received-emails/{emailId}.
+        desks. Returned mail such as out-of-office auto-replies and bounce
+        reports is discarded without storage or `email.received`. A configured
+        organization webhook receives `email.received` with routing metadata
+        only; fetch the body with GET /api/v1/received-emails/{emailId}.
       requestBody:
         required: true
         content:
@@ -202,6 +204,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReceivedEmailAccepted'
+        '202':
+          description: Returned auto-reply or bounce discarded without storage.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceivedEmailDiscarded'
         '400':
           $ref: '#/components/responses/InvalidJson'
         '401':
@@ -2289,6 +2300,20 @@ components:
         object:
           type: string
           const: email
+    ReceivedEmailDiscarded:
+      type: object
+      additionalProperties: false
+      required: [discarded, object, reason]
+      properties:
+        discarded:
+          type: boolean
+          const: true
+        object:
+          type: string
+          const: email
+        reason:
+          type: string
+          enum: [auto_reply, bounce]
     ReceivedEmail:
       type: object
       additionalProperties: false

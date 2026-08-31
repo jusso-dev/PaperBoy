@@ -6,7 +6,11 @@ import {
   type GetObjectCommandOutput,
   type ListObjectsV2CommandOutput,
 } from "@aws-sdk/client-s3";
-import { MAX_INBOUND_RAW_BYTES, parseInboundEmailInput } from "@/lib/inbound-core";
+import {
+  inboundSinkholeReasonFromPayload,
+  MAX_INBOUND_RAW_BYTES,
+  parseInboundEmailInput,
+} from "@/lib/inbound-core";
 import {
   findLiveOrgForInboundRecipients,
   receiveInboundEmail,
@@ -103,6 +107,10 @@ export async function processInboundS3Queue(
     getObject: (key) => readInboundObject(client, config, key),
     keys: await listInboundObjectKeys(client, config),
     processEmail: async (raw) => {
+      if (inboundSinkholeReasonFromPayload({ email: raw })) {
+        return true;
+      }
+
       const parsed = await parseInboundEmailInput({ email: raw });
       const orgId = await resolveOrg(parsed.to);
       if (!orgId) return false;

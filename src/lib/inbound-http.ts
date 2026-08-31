@@ -5,11 +5,11 @@ import {
   emailJson,
 } from "@/lib/email-http";
 import {
-  getReceivedEmail,
   inboundEmailApiBody,
-  receiveInboundEmail,
-  type ReceivedEmailRecord,
-} from "@/lib/inbound";
+  isDiscardedInboundEmail,
+  type DiscardedInboundEmail,
+} from "@/lib/inbound-core";
+import type { ReceivedEmailRecord } from "@/lib/inbound";
 import { MessageStatusError } from "@/lib/message-status-core";
 
 export type InboundHttpDependencies = {
@@ -21,7 +21,7 @@ export type InboundHttpDependencies = {
   receive?: (
     principal: ApiKeyPrincipal,
     payload: unknown,
-  ) => Promise<ReceivedEmailRecord>;
+  ) => Promise<ReceivedEmailRecord | DiscardedInboundEmail>;
 };
 
 function unauthorized(): Response {
@@ -92,9 +92,23 @@ export async function handleReceiveInboundEmailRequest(
   }
 
   try {
-    const receive = dependencies.receive ?? ((actor, body) =>
-      receiveInboundEmail({ payload: body, principal: actor }));
+    const receive =
+      dependencies.receive ??
+      (async (actor, body) => {
+        const { receiveInboundEmail } = await import("@/lib/inbound");
+        return receiveInboundEmail({ payload: body, principal: actor });
+      });
     const email = await receive(principal, payload);
+    if (isDiscardedInboundEmail(email)) {
+      return emailJson(
+        {
+          discarded: true,
+          object: "email",
+          reason: email.reason,
+        },
+        202,
+      );
+    }
     return emailJson({ id: email.id, object: "email" }, email.replayed ? 200 : 201);
   } catch (error) {
     return inboundFailure(error);
@@ -112,12 +126,14 @@ export async function handleGetReceivedEmailRequest(
   try {
     const get =
       dependencies.get ??
-      ((actor, id) =>
-        getReceivedEmail({
+      (async (actor, id) => {
+        const { getReceivedEmail } = await import("@/lib/inbound");
+        return getReceivedEmail({
           environment: actor.environment,
           orgId: actor.orgId,
           receivedEmailId: id,
-        }));
+        });
+      });
     const email = await get(principal, receivedEmailId);
     return emailJson(inboundEmailApiBody(email), 200);
   } catch (error) {
