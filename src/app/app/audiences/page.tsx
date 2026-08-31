@@ -9,7 +9,12 @@ import {
   updateAudienceAction,
   updateContactAction,
 } from "./actions";
-import { listAudiences, listContacts } from "@/lib/audiences";
+import {
+  AudienceError,
+  MAX_AUDIENCE_SEARCH_LENGTH,
+  parseAudienceSearch,
+} from "@/lib/audience-core";
+import { getAudience, listAudiences, listContacts } from "@/lib/audiences";
 import { can } from "@/lib/authorization";
 import { requireOrganization } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
@@ -17,6 +22,8 @@ import { formatDateTime } from "@/lib/time";
 type Props = {
   searchParams: Promise<{
     audience?: string;
+    audienceQuery?: string;
+    contactQuery?: string;
     created?: string;
     deleted?: string;
     error?: string;
@@ -30,6 +37,37 @@ function count(value: string | undefined) {
   return value && /^\d+$/.test(value) ? Number(value) : 0;
 }
 
+function audiencesHref(params: {
+  audience?: string;
+  audienceQuery?: string | null;
+  contactQuery?: string | null;
+}): string {
+  const search = new URLSearchParams();
+  if (params.audience) search.set("audience", params.audience);
+  if (params.audienceQuery) search.set("audienceQuery", params.audienceQuery);
+  if (params.contactQuery) search.set("contactQuery", params.contactQuery);
+  const query = search.toString();
+  return query ? `/app/audiences?${query}` : "/app/audiences";
+}
+
+/**
+ * Resolves an explicitly selected audience that the sidebar search has filtered
+ * out of view. Without this the `records[0]` fallback below would silently swap
+ * the contact table over to a different audience's rows.
+ */
+async function selectedOutsideSearch(input: {
+  actorUserId: string;
+  audienceId: string;
+  orgId: string;
+}) {
+  try {
+    return await getAudience(input);
+  } catch (error) {
+    if (error instanceof AudienceError) return null;
+    throw error;
+  }
+}
+
 export default async function AudiencesPage({ searchParams }: Props) {
   const [{ organization, session }, status] = await Promise.all([
     requireOrganization(),
@@ -37,18 +75,41 @@ export default async function AudiencesPage({ searchParams }: Props) {
   ]);
   const canRead = can(organization.role, "audiences.read");
   const canManage = can(organization.role, "audiences.manage");
+  const audienceQuery = parseAudienceSearch(status.audienceQuery);
+  const contactQuery = parseAudienceSearch(status.contactQuery);
   const records = canRead
-    ? await listAudiences({ actorUserId: session.user.id, orgId: organization.id })
+    ? await listAudiences({
+        actorUserId: session.user.id,
+        orgId: organization.id,
+        search: audienceQuery,
+      })
     : [];
-  const selected = records.find((record) => record.id === status.audience) ?? records[0] ?? null;
+  const matched = records.find((record) => record.id === status.audience) ?? null;
+  const selected =
+    matched
+    ?? (canRead && status.audience && audienceQuery
+      ? await selectedOutsideSearch({
+          actorUserId: session.user.id,
+          audienceId: status.audience,
+          orgId: organization.id,
+        })
+      : null)
+    ?? records[0]
+    ?? null;
   const contacts = selected
     ? await listContacts({
         actorUserId: session.user.id,
         audienceId: selected.id,
         orgId: organization.id,
+        search: contactQuery,
       })
     : [];
-  const unsubscribedCount = contacts.filter((contact) => contact.unsubscribedAt).length;
+  // Counted from the audience itself, never from the filtered rows above: this
+  // number labels the bulk delete, which always removes every unsubscribed
+  // contact in the audience regardless of any search.
+  const unsubscribedCount = selected
+    ? selected.contactCount - selected.activeContactCount
+    : 0;
   const saved =
     status.saved === "audience-created" ? "Audience created."
       : status.saved === "audience-updated" ? "Audience updated."
@@ -89,13 +150,45 @@ export default async function AudiencesPage({ searchParams }: Props) {
         <div className="audience-layout">
           <aside className="card audience-picker">
             <h2>Audience list</h2>
-            {records.length === 0 ? <p>No audiences yet.</p> : (
+            <form className="audience-search-form" method="get">
+              <div className="field">
+                <label htmlFor="audience-query">Search audiences</label>
+                <input
+                  defaultValue={audienceQuery ?? ""}
+                  id="audience-query"
+                  maxLength={MAX_AUDIENCE_SEARCH_LENGTH}
+                  name="audienceQuery"
+                  placeholder="Weekly"
+                  type="search"
+                />
+              </div>
+              {status.audience ? (
+                <input name="audience" type="hidden" value={status.audience} />
+              ) : null}
+              {contactQuery ? (
+                <input name="contactQuery" type="hidden" value={contactQuery} />
+              ) : null}
+              <div className="audience-search-actions">
+                <button className="btn btn-compact" type="submit">Search</button>
+                {audienceQuery ? (
+                  <Link
+                    className="btn btn-compact"
+                    href={audiencesHref({ audience: status.audience, contactQuery })}
+                  >
+                    Clear
+                  </Link>
+                ) : null}
+              </div>
+            </form>
+            {records.length === 0 ? (
+              <p>{audienceQuery ? "No audiences match that search." : "No audiences yet."}</p>
+            ) : (
               <ul>
                 {records.map((record) => (
                   <li key={record.id}>
                     <Link
                       aria-current={selected?.id === record.id ? "page" : undefined}
-                      href={`/app/audiences?audience=${record.id}`}
+                      href={audiencesHref({ audience: record.id, audienceQuery })}
                     >
                       <strong>{record.name}</strong>
                       <span>{record.activeContactCount} active · {record.contactCount} total</span>
@@ -177,32 +270,83 @@ export default async function AudiencesPage({ searchParams }: Props) {
                   <div className="audience-contacts-heading">
                     <div>
                       <h2>Contacts</h2>
-                      <p>{unsubscribedCount} unsubscribed</p>
+                      <p>
+                        {contactQuery
+                          ? `${contacts.length} of ${selected.contactCount} shown · ${unsubscribedCount} unsubscribed in this audience`
+                          : `${unsubscribedCount} unsubscribed`}
+                      </p>
                     </div>
                     {canManage && unsubscribedCount > 0 ? (
                       <form action={deleteUnsubscribedContactsAction} className="audience-bulk-delete-form">
                         <input name="audienceId" type="hidden" value={selected.id} />
+                        {contactQuery ? (
+                          <input name="contactQuery" type="hidden" value={contactQuery} />
+                        ) : null}
                         <label className="confirmation-control">
-                          <input name="confirm" required type="checkbox" value="yes" />
+                          <input
+                            disabled={Boolean(contactQuery)}
+                            name="confirm"
+                            required
+                            type="checkbox"
+                            value="yes"
+                          />
                           Confirm removal
                         </label>
-                        <button className="btn btn-danger btn-compact" type="submit">
-                          Delete all unsubscribed
+                        <button
+                          aria-describedby="audience-bulk-delete-note"
+                          className="btn btn-danger btn-compact"
+                          disabled={Boolean(contactQuery)}
+                          type="submit"
+                        >
+                          Delete all {unsubscribedCount} unsubscribed
                         </button>
                       </form>
                     ) : null}
                   </div>
+
                   {canManage && unsubscribedCount > 0 ? (
-                    <p className="audience-bulk-delete-note">
-                      Removes unsubscribed contact rows from this audience. Organization suppression records remain, so those addresses stay opted out.
+                    <p className="audience-bulk-delete-note" id="audience-bulk-delete-note">
+                      Removes every unsubscribed contact row in this audience, never only the rows shown. Organization suppression records remain, so those addresses stay opted out.
+                      {contactQuery
+                        ? " Unavailable while a contact search is active; clear the search to delete."
+                        : null}
                     </p>
                   ) : null}
+
+                  <form className="contact-search-form" method="get">
+                    <input name="audience" type="hidden" value={selected.id} />
+                    {audienceQuery ? (
+                      <input name="audienceQuery" type="hidden" value={audienceQuery} />
+                    ) : null}
+                    <div className="field">
+                      <label htmlFor="contact-query">Search contacts</label>
+                      <input
+                        defaultValue={contactQuery ?? ""}
+                        id="contact-query"
+                        maxLength={MAX_AUDIENCE_SEARCH_LENGTH}
+                        name="contactQuery"
+                        placeholder="Email or name"
+                        type="search"
+                      />
+                    </div>
+                    <div className="contact-search-actions">
+                      <button className="btn btn-compact" type="submit">Search</button>
+                      {contactQuery ? (
+                        <Link
+                          className="btn btn-compact"
+                          href={audiencesHref({ audience: selected.id, audienceQuery })}
+                        >
+                          Clear
+                        </Link>
+                      ) : null}
+                    </div>
+                  </form>
                   <div className="table-scroll">
                     <table className="table contact-table">
                       <thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Updated</th>{canManage ? <th>Manage</th> : null}</tr></thead>
                       <tbody>
                         {contacts.length === 0 ? (
-                          <tr><td colSpan={canManage ? 5 : 4}>No contacts in this audience.</td></tr>
+                          <tr><td colSpan={canManage ? 5 : 4}>{contactQuery ? "No contacts match that search." : "No contacts in this audience."}</td></tr>
                         ) : contacts.map((contact) => (
                           <tr key={contact.id}>
                             <td>{canManage ? <input aria-label={`Email for ${contact.email}`} defaultValue={contact.email} form={`contact-${contact.id}`} maxLength={254} name="email" required type="email" /> : contact.email}</td>

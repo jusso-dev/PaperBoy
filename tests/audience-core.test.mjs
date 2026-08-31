@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AudienceError,
+  MAX_AUDIENCE_SEARCH_LENGTH,
+  parseAudienceSearch,
   parseContactCsv,
   parseCreateAudienceInput,
   parseCreateContactInput,
@@ -112,4 +114,20 @@ test("unsubscribe URLs and fallback footers are provider-neutral", () => {
     withUnsubscribeFooter({ html: "{{unsubscribe_url}}", text: null }).html,
     "{{unsubscribe_url}}",
   );
+});
+
+test("audience search terms are trimmed, bounded, and case-preserving", () => {
+  assert.equal(parseAudienceSearch("  Weekly  "), "Weekly");
+  assert.equal(parseAudienceSearch("Ann"), "Ann");
+  assert.equal(parseAudienceSearch(""), null);
+  assert.equal(parseAudienceSearch("   "), null);
+  assert.equal(parseAudienceSearch(undefined), null);
+  assert.equal(parseAudienceSearch(null), null);
+  assert.equal(parseAudienceSearch(42), null);
+  assert.equal(parseAudienceSearch(["weekly"]), null);
+  assert.equal(
+    parseAudienceSearch("x".repeat(MAX_AUDIENCE_SEARCH_LENGTH + 40)).length,
+    MAX_AUDIENCE_SEARCH_LENGTH,
+  );
+  assert.equal(parseAudienceSearch(" %_\\ "), "%_\\");
 });

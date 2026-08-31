@@ -477,3 +477,135 @@ test(
     }
   },
 );
+
+test(
+  "PostgreSQL audience and contact search filters in the database without rescoping audience counts",
+  { skip: databaseUrl ? false : "PAPERBOY_TEST_DATABASE_URL is not configured" },
+  async () => {
+    process.env.DATABASE_URL = databaseUrl;
+    const [
+      { eq },
+      { db },
+      { audiences, contacts, orgMembers, orgs, users },
+      {
+        createAudience,
+        createContact,
+        deleteUnsubscribedContacts,
+        getAudience,
+        listAudiences,
+        listContacts,
+      },
+    ] = await Promise.all([
+      import("drizzle-orm"),
+      import("../src/db/index.ts"),
+      import("../src/db/schema.ts"),
+      import("../src/lib/audiences.ts"),
+    ]);
+    const orgId = randomUUID();
+    const adminId = `audience-search-admin-${randomUUID()}`;
+    const now = new Date("2026-08-31T02:03:04.000Z");
+    const lock = await db.$client.reserve();
+    const emails = (rows) => rows.map((row) => row.email).sort();
+
+    await lock`SELECT pg_advisory_lock(${190024})`;
+    try {
+      await db.insert(orgs).values({ id: orgId, name: "Search tenant" });
+      await db.insert(users).values({
+        email: `${randomUUID()}@example.com`,
+        id: adminId,
+        name: "Search admin",
+        timezone: "Australia/Sydney",
+      });
+      await db.insert(orgMembers).values({ orgId, role: "admin", userId: adminId });
+
+      const weekly = await createAudience({
+        actorUserId: adminId, now, orgId, payload: { name: "Weekly readers" },
+      });
+      await createAudience({
+        actorUserId: adminId, now, orgId, payload: { name: "Weekly archive" },
+      });
+      await createAudience({
+        actorUserId: adminId, now, orgId, payload: { name: "Product digest" },
+      });
+
+      const seed = [
+        { email: "ada@example.net", name: "Ada Lovelace" },
+        { email: "grace@example.net", name: "Grace Hopper" },
+        { email: "a_b@example.net", name: "Literal underscore" },
+        { email: "axb@example.net", name: "Wildcard bait" },
+        { email: "gone@example.net", name: "Gone Away" },
+        { email: "left@example.net", name: "Left Early" },
+      ];
+      for (const payload of seed) {
+        await createContact({
+          actorUserId: adminId, audienceId: weekly.id, now, orgId, payload,
+        });
+      }
+      await db
+        .update(contacts)
+        .set({ unsubscribedAt: now })
+        .where(eq(contacts.email, "gone@example.net"));
+      await db
+        .update(contacts)
+        .set({ unsubscribedAt: now })
+        .where(eq(contacts.email, "left@example.net"));
+
+      const principal = { actorUserId: adminId, audienceId: weekly.id, orgId };
+      const contactsMatching = (search) => listContacts({ ...principal, search });
+
+      // Matches email and name, case-insensitively, and nothing else.
+      assert.deepEqual(emails(await contactsMatching("ada")), ["ada@example.net"]);
+      assert.deepEqual(emails(await contactsMatching("ADA")), ["ada@example.net"]);
+      assert.deepEqual(emails(await contactsMatching("Hopper")), ["grace@example.net"]);
+      assert.deepEqual(emails(await contactsMatching("hopper")), ["grace@example.net"]);
+      assert.deepEqual(emails(await contactsMatching("no-such-contact")), []);
+
+      // An absent search returns the whole audience.
+      assert.equal((await contactsMatching(null)).length, seed.length);
+      assert.equal((await listContacts(principal)).length, seed.length);
+
+      // LIKE metacharacters are literal, not wildcards.
+      assert.deepEqual(emails(await contactsMatching("a_b")), ["a_b@example.net"]);
+      assert.deepEqual(emails(await contactsMatching("%")), []);
+      assert.deepEqual(emails(await contactsMatching("%@%")), []);
+      assert.deepEqual(emails(await contactsMatching("\\")), []);
+
+      // Audience names filter the same way.
+      const audienceNames = async (search) =>
+        (await listAudiences({ actorUserId: adminId, orgId, search }))
+          .map((record) => record.name)
+          .sort();
+      assert.deepEqual(await audienceNames("weekly"), [
+        "Weekly archive",
+        "Weekly readers",
+      ]);
+      assert.deepEqual(await audienceNames("DIGEST"), ["Product digest"]);
+      assert.deepEqual(await audienceNames("%"), []);
+      assert.equal((await audienceNames(null)).length, 3);
+
+      // A contact search must never rescope the audience's own counts, which are
+      // what the console's "delete all unsubscribed" control is labelled from.
+      const filtered = await contactsMatching("ada");
+      assert.equal(filtered.length, 1);
+      const record = await getAudience({ actorUserId: adminId, audienceId: weekly.id, orgId });
+      assert.equal(record.contactCount, 6);
+      assert.equal(record.activeContactCount, 4);
+      assert.equal(record.contactCount - record.activeContactCount, 2);
+
+      // And the bulk delete stays whole-audience regardless of any search.
+      const removed = await deleteUnsubscribedContacts({
+        actorUserId: adminId, audienceId: weekly.id, orgId,
+      });
+      assert.equal(removed.deleted, 2);
+      assert.equal((await listContacts(principal)).length, 4);
+    } finally {
+      try {
+        await db.delete(orgs).where(eq(orgs.id, orgId));
+        await db.delete(users).where(eq(users.id, adminId));
+      } finally {
+        await lock`SELECT pg_advisory_unlock(${190024})`;
+        lock.release();
+      }
+    }
+  },
+);

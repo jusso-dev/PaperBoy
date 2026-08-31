@@ -3,6 +3,7 @@ import { normalizeEmailAddress } from "@/lib/email-core";
 export const MAX_AUDIENCE_NAME_LENGTH = 120;
 export const MAX_CONTACT_NAME_LENGTH = 200;
 export const MAX_CONTACT_CSV_BYTES = 1024 * 1024;
+export const MAX_AUDIENCE_SEARCH_LENGTH = 254;
 
 export type AudienceValidationIssue = {
   field: string;
@@ -97,6 +98,18 @@ function contactName(value: unknown): string | null | undefined {
     !/[\u0000-\u001f\u007f]/.test(name)
     ? name
     : undefined;
+}
+
+/**
+ * Normalizes a console search box term for the audience picker and the contact
+ * table. Casing is preserved so the box redisplays what was typed; matching is
+ * case-insensitive in SQL rather than here.
+ */
+export function parseAudienceSearch(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const term = value.trim();
+  if (!term) return null;
+  return term.slice(0, MAX_AUDIENCE_SEARCH_LENGTH);
 }
 
 export function parseCreateAudienceInput(value: unknown): { name: string } {
