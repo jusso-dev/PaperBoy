@@ -1,6 +1,6 @@
-import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { audiences, contacts, orgMembers } from "@/db/schema";
+import { audiences, contacts, emailSuppressions, orgMembers } from "@/db/schema";
 import {
   AudienceError,
   parseContactCsv,
@@ -291,12 +291,24 @@ export async function createContact(input: {
         )
         .for("update");
       if (!audience) throw new AudienceError("AUDIENCE_NOT_FOUND");
+      const [suppression] = await tx
+        .select({ reason: emailSuppressions.reason })
+        .from(emailSuppressions)
+        .where(
+          and(
+            eq(emailSuppressions.orgId, input.orgId),
+            eq(emailSuppressions.email, definition.email),
+          ),
+        )
+        .limit(1);
       const [created] = await tx
         .insert(contacts)
         .values({
           ...definition,
           audienceId: input.audienceId,
           createdAt: now,
+          unsubscribedAt:
+            suppression?.reason === "unsubscribed" ? now : null,
           updatedAt: now,
         })
         .returning(contactSelection);
@@ -416,23 +428,53 @@ export async function importContacts(input: {
       .from(contacts)
       .where(eq(contacts.audienceId, input.audienceId));
     const existingByEmail = new Map(existing.map((contact) => [contact.email, contact]));
+    const suppressedUnsubscribed = new Set(
+      parsed.rows.length === 0
+        ? []
+        : (
+            await tx
+              .select({ email: emailSuppressions.email })
+              .from(emailSuppressions)
+              .where(
+                and(
+                  eq(emailSuppressions.orgId, input.orgId),
+                  eq(emailSuppressions.reason, "unsubscribed"),
+                  inArray(
+                    emailSuppressions.email,
+                    parsed.rows.map((row) => row.email),
+                  ),
+                ),
+              )
+          ).map((row) => row.email),
+    );
     let created = 0;
     let updated = 0;
     let unchanged = 0;
     for (const row of parsed.rows) {
       const current = existingByEmail.get(row.email);
+      const unsubscribedAt = suppressedUnsubscribed.has(row.email) ? now : null;
       if (!current) {
         await tx.insert(contacts).values({
           ...row,
           audienceId: input.audienceId,
           createdAt: now,
+          unsubscribedAt,
           updatedAt: now,
         });
         created += 1;
-      } else if (current.name !== row.name) {
+      } else if (
+        current.name !== row.name ||
+        (unsubscribedAt && !current.unsubscribedAt)
+      ) {
         await tx
           .update(contacts)
-          .set({ name: row.name, updatedAt: now })
+          .set({
+            ...(current.name !== row.name ? { name: row.name } : {}),
+            ...(unsubscribedAt && !current.unsubscribedAt
+              ? { unsubscribedAt }
+              : {}),
+            updatedAt: now,
+          })
           .where(eq(contacts.id, current.id));
         updated += 1;
       } else unchanged += 1;
@@ -457,10 +499,18 @@ export async function getActiveAudienceContacts(input: {
   const rows = await db
     .select({ email: contacts.email, id: contacts.id, name: contacts.name })
     .from(contacts)
+    .leftJoin(
+      emailSuppressions,
+      and(
+        eq(emailSuppressions.orgId, input.orgId),
+        eq(emailSuppressions.email, contacts.email),
+      ),
+    )
     .where(
       and(
         eq(contacts.audienceId, input.audienceId),
         isNull(contacts.unsubscribedAt),
+        isNull(emailSuppressions.id),
       ),
     )
     .orderBy(asc(contacts.createdAt), asc(contacts.id));

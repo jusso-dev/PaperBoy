@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { emailSuppressions, orgMembers, orgs } from "@/db/schema";
+import { audiences, contacts, emailSuppressions, orgMembers, orgs } from "@/db/schema";
 import {
   isOrgRole,
   requirePermission,
@@ -73,6 +73,35 @@ async function requireOrganizationPermission(input: {
 
 function searchPattern(query: string): string {
   return `%${query.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+async function markContactsUnsubscribed(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  orgId: string,
+  emails: string[],
+  now: Date,
+): Promise<void> {
+  if (emails.length === 0) return;
+  const organizationAudiences = await tx
+    .select({ id: audiences.id })
+    .from(audiences)
+    .where(eq(audiences.orgId, orgId));
+  if (organizationAudiences.length === 0) return;
+  await tx
+    .update(contacts)
+    .set({
+      unsubscribedAt: sql`coalesce(${contacts.unsubscribedAt}, ${now})`,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        inArray(
+          contacts.audienceId,
+          organizationAudiences.map((row) => row.id),
+        ),
+        inArray(contacts.email, emails),
+      ),
+    );
 }
 
 function reasonRank(reason: SuppressionReason): number {
@@ -196,6 +225,9 @@ export async function createSuppression(input: {
         .returning(suppressionSelection);
 
       if (!created) throw new SuppressionError("SUPPRESSION_NOT_FOUND");
+      if (created.reason === "unsubscribed") {
+        await markContactsUnsubscribed(tx, input.orgId, [created.email], now);
+      }
       return created;
     });
   } catch (error) {
@@ -377,6 +409,7 @@ export async function importSuppressions(input: {
           reason: sql`case
             when ${emailSuppressions.reason} = 'complained' or excluded.reason = 'complained' then 'complained'
             when ${emailSuppressions.reason} = 'bounced' or excluded.reason = 'bounced' then 'bounced'
+            when ${emailSuppressions.reason} = 'unsubscribed' or excluded.reason = 'unsubscribed' then 'unsubscribed'
             else 'manual'
           end`,
           updatedAt: sql`case
@@ -388,6 +421,15 @@ export async function importSuppressions(input: {
         },
         target: [emailSuppressions.orgId, emailSuppressions.email],
       });
+
+    await markContactsUnsubscribed(
+      tx,
+      input.orgId,
+      parsed.rows
+        .filter((row) => row.reason === "unsubscribed")
+        .map((row) => row.email),
+      now,
+    );
 
     return {
       created,

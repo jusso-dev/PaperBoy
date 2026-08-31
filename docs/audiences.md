@@ -28,7 +28,7 @@ Quoted fields, commas inside quoted names, CRLF, LF, and a UTF-8 BOM are accepte
 
 ## Broadcast snapshots
 
-Broadcast creation accepts `audience_id`, not caller-supplied recipient records. PaperBoy checks that the audience belongs to the API key's organization, snapshots only contacts whose `unsubscribed_at` is null, and preserves contact IDs privately on the snapshot. A missing, empty, or cross-tenant audience fails before any message is queued.
+Broadcast creation accepts `audience_id`, not caller-supplied recipient records. PaperBoy checks that the audience belongs to the API key's organization, snapshots only contacts whose `unsubscribed_at` is null and whose address is not on the organization suppression list, and preserves contact IDs privately on the snapshot. A missing, empty, or cross-tenant audience fails before any message is queued. Importing a contact that already has an `unsubscribed` suppression stores `unsubscribed_at` so the console matches the send gate.
 
 Each recipient receives these template variables:
 

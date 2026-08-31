@@ -27,7 +27,9 @@ hard-bounce@example.net,bounced
 complaint@example.net,complained
 ```
 
-Quoted RFC-style fields, CRLF, LF, and a UTF-8 BOM are accepted. Unsupported columns, malformed quoting, invalid addresses, and unknown reasons reject the whole import before mutation. Duplicate CSV rows and existing records preserve the strongest reason: `complained`, then `bounced`, then `unsubscribed`, then `manual`. Replaying the same import is safe and reports unchanged rows.
+Quoted RFC-style fields, CRLF, LF, and a UTF-8 BOM are accepted. Unsupported columns, malformed quoting, invalid addresses, and unknown reasons reject the whole import before mutation. Duplicate CSV rows and existing records preserve the strongest reason: `complained`, then `bounced`, then `unsubscribed`, then `manual`. Replaying the same import is safe and reports unchanged rows. An `unsubscribed` row also sets `unsubscribed_at` on matching organization contacts. Broadcast snapshots skip every suppressed address, including bounced and complained entries.
+
+If you previously sent with Resend, export unsubscribed contacts plus the Resend suppression list and import them here. Map Resend `bounce` to `bounced`, `complaint` to `complained`, and globally unsubscribed contacts to `unsubscribed`. Future sends, including remaining broadcast recipients, check this table before a queue row is inserted.
 
 ## MCP and timezones
 

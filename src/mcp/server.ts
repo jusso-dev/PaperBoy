@@ -387,7 +387,7 @@ const suppressionDocument = `# PaperBoy suppression list
 - Suppressions belong to the organization bound to the API key. Never pass an organization ID to a suppression tool.
 - paperboy_list_suppressions and paperboy_get_suppression are available to current members. Create, update, delete, and import require an owner or admin.
 - Reasons are manual, unsubscribed, bounced, or complained. The send path returns recipient_suppressed with the reason before inserting a queue row, so the address never reaches SMTP or Cloudflare Email Sending.
-- CSV import accepts UTF-8 with an email header and optional reason column, at most 1 MiB and 5,000 data rows. The entire file validates before mutation. Duplicate rows and existing entries keep the strongest reason: complained, then bounced, then unsubscribed, then manual.
+- CSV import accepts UTF-8 with an email header and optional reason column, at most 1 MiB and 5,000 data rows. The entire file validates before mutation. Duplicate rows and existing entries keep the strongest reason: complained, then bounced, then unsubscribed, then manual. An unsubscribed import marks matching contacts. Broadcast snapshots skip the whole suppression list. Import Resend unsubscribed contacts and bounce/complaint suppressions through this CSV so PaperBoy does not mail people who already opted out there.
 - Read a suppression before deleting it and pass confirm: true. Deletion means the address may receive future mail; it does not modify Cloudflare provider suppressions.
 - PaperBoy suppression state is provider-neutral and complements, but does not replace, the Cloudflare-managed cf-bounce and provider suppression pipeline.
 - Stored instants and MCP timestamps are RFC 3339 UTC. Console presentation uses the signed-in user's IANA timezone.
@@ -400,7 +400,7 @@ const audienceDocument = `# PaperBoy audiences and contacts
 - PaperBoy imposes no audience-count or contact-count cap. Each CSV import accepts UTF-8 with an email header and optional name column, at most 1 MiB. The complete file validates before mutation.
 - paperboy_delete_unsubscribed_contacts requires explicit confirmation, deletes unsubscribed contacts from one audience, and retains organization suppression records.
 - Import only contacts who gave the sender permission. PaperBoy does not provide a purchased-list marketplace.
-- paperboy_create_broadcast accepts audienceId, snapshots only active contacts, and appends a signed unsubscribe link when the template omitted one. Template data includes name, email, contact, and unsubscribe_url.
+- paperboy_create_broadcast accepts audienceId, snapshots only active contacts who are not on the organization suppression list, and appends a signed unsubscribe link when the template omitted one. Template data includes name, email, contact, and unsubscribe_url. Importing a contact that already has an unsubscribed suppression stores unsubscribed_at.
 - Opening an unsubscribe URL is read-only. The recipient must confirm; confirmation sets unsubscribed_at and creates an organization-wide unsubscribed suppression atomically.
 - PaperBoy links are HMAC-SHA256 signed with PAPERBOY_UNSUBSCRIBE_SIGNING_KEY and have no provider dependency. SMTP and Cloudflare Email Sending receive the same rendered link and body.
 - Cloudflare keeps its independent cf-bounce return path and provider suppression pipeline. PaperBoy unsubscribe state complements it and blocks before provider queue insertion.

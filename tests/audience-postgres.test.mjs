@@ -46,6 +46,7 @@ test(
       { prepareCloudflareEmailMessage },
       { EmailError },
       { queueEmail },
+      { createSuppression },
       { unsubscribe, UnsubscribeError },
       { createUnsubscribeToken, createUnsubscribeUrl },
     ] = await Promise.all([
@@ -59,6 +60,7 @@ test(
       import("../src/lib/email-delivery.ts"),
       import("../src/lib/email-core.ts"),
       import("../src/lib/messages.ts"),
+      import("../src/lib/suppressions.ts"),
       import("../src/lib/unsubscribe.ts"),
       import("../src/lib/unsubscribe-core.ts"),
     ]);
@@ -260,6 +262,20 @@ test(
         .from(emailSuppressions)
         .where(and(eq(emailSuppressions.orgId, firstOrgId), eq(emailSuppressions.email, reader.email)));
       assert.equal(retainedSuppression.reason, "unsubscribed");
+
+      await createContact({
+        actorUserId: adminId,
+        audienceId: weekly.id,
+        now: fixedNow,
+        orgId: firstOrgId,
+        payload: { email: "opted-out@example.net", name: "Opted out" },
+      });
+      await createSuppression({
+        actorUserId: adminId,
+        now: fixedNow,
+        orgId: firstOrgId,
+        payload: { email: "opted-out@example.net", reason: "unsubscribed" },
+      });
 
       await assert.rejects(
         () => queueEmail({
