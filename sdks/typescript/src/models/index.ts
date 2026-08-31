@@ -1911,6 +1911,58 @@ export const ReceivedEmailAcceptedObjectEnum = {
 export type ReceivedEmailAcceptedObjectEnum = typeof ReceivedEmailAcceptedObjectEnum[keyof typeof ReceivedEmailAcceptedObjectEnum];
 
 /**
+ * 
+ * @export
+ * @interface ReceivedEmailDiscarded
+ */
+export interface ReceivedEmailDiscarded {
+    /**
+     * 
+     * @type {ReceivedEmailDiscardedDiscardedEnum}
+     * @memberof ReceivedEmailDiscarded
+     */
+    discarded: ReceivedEmailDiscardedDiscardedEnum;
+    /**
+     * 
+     * @type {ReceivedEmailDiscardedObjectEnum}
+     * @memberof ReceivedEmailDiscarded
+     */
+    object: ReceivedEmailDiscardedObjectEnum;
+    /**
+     * 
+     * @type {ReceivedEmailDiscardedReasonEnum}
+     * @memberof ReceivedEmailDiscarded
+     */
+    reason: ReceivedEmailDiscardedReasonEnum;
+}
+
+
+/**
+ * @export
+ */
+export const ReceivedEmailDiscardedDiscardedEnum = {
+    true: true
+} as const;
+export type ReceivedEmailDiscardedDiscardedEnum = typeof ReceivedEmailDiscardedDiscardedEnum[keyof typeof ReceivedEmailDiscardedDiscardedEnum];
+
+/**
+ * @export
+ */
+export const ReceivedEmailDiscardedObjectEnum = {
+    email: 'email'
+} as const;
+export type ReceivedEmailDiscardedObjectEnum = typeof ReceivedEmailDiscardedObjectEnum[keyof typeof ReceivedEmailDiscardedObjectEnum];
+
+/**
+ * @export
+ */
+export const ReceivedEmailDiscardedReasonEnum = {
+    auto_reply: 'auto_reply',
+    bounce: 'bounce'
+} as const;
+export type ReceivedEmailDiscardedReasonEnum = typeof ReceivedEmailDiscardedReasonEnum[keyof typeof ReceivedEmailDiscardedReasonEnum];
+
+/**
  * @type Recipients
  * 
  * @export

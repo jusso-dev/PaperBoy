@@ -156,6 +156,7 @@ All URIs are relative to *http://localhost*
 - [ReceiveInboundEmailInput](docs/ReceiveInboundEmailInput.md)
 - [ReceivedEmail](docs/ReceivedEmail.md)
 - [ReceivedEmailAccepted](docs/ReceivedEmailAccepted.md)
+- [ReceivedEmailDiscarded](docs/ReceivedEmailDiscarded.md)
 - [Recipients](docs/Recipients.md)
 - [SendEmailInput](docs/SendEmailInput.md)
 - [StoredAttachment](docs/StoredAttachment.md)

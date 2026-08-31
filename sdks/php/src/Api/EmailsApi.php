@@ -775,7 +775,7 @@ class EmailsApi
      *
      * @throws \PaperBoy\OpenApi\ApiException on non-2xx response or if the response body is not in the expected format
      * @throws \InvalidArgumentException
-     * @return \PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope
+     * @return \PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ReceivedEmailDiscarded|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope
      */
     public function receiveInboundEmail($receive_inbound_email_input, string $contentType = self::contentTypes['receiveInboundEmail'][0])
     {
@@ -793,7 +793,7 @@ class EmailsApi
      *
      * @throws \PaperBoy\OpenApi\ApiException on non-2xx response or if the response body is not in the expected format
      * @throws \InvalidArgumentException
-     * @return array of \PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope, HTTP status code, HTTP response headers (array of strings)
+     * @return array of \PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ReceivedEmailAccepted|\PaperBoy\OpenApi\Model\ReceivedEmailDiscarded|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope|\PaperBoy\OpenApi\Model\ErrorEnvelope, HTTP status code, HTTP response headers (array of strings)
      */
     public function receiveInboundEmailWithHttpInfo($receive_inbound_email_input, string $contentType = self::contentTypes['receiveInboundEmail'][0])
     {
@@ -832,6 +832,12 @@ class EmailsApi
                 case 200:
                     return $this->handleResponseWithDataType(
                         '\PaperBoy\OpenApi\Model\ReceivedEmailAccepted',
+                        $request,
+                        $response,
+                    );
+                case 202:
+                    return $this->handleResponseWithDataType(
+                        '\PaperBoy\OpenApi\Model\ReceivedEmailDiscarded',
                         $request,
                         $response,
                     );
@@ -895,6 +901,14 @@ class EmailsApi
                     $data = ObjectSerializer::deserialize(
                         $e->getResponseBody(),
                         '\PaperBoy\OpenApi\Model\ReceivedEmailAccepted',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;
+                case 202:
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '\PaperBoy\OpenApi\Model\ReceivedEmailDiscarded',
                         $e->getResponseHeaders()
                     );
                     $e->setResponseObject($data);

@@ -22,6 +22,7 @@ import type {
     ReceiveInboundEmailInput,
     ReceivedEmail,
     ReceivedEmailAccepted,
+    ReceivedEmailDiscarded,
     SendEmailInput,
 } from '../models/index';
 
@@ -199,7 +200,7 @@ export class EmailsApi extends runtime.BaseAPI {
     }
 
     /**
-     * Accepts a raw RFC 822 `email` string or parsed from/to/subject/html/text fields. Live keys require at least one recipient domain to be a verified organization sending domain, including plus-addresses used by support desks. A configured organization webhook receives `email.received` with routing metadata only; fetch the body with GET /api/v1/received-emails/{emailId}.
+     * Accepts a raw RFC 822 `email` string or parsed from/to/subject/html/text fields. Live keys require at least one recipient domain to be a verified organization sending domain, including plus-addresses used by support desks. Returned mail such as out-of-office auto-replies and bounce reports is discarded without storage or `email.received`. A configured organization webhook receives `email.received` with routing metadata only; fetch the body with GET /api/v1/received-emails/{emailId}.
      * Store one inbound email
      */
     async receiveInboundEmailRaw(requestParameters: ReceiveInboundEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ReceivedEmailAccepted>> {
@@ -210,7 +211,7 @@ export class EmailsApi extends runtime.BaseAPI {
     }
 
     /**
-     * Accepts a raw RFC 822 `email` string or parsed from/to/subject/html/text fields. Live keys require at least one recipient domain to be a verified organization sending domain, including plus-addresses used by support desks. A configured organization webhook receives `email.received` with routing metadata only; fetch the body with GET /api/v1/received-emails/{emailId}.
+     * Accepts a raw RFC 822 `email` string or parsed from/to/subject/html/text fields. Live keys require at least one recipient domain to be a verified organization sending domain, including plus-addresses used by support desks. Returned mail such as out-of-office auto-replies and bounce reports is discarded without storage or `email.received`. A configured organization webhook receives `email.received` with routing metadata only; fetch the body with GET /api/v1/received-emails/{emailId}.
      * Store one inbound email
      */
     async receiveInboundEmail(requestParameters: ReceiveInboundEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ReceivedEmailAccepted> {

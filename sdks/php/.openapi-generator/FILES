@@ -72,6 +72,7 @@ src/Model/RateLimitUpdateInput.php
 src/Model/ReceiveInboundEmailInput.php
 src/Model/ReceivedEmail.php
 src/Model/ReceivedEmailAccepted.php
+src/Model/ReceivedEmailDiscarded.php
 src/Model/Recipients.php
 src/Model/SendEmailInput.php
 src/Model/StoredAttachment.php

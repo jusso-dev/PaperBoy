@@ -176,6 +176,7 @@ Class | Method | HTTP request | Description
 - [ReceiveInboundEmailInput](docs/Model/ReceiveInboundEmailInput.md)
 - [ReceivedEmail](docs/Model/ReceivedEmail.md)
 - [ReceivedEmailAccepted](docs/Model/ReceivedEmailAccepted.md)
+- [ReceivedEmailDiscarded](docs/Model/ReceivedEmailDiscarded.md)
 - [Recipients](docs/Model/Recipients.md)
 - [SendEmailInput](docs/Model/SendEmailInput.md)
 - [StoredAttachment](docs/Model/StoredAttachment.md)
