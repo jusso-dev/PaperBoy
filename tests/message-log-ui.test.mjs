@@ -54,7 +54,8 @@ test("emails log shows subject in the list and body in the drawer", async () => 
   assert.doesNotMatch(page, /limited to the most recent 50/);
   assert.doesNotMatch(table, /Up to 50 matching messages/);
   assert.match(css, /\.dashboard-main > \.dashboard-wide \{/);
-  assert.match(css, /minmax\(16rem, 2fr\)/);
+  assert.match(css, /\.message-log-filters \{/);
+  assert.match(css, /repeat\(auto-fit, minmax\(min\(11rem, 100%\), 1fr\)\)/);
   assert.doesNotMatch(
     css,
     /grid-template-columns: minmax\(220px, 1\.5fr\) 140px minmax\(160px, 1fr\) 140px 140px 140px 150px auto/,
