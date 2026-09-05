@@ -247,6 +247,35 @@ export async function enqueueMessageJob(input: {
   );
 }
 
+export async function removeMessageJob(input: {
+  attemptCount: number;
+  messageId: string;
+  runAt: Date;
+}): Promise<void> {
+  if (!jobQueueConfigured()) return;
+  requireUuid(input.messageId, "Message ID");
+  try {
+    const queues = await getJobQueues();
+    const job = await queues.messages.getJob(
+      versionedJobId({
+        attemptCount: input.attemptCount,
+        entityId: input.messageId,
+        kind: "message",
+        runAt: input.runAt,
+      }),
+    );
+    if (!job) return;
+    const state = await job.getState();
+    if (state === "delayed" || state === "waiting" || state === "prioritized") {
+      await job.remove();
+    }
+  } catch (error) {
+    console.error(
+      `PaperBoy could not remove message job ${input.messageId}; the worker claim guard remains authoritative.`,
+    );
+  }
+}
+
 export async function enqueueBroadcastJob(input: {
   broadcastId: string;
   orgId: string;

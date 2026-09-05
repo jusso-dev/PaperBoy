@@ -68,7 +68,8 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'reply_to' => '\PaperBoy\OpenApi\Model\Recipients',
         'cc' => '\PaperBoy\OpenApi\Model\Recipients',
         'bcc' => '\PaperBoy\OpenApi\Model\Recipients',
-        'headers' => 'array<string,string>'
+        'headers' => 'array<string,string>',
+        'scheduled_at' => '\DateTime'
     ];
 
     /**
@@ -90,7 +91,8 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'reply_to' => null,
         'cc' => null,
         'bcc' => null,
-        'headers' => null
+        'headers' => null,
+        'scheduled_at' => 'date-time'
     ];
 
     /**
@@ -110,7 +112,8 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'reply_to' => false,
         'cc' => false,
         'bcc' => false,
-        'headers' => false
+        'headers' => false,
+        'scheduled_at' => false
     ];
 
     /**
@@ -210,7 +213,8 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'reply_to' => 'reply_to',
         'cc' => 'cc',
         'bcc' => 'bcc',
-        'headers' => 'headers'
+        'headers' => 'headers',
+        'scheduled_at' => 'scheduled_at'
     ];
 
     /**
@@ -230,7 +234,8 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'reply_to' => 'setReplyTo',
         'cc' => 'setCc',
         'bcc' => 'setBcc',
-        'headers' => 'setHeaders'
+        'headers' => 'setHeaders',
+        'scheduled_at' => 'setScheduledAt'
     ];
 
     /**
@@ -250,7 +255,8 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'reply_to' => 'getReplyTo',
         'cc' => 'getCc',
         'bcc' => 'getBcc',
-        'headers' => 'getHeaders'
+        'headers' => 'getHeaders',
+        'scheduled_at' => 'getScheduledAt'
     ];
 
     /**
@@ -322,6 +328,7 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         $this->setIfExists('cc', $data ?? [], null);
         $this->setIfExists('bcc', $data ?? [], null);
         $this->setIfExists('headers', $data ?? [], null);
+        $this->setIfExists('scheduled_at', $data ?? [], null);
     }
 
     /**
@@ -791,6 +798,33 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
             throw new \InvalidArgumentException('invalid value for $headers when calling InlineEmailInput., number of items must be less than or equal to 50.');
         }
         $this->container['headers'] = $headers;
+
+        return $this;
+    }
+
+    /**
+     * Gets scheduled_at
+     *
+     * @return \DateTime|null
+     */
+    public function getScheduledAt()
+    {
+        return $this->container['scheduled_at'];
+    }
+
+    /**
+     * Sets scheduled_at
+     *
+     * @param \DateTime|null $scheduled_at ISO 8601 instant. Future values queue the message for later delivery; past values send immediately.
+     *
+     * @return self
+     */
+    public function setScheduledAt($scheduled_at)
+    {
+        if (is_null($scheduled_at)) {
+            throw new \InvalidArgumentException('non-nullable scheduled_at cannot be null');
+        }
+        $this->container['scheduled_at'] = $scheduled_at;
 
         return $this;
     }

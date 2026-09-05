@@ -93,9 +93,12 @@ Class | Method | HTTP request | Description
 *BroadcastsApi* | [**pauseBroadcast**](docs/Api/BroadcastsApi.md#pausebroadcast) | **POST** /api/v1/broadcasts/{broadcastId}/pause | Pause a running broadcast
 *BroadcastsApi* | [**resumeBroadcast**](docs/Api/BroadcastsApi.md#resumebroadcast) | **POST** /api/v1/broadcasts/{broadcastId}/resume | Resume a paused broadcast
 *BroadcastsApi* | [**updateBroadcast**](docs/Api/BroadcastsApi.md#updatebroadcast) | **PATCH** /api/v1/broadcasts/{broadcastId} | Update a scheduled broadcast
+*EmailsApi* | [**cancelEmail**](docs/Api/EmailsApi.md#cancelemail) | **POST** /api/v1/emails/{emailId}/cancel | Cancel a queued email
 *EmailsApi* | [**getEmail**](docs/Api/EmailsApi.md#getemail) | **GET** /api/v1/emails/{emailId} | Get one email
 *EmailsApi* | [**getReceivedEmail**](docs/Api/EmailsApi.md#getreceivedemail) | **GET** /api/v1/received-emails/{emailId} | Get one inbound email
+*EmailsApi* | [**listEmails**](docs/Api/EmailsApi.md#listemails) | **GET** /api/v1/emails | List emails
 *EmailsApi* | [**receiveInboundEmail**](docs/Api/EmailsApi.md#receiveinboundemail) | **POST** /api/v1/received-emails | Store one inbound email
+*EmailsApi* | [**rescheduleEmail**](docs/Api/EmailsApi.md#rescheduleemail) | **PATCH** /api/v1/emails/{emailId} | Reschedule a queued email
 *EmailsApi* | [**sendEmail**](docs/Api/EmailsApi.md#sendemail) | **POST** /api/v1/emails | Queue one email
 *EmailsApi* | [**sendEmailBatch**](docs/Api/EmailsApi.md#sendemailbatch) | **POST** /api/v1/emails/batch | Queue one to 100 emails
 *EventsApi* | [**listEmailEvents**](docs/Api/EventsApi.md#listemailevents) | **GET** /api/v1/emails/{emailId}/events | List one email&#39;s events
@@ -145,6 +148,8 @@ Class | Method | HTTP request | Description
 - [EmailAttachment](docs/Model/EmailAttachment.md)
 - [EmailBatchEnvelope](docs/Model/EmailBatchEnvelope.md)
 - [EmailBatchItem](docs/Model/EmailBatchItem.md)
+- [EmailListEnvelope](docs/Model/EmailListEnvelope.md)
+- [EmailSummary](docs/Model/EmailSummary.md)
 - [EmailTag](docs/Model/EmailTag.md)
 - [ErrorEnvelope](docs/Model/ErrorEnvelope.md)
 - [ErrorEnvelopeError](docs/Model/ErrorEnvelopeError.md)
@@ -179,6 +184,7 @@ Class | Method | HTTP request | Description
 - [ReceivedEmailAccepted](docs/Model/ReceivedEmailAccepted.md)
 - [ReceivedEmailDiscarded](docs/Model/ReceivedEmailDiscarded.md)
 - [Recipients](docs/Model/Recipients.md)
+- [RescheduleEmailInput](docs/Model/RescheduleEmailInput.md)
 - [SendEmailInput](docs/Model/SendEmailInput.md)
 - [StoredAttachment](docs/Model/StoredAttachment.md)
 - [Suppression](docs/Model/Suppression.md)

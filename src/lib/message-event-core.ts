@@ -6,6 +6,8 @@ export const MESSAGE_EVENT_TYPES = [
   "complained",
   "opened",
   "clicked",
+  "scheduled",
+  "cancelled",
 ] as const;
 
 export type MessageEventType = (typeof MESSAGE_EVENT_TYPES)[number];

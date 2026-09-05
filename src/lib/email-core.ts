@@ -6,6 +6,7 @@ export const MESSAGE_STATUSES = [
   "sending",
   "sent",
   "failed",
+  "cancelled",
 ] as const;
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
 
@@ -36,6 +37,7 @@ export type SendEmailInput = {
   headers: Record<string, string>;
   html: string | null;
   replyTo: string[];
+  scheduledAt: Date | null;
   subject: string;
   tags: EmailTag[];
   text: string | null;
@@ -81,6 +83,7 @@ const SEND_FIELDS = new Set([
   "cc",
   "from",
   "headers",
+  "scheduled_at",
   "to",
   "reply_to",
   "subject",
@@ -307,6 +310,91 @@ function parseTags(
   return tags;
 }
 
+const MAX_SCHEDULE_AHEAD_MS = 365 * 24 * 60 * 60 * 1000;
+const SCHEDULE_GRACE_MS = 60 * 1000;
+
+function parseScheduledAt(
+  value: unknown,
+  now: Date,
+  issues: EmailValidationIssue[],
+): Date | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    issues.push({
+      field: "scheduled_at",
+      message: "Use an ISO 8601 UTC instant such as 2026-09-06T01:30:00Z.",
+    });
+    return null;
+  }
+
+  const trimmed = value.trim();
+  const parsed = new Date(trimmed);
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})$/.test(
+      trimmed,
+    )
+  ) {
+    issues.push({
+      field: "scheduled_at",
+      message: "Use an ISO 8601 UTC instant such as 2026-09-06T01:30:00Z.",
+    });
+    return null;
+  }
+
+  if (parsed.getTime() - now.getTime() > MAX_SCHEDULE_AHEAD_MS) {
+    issues.push({
+      field: "scheduled_at",
+      message: "Schedule at most 365 days ahead.",
+    });
+    return null;
+  }
+
+  if (parsed.getTime() <= now.getTime() + SCHEDULE_GRACE_MS) {
+    return null;
+  }
+
+  return parsed;
+}
+
+export function parseRescheduledAt(value: unknown, now = new Date()): Date | null {
+  if (!isRecord(value)) {
+    throw new EmailError("VALIDATION_ERROR", [
+      { field: "body", message: "Must be a JSON object." },
+    ]);
+  }
+
+  const issues: EmailValidationIssue[] = [];
+
+  for (const field of Object.keys(value)) {
+    if (field !== "scheduled_at") {
+      issues.push({ field, message: "This field is not supported." });
+    }
+  }
+
+  if (!Object.hasOwn(value, "scheduled_at")) {
+    issues.push({
+      field: "scheduled_at",
+      message: "Use an ISO 8601 UTC instant such as 2026-09-06T01:30:00Z.",
+    });
+  }
+
+  const scheduledAt =
+    issues.length > 0
+      ? null
+      : parseScheduledAt(value.scheduled_at, now, issues);
+
+  if (issues.length > 0) {
+    throw new EmailError("VALIDATION_ERROR", issues);
+  }
+
+  return scheduledAt;
+}
+
 function parseHeaders(
   value: unknown,
   issues: EmailValidationIssue[],
@@ -507,7 +595,7 @@ function parseAttachments(
 
 export function parseSendEmailInput(
   value: unknown,
-  options: { allowAttachments?: boolean } = {},
+  options: { allowAttachments?: boolean; now?: Date } = {},
 ): SendEmailInput {
   if (!isRecord(value)) {
     throw new EmailError("VALIDATION_ERROR", [
@@ -603,6 +691,11 @@ export function parseSendEmailInput(
   const cc = parseAddressList(value.cc, "cc", issues);
   const bcc = parseAddressList(value.bcc, "bcc", issues);
   const headers = parseHeaders(value.headers, issues);
+  const scheduledAt = parseScheduledAt(
+    value.scheduled_at,
+    options.now ?? new Date(),
+    issues,
+  );
 
   if (recipients.length + cc.length + bcc.length > MAX_RECIPIENTS) {
     issues.push({
@@ -625,6 +718,7 @@ export function parseSendEmailInput(
     headers,
     html,
     replyTo,
+    scheduledAt,
     subject,
     tags,
     text,
@@ -667,6 +761,7 @@ export function emailRequestHash(input: SendEmailInput): string {
         cc: input.cc,
         bcc: input.bcc,
         headers: input.headers,
+        scheduledAt: input.scheduledAt?.toISOString() ?? null,
         subject: input.subject,
         tags: input.tags,
         text: input.text,

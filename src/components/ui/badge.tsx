@@ -17,6 +17,7 @@ const badgeVariants = cva(
         sending: "border-postal-blue/40 bg-postal-blue/10 text-postal-blue-dark",
         sent: "border-postal-blue-light bg-sidebar text-postal-blue-dark",
         failed: "border-error/50 bg-error/10 text-error",
+        cancelled: "border-line bg-paper-dark text-ink-muted",
         neutral: "border-line bg-paper-dark/60 text-ink-muted",
       },
     },

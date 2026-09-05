@@ -69,6 +69,7 @@ class SendEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'cc' => '\PaperBoy\OpenApi\Model\Recipients',
         'bcc' => '\PaperBoy\OpenApi\Model\Recipients',
         'headers' => 'array<string,string>',
+        'scheduled_at' => '\DateTime',
         'template_id' => 'string',
         'data' => 'array<string,mixed>'
     ];
@@ -93,6 +94,7 @@ class SendEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'cc' => null,
         'bcc' => null,
         'headers' => null,
+        'scheduled_at' => 'date-time',
         'template_id' => 'uuid',
         'data' => null
     ];
@@ -115,6 +117,7 @@ class SendEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'cc' => false,
         'bcc' => false,
         'headers' => false,
+        'scheduled_at' => false,
         'template_id' => false,
         'data' => false
     ];
@@ -217,6 +220,7 @@ class SendEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'cc' => 'cc',
         'bcc' => 'bcc',
         'headers' => 'headers',
+        'scheduled_at' => 'scheduled_at',
         'template_id' => 'template_id',
         'data' => 'data'
     ];
@@ -239,6 +243,7 @@ class SendEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'cc' => 'setCc',
         'bcc' => 'setBcc',
         'headers' => 'setHeaders',
+        'scheduled_at' => 'setScheduledAt',
         'template_id' => 'setTemplateId',
         'data' => 'setData'
     ];
@@ -261,6 +266,7 @@ class SendEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'cc' => 'getCc',
         'bcc' => 'getBcc',
         'headers' => 'getHeaders',
+        'scheduled_at' => 'getScheduledAt',
         'template_id' => 'getTemplateId',
         'data' => 'getData'
     ];
@@ -334,6 +340,7 @@ class SendEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         $this->setIfExists('cc', $data ?? [], null);
         $this->setIfExists('bcc', $data ?? [], null);
         $this->setIfExists('headers', $data ?? [], null);
+        $this->setIfExists('scheduled_at', $data ?? [], null);
         $this->setIfExists('template_id', $data ?? [], null);
         $this->setIfExists('data', $data ?? [], null);
     }
@@ -816,6 +823,33 @@ class SendEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
             throw new \InvalidArgumentException('invalid value for $headers when calling SendEmailInput., number of items must be less than or equal to 50.');
         }
         $this->container['headers'] = $headers;
+
+        return $this;
+    }
+
+    /**
+     * Gets scheduled_at
+     *
+     * @return \DateTime|null
+     */
+    public function getScheduledAt()
+    {
+        return $this->container['scheduled_at'];
+    }
+
+    /**
+     * Sets scheduled_at
+     *
+     * @param \DateTime|null $scheduled_at ISO 8601 instant. Future values queue the message for later delivery; past values send immediately.
+     *
+     * @return self
+     */
+    public function setScheduledAt($scheduled_at)
+    {
+        if (is_null($scheduled_at)) {
+            throw new \InvalidArgumentException('non-nullable scheduled_at cannot be null');
+        }
+        $this->container['scheduled_at'] = $scheduled_at;
 
         return $this;
     }

@@ -39,6 +39,9 @@ const statusSelection = {
   leaseExpiresAt: messages.leaseExpiresAt,
   nextAttemptAt: messages.nextAttemptAt,
   outboundProvider: messages.outboundProvider,
+  providerMessageId: messages.providerMessageId,
+  scheduledAt: messages.scheduledAt,
+  cancelledAt: messages.cancelledAt,
   sentAt: messages.sentAt,
   status: messages.status,
   updatedAt: messages.updatedAt,
@@ -46,6 +49,7 @@ const statusSelection = {
 
 const overviewSelection = {
   ...statusSelection,
+  from: messages.from,
   subject: messages.subject,
   to: messages.to,
 };
@@ -65,13 +69,16 @@ type StatusRow = Pick<
   | "leaseExpiresAt"
   | "nextAttemptAt"
   | "outboundProvider"
+  | "providerMessageId"
+  | "scheduledAt"
+  | "cancelledAt"
   | "sentAt"
   | "status"
   | "updatedAt"
 >;
 
 type OverviewRow = StatusRow &
-  Pick<typeof messages.$inferSelect, "subject" | "to">;
+  Pick<typeof messages.$inferSelect, "from" | "subject" | "to">;
 
 export async function requireMessageRead(input: {
   actorUserId: string | null;
@@ -102,6 +109,7 @@ export async function requireMessageRead(input: {
 function overviewFromRow(row: OverviewRow): MessageDeliveryOverviewRecord {
   return {
     ...recordFromRow(row),
+    from: row.from,
     subject: row.subject,
     to: Array.isArray(row.to) ? row.to.map(String) : [],
   };
@@ -124,6 +132,9 @@ function recordFromRow(row: StatusRow): MessageDeliveryStatusRecord {
     provider: isOutboundProvider(row.outboundProvider)
       ? row.outboundProvider
       : "test-sink",
+    providerMessageId: row.providerMessageId,
+    scheduledAt: row.scheduledAt,
+    cancelledAt: row.cancelledAt,
     sentAt: row.sentAt,
     status: row.status,
     updatedAt: row.updatedAt,
@@ -225,6 +236,7 @@ async function listOverviewRows(
   orgId: string,
   limit?: number,
   filters: MessageDeliveryStatusFilters & {
+    environment?: "live" | "test";
     offset?: number;
     sort?: MessageLogSort;
     sortDirection?: MessageLogOrder;
@@ -233,7 +245,7 @@ async function listOverviewRows(
   return db
     .select(overviewSelection)
     .from(messages)
-    .where(messageFilters(orgId, undefined, filters))
+    .where(messageFilters(orgId, filters.environment, filters))
     .orderBy(...orderColumns(filters.sort, filters.sortDirection))
     .limit(boundedLimit(limit))
     .offset(boundedOffset(filters.offset));
@@ -241,12 +253,14 @@ async function listOverviewRows(
 
 async function countMatchingRows(
   orgId: string,
-  filters: MessageDeliveryStatusFilters = {},
+  filters: MessageDeliveryStatusFilters & {
+    environment?: "live" | "test";
+  } = {},
 ) {
   const [row] = await db
     .select({ count: count() })
     .from(messages)
-    .where(messageFilters(orgId, undefined, filters));
+    .where(messageFilters(orgId, filters.environment, filters));
   return Number(row?.count ?? 0);
 }
 
@@ -312,6 +326,7 @@ export async function getMessageDeliveryOverview(input: {
   createdAtBefore?: Date;
   createdAtFrom?: Date;
   domainId?: string;
+  environment?: "live" | "test";
   limit?: number;
   offset?: number;
   orgId: string;
@@ -331,6 +346,7 @@ export async function getMessageDeliveryOverview(input: {
     countMatchingRows(input.orgId, input),
   ]);
   const counts: MessageDeliveryCounts = {
+    cancelled: 0,
     failed: 0,
     queued: 0,
     sending: 0,

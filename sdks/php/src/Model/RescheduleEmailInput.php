@@ -1,6 +1,6 @@
 <?php
 /**
- * WebhookEvent
+ * RescheduleEmailInput
  *
  * PHP version 8.1
  *
@@ -32,7 +32,7 @@ use \ArrayAccess;
 use \PaperBoy\OpenApi\ObjectSerializer;
 
 /**
- * WebhookEvent Class Doc Comment
+ * RescheduleEmailInput Class Doc Comment
  *
  * @category Class
  * @package  PaperBoy\OpenApi
@@ -40,7 +40,7 @@ use \PaperBoy\OpenApi\ObjectSerializer;
  * @link     https://openapi-generator.tech
  * @implements \ArrayAccess<string, mixed>
  */
-class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
+class RescheduleEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
 {
     public const DISCRIMINATOR = null;
 
@@ -49,7 +49,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      *
      * @var string
      */
-    protected static $openAPIModelName = 'WebhookEvent';
+    protected static $openAPIModelName = 'RescheduleEmailInput';
 
     /**
      * Array of property to type mappings. Used for (de)serialization
@@ -57,9 +57,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $openAPITypes = [
-        'created_at' => '\DateTime',
-        'data' => '\PaperBoy\OpenApi\Model\WebhookEventData',
-        'type' => 'string'
+        'scheduled_at' => '\DateTime'
     ];
 
     /**
@@ -70,9 +68,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @psalm-var array<string, string|null>
      */
     protected static $openAPIFormats = [
-        'created_at' => 'date-time',
-        'data' => null,
-        'type' => null
+        'scheduled_at' => 'date-time'
     ];
 
     /**
@@ -81,9 +77,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var boolean[]
      */
     protected static array $openAPINullables = [
-        'created_at' => false,
-        'data' => false,
-        'type' => false
+        'scheduled_at' => false
     ];
 
     /**
@@ -172,9 +166,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $attributeMap = [
-        'created_at' => 'created_at',
-        'data' => 'data',
-        'type' => 'type'
+        'scheduled_at' => 'scheduled_at'
     ];
 
     /**
@@ -183,9 +175,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $setters = [
-        'created_at' => 'setCreatedAt',
-        'data' => 'setData',
-        'type' => 'setType'
+        'scheduled_at' => 'setScheduledAt'
     ];
 
     /**
@@ -194,9 +184,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $getters = [
-        'created_at' => 'getCreatedAt',
-        'data' => 'getData',
-        'type' => 'getType'
+        'scheduled_at' => 'getScheduledAt'
     ];
 
     /**
@@ -240,35 +228,6 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
         return self::$openAPIModelName;
     }
 
-    public const TYPE_EMAIL_QUEUED = 'email.queued';
-    public const TYPE_EMAIL_DELIVERED = 'email.delivered';
-    public const TYPE_EMAIL_DEFERRED = 'email.deferred';
-    public const TYPE_EMAIL_BOUNCED = 'email.bounced';
-    public const TYPE_EMAIL_COMPLAINED = 'email.complained';
-    public const TYPE_EMAIL_OPENED = 'email.opened';
-    public const TYPE_EMAIL_CLICKED = 'email.clicked';
-    public const TYPE_EMAIL_SCHEDULED = 'email.scheduled';
-    public const TYPE_EMAIL_CANCELLED = 'email.cancelled';
-
-    /**
-     * Gets allowable values of the enum
-     *
-     * @return string[]
-     */
-    public function getTypeAllowableValues()
-    {
-        return [
-            self::TYPE_EMAIL_QUEUED,
-            self::TYPE_EMAIL_DELIVERED,
-            self::TYPE_EMAIL_DEFERRED,
-            self::TYPE_EMAIL_BOUNCED,
-            self::TYPE_EMAIL_COMPLAINED,
-            self::TYPE_EMAIL_OPENED,
-            self::TYPE_EMAIL_CLICKED,
-            self::TYPE_EMAIL_SCHEDULED,
-            self::TYPE_EMAIL_CANCELLED,
-        ];
-    }
 
     /**
      * Associative array for storing property values
@@ -285,9 +244,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     public function __construct(?array $data = null)
     {
-        $this->setIfExists('created_at', $data ?? [], null);
-        $this->setIfExists('data', $data ?? [], null);
-        $this->setIfExists('type', $data ?? [], null);
+        $this->setIfExists('scheduled_at', $data ?? [], null);
     }
 
     /**
@@ -317,24 +274,9 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
     {
         $invalidProperties = [];
 
-        if ($this->container['created_at'] === null) {
-            $invalidProperties[] = "'created_at' can't be null";
+        if ($this->container['scheduled_at'] === null) {
+            $invalidProperties[] = "'scheduled_at' can't be null";
         }
-        if ($this->container['data'] === null) {
-            $invalidProperties[] = "'data' can't be null";
-        }
-        if ($this->container['type'] === null) {
-            $invalidProperties[] = "'type' can't be null";
-        }
-        $allowedValues = $this->getTypeAllowableValues();
-        if (!is_null($this->container['type']) && !in_array($this->container['type'], $allowedValues, true)) {
-            $invalidProperties[] = sprintf(
-                "invalid value '%s' for 'type', must be one of '%s'",
-                $this->container['type'],
-                implode("', '", $allowedValues)
-            );
-        }
-
         return $invalidProperties;
     }
 
@@ -351,92 +293,28 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
 
 
     /**
-     * Gets created_at
+     * Gets scheduled_at
      *
      * @return \DateTime
      */
-    public function getCreatedAt()
+    public function getScheduledAt()
     {
-        return $this->container['created_at'];
+        return $this->container['scheduled_at'];
     }
 
     /**
-     * Sets created_at
+     * Sets scheduled_at
      *
-     * @param \DateTime $created_at RFC 3339 UTC instant. PaperBoy serializes this with a trailing `Z`.
+     * @param \DateTime $scheduled_at ISO 8601 instant. Future values queue the message for later delivery; past values send immediately.
      *
      * @return self
      */
-    public function setCreatedAt($created_at)
+    public function setScheduledAt($scheduled_at)
     {
-        if (is_null($created_at)) {
-            throw new \InvalidArgumentException('non-nullable created_at cannot be null');
+        if (is_null($scheduled_at)) {
+            throw new \InvalidArgumentException('non-nullable scheduled_at cannot be null');
         }
-        $this->container['created_at'] = $created_at;
-
-        return $this;
-    }
-
-    /**
-     * Gets data
-     *
-     * @return \PaperBoy\OpenApi\Model\WebhookEventData
-     */
-    public function getData()
-    {
-        return $this->container['data'];
-    }
-
-    /**
-     * Sets data
-     *
-     * @param \PaperBoy\OpenApi\Model\WebhookEventData $data data
-     *
-     * @return self
-     */
-    public function setData($data)
-    {
-        if (is_null($data)) {
-            throw new \InvalidArgumentException('non-nullable data cannot be null');
-        }
-        $this->container['data'] = $data;
-
-        return $this;
-    }
-
-    /**
-     * Gets type
-     *
-     * @return string
-     */
-    public function getType()
-    {
-        return $this->container['type'];
-    }
-
-    /**
-     * Sets type
-     *
-     * @param string $type type
-     *
-     * @return self
-     */
-    public function setType($type)
-    {
-        if (is_null($type)) {
-            throw new \InvalidArgumentException('non-nullable type cannot be null');
-        }
-        $allowedValues = $this->getTypeAllowableValues();
-        if (!in_array($type, $allowedValues, true)) {
-            throw new \InvalidArgumentException(
-                sprintf(
-                    "Invalid value '%s' for 'type', must be one of '%s'",
-                    $type,
-                    implode("', '", $allowedValues)
-                )
-            );
-        }
-        $this->container['type'] = $type;
+        $this->container['scheduled_at'] = $scheduled_at;
 
         return $this;
     }

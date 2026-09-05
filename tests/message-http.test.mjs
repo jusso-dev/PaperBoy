@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MessageStatusError } from "../src/lib/message-status-core.ts";
 import {
+  handleCancelMessageRequest,
   handleGetMessageRequest,
   handleListMessageEventsRequest,
+  handleListMessagesRequest,
+  handleRescheduleMessageRequest,
 } from "../src/lib/message-http.ts";
+import { MessageLifecycleError } from "../src/lib/message-lifecycle.ts";
 
 const principal = {
   actorUserId: "user-one",
@@ -51,6 +55,9 @@ function detail() {
     nextAttemptAt: null,
     openTrackingEnabled: false,
     clickTrackingEnabled: false,
+    providerMessageId: "ses-123",
+    scheduledAt: null,
+    cancelledAt: null,
     provider: "test-sink",
     sentAt: new Date("2026-08-23T10:01:00.000Z"),
     status: "sent",
@@ -112,6 +119,9 @@ test("GET email returns tenant service data with explicit UTC timestamps", async
   assert.equal(body.created_at, "2026-08-23T10:00:00.000Z");
   assert.equal(body.sent_at, "2026-08-23T10:01:00.000Z");
   assert.equal(body.open_tracking_enabled, false);
+  assert.equal(body.provider_message_id, "ses-123");
+  assert.equal(body.scheduled_at, null);
+  assert.equal(body.cancelled_at, null);
   assert.equal(body.provider, "test-sink");
   assert.deepEqual(body.attachments, [
     {
@@ -177,4 +187,99 @@ test("message reads reject unauthenticated and hidden records", async () => {
   assert.equal(missing.status, 404);
   assert.equal((await missing.json()).error.code, "email_not_found");
   assert.equal(missingEvents.status, 404);
+});
+
+test("GET emails lists one page of summaries with totals", async () => {
+  const summary = {
+    attemptCount: 0,
+    cancelledAt: null,
+    createdAt: new Date("2026-08-23T10:00:00.000Z"),
+    deliveryMode: "test-sink",
+    domainId: null,
+    environment: "test",
+    failedAt: null,
+    failureReason: null,
+    from: "PaperBoy <news@example.com>",
+    id: messageId,
+    lastAttemptAt: null,
+    lastErrorCode: null,
+    leaseExpiresAt: null,
+    nextAttemptAt: null,
+    provider: "test-sink",
+    providerMessageId: null,
+    scheduledAt: new Date("2026-08-24T10:00:00.000Z"),
+    sentAt: null,
+    status: "queued",
+    subject: "Morning edition",
+    to: ["reader@example.net"],
+    updatedAt: new Date("2026-08-23T10:00:00.000Z"),
+  };
+  let receivedQuery;
+  const deps = dependencies({
+    async list(receivedPrincipal, query) {
+      receivedQuery = [receivedPrincipal, query];
+      return { limit: 20, messages: [summary], page: 2, total: 21 };
+    },
+  });
+  const response = await handleListMessagesRequest(
+    new Request("http://paperboy.test/api/v1/emails?page=2", {
+      headers: { Authorization: "Bearer test-key" },
+    }),
+    deps,
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(receivedQuery[1], { limit: null, page: "2" });
+  assert.equal(body.page, 2);
+  assert.equal(body.limit, 20);
+  assert.equal(body.total, 21);
+  assert.equal(body.data.length, 1);
+  assert.equal(body.data[0].id, messageId);
+  assert.equal(body.data[0].object, "email");
+  assert.equal(body.data[0].scheduled_at, "2026-08-24T10:00:00.000Z");
+  assert.equal("html" in body.data[0], false);
+});
+
+test("PATCH emails reschedules a queued message", async () => {
+  let received;
+  const deps = dependencies({
+    async reschedule(receivedPrincipal, receivedId, payload) {
+      received = [receivedPrincipal, receivedId, payload];
+      return { ...detail(), status: "queued" };
+    },
+  });
+  const response = await handleRescheduleMessageRequest(
+    new Request(`http://paperboy.test/api/v1/emails/${messageId}`, {
+      headers: { Authorization: "Bearer test-key" },
+      method: "PATCH",
+      body: JSON.stringify({ scheduled_at: "2026-08-24T10:00:00.000Z" }),
+    }),
+    messageId,
+    deps,
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(received[2], { scheduled_at: "2026-08-24T10:00:00.000Z" });
+  assert.equal(body.id, messageId);
+});
+
+test("POST emails cancel rejects a sent message", async () => {
+  const deps = dependencies({
+    async cancel() {
+      throw new MessageLifecycleError("NOT_CANCELLABLE");
+    },
+  });
+  const response = await handleCancelMessageRequest(
+    new Request(`http://paperboy.test/api/v1/emails/${messageId}/cancel`, {
+      headers: { Authorization: "Bearer test-key" },
+      method: "POST",
+    }),
+    messageId,
+    deps,
+  );
+
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).error.code, "email_not_cancellable");
 });

@@ -77,6 +77,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'object' => 'string',
         'open_tracking_enabled' => 'bool',
         'click_tracking_enabled' => 'bool',
+        'scheduled_at' => 'mixed',
+        'cancelled_at' => 'mixed',
+        'provider_message_id' => 'string',
         'provider' => '\PaperBoy\OpenApi\Model\MessageOutboundProvider',
         'sent_at' => 'mixed',
         'status' => 'string',
@@ -115,6 +118,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'object' => null,
         'open_tracking_enabled' => null,
         'click_tracking_enabled' => null,
+        'scheduled_at' => null,
+        'cancelled_at' => null,
+        'provider_message_id' => null,
         'provider' => null,
         'sent_at' => null,
         'status' => null,
@@ -151,6 +157,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'object' => false,
         'open_tracking_enabled' => false,
         'click_tracking_enabled' => false,
+        'scheduled_at' => true,
+        'cancelled_at' => true,
+        'provider_message_id' => true,
         'provider' => false,
         'sent_at' => true,
         'status' => false,
@@ -267,6 +276,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'object' => 'object',
         'open_tracking_enabled' => 'open_tracking_enabled',
         'click_tracking_enabled' => 'click_tracking_enabled',
+        'scheduled_at' => 'scheduled_at',
+        'cancelled_at' => 'cancelled_at',
+        'provider_message_id' => 'provider_message_id',
         'provider' => 'provider',
         'sent_at' => 'sent_at',
         'status' => 'status',
@@ -303,6 +315,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'object' => 'setObject',
         'open_tracking_enabled' => 'setOpenTrackingEnabled',
         'click_tracking_enabled' => 'setClickTrackingEnabled',
+        'scheduled_at' => 'setScheduledAt',
+        'cancelled_at' => 'setCancelledAt',
+        'provider_message_id' => 'setProviderMessageId',
         'provider' => 'setProvider',
         'sent_at' => 'setSentAt',
         'status' => 'setStatus',
@@ -339,6 +354,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'object' => 'getObject',
         'open_tracking_enabled' => 'getOpenTrackingEnabled',
         'click_tracking_enabled' => 'getClickTrackingEnabled',
+        'scheduled_at' => 'getScheduledAt',
+        'cancelled_at' => 'getCancelledAt',
+        'provider_message_id' => 'getProviderMessageId',
         'provider' => 'getProvider',
         'sent_at' => 'getSentAt',
         'status' => 'getStatus',
@@ -399,6 +417,7 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
     public const STATUS_SENDING = 'sending';
     public const STATUS_SENT = 'sent';
     public const STATUS_FAILED = 'failed';
+    public const STATUS_CANCELLED = 'cancelled';
 
     /**
      * Gets allowable values of the enum
@@ -450,6 +469,7 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
             self::STATUS_SENDING,
             self::STATUS_SENT,
             self::STATUS_FAILED,
+            self::STATUS_CANCELLED,
         ];
     }
 
@@ -488,6 +508,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         $this->setIfExists('object', $data ?? [], null);
         $this->setIfExists('open_tracking_enabled', $data ?? [], null);
         $this->setIfExists('click_tracking_enabled', $data ?? [], null);
+        $this->setIfExists('scheduled_at', $data ?? [], null);
+        $this->setIfExists('cancelled_at', $data ?? [], null);
+        $this->setIfExists('provider_message_id', $data ?? [], null);
         $this->setIfExists('provider', $data ?? [], null);
         $this->setIfExists('sent_at', $data ?? [], null);
         $this->setIfExists('status', $data ?? [], null);
@@ -619,6 +642,15 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         }
         if ($this->container['click_tracking_enabled'] === null) {
             $invalidProperties[] = "'click_tracking_enabled' can't be null";
+        }
+        if ($this->container['scheduled_at'] === null && !$this->isNullableSetToNull('scheduled_at')) {
+            $invalidProperties[] = "'scheduled_at' is required";
+        }
+        if ($this->container['cancelled_at'] === null && !$this->isNullableSetToNull('cancelled_at')) {
+            $invalidProperties[] = "'cancelled_at' is required";
+        }
+        if ($this->container['provider_message_id'] === null && !$this->isNullableSetToNull('provider_message_id')) {
+            $invalidProperties[] = "'provider_message_id' is required";
         }
         if ($this->container['provider'] === null) {
             $invalidProperties[] = "'provider' can't be null";
@@ -1294,6 +1326,108 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
             throw new \InvalidArgumentException('non-nullable click_tracking_enabled cannot be null');
         }
         $this->container['click_tracking_enabled'] = $click_tracking_enabled;
+
+        return $this;
+    }
+
+    /**
+     * Gets scheduled_at
+     *
+     * @return mixed|null
+     */
+    public function getScheduledAt()
+    {
+        return $this->container['scheduled_at'];
+    }
+
+    /**
+     * Sets scheduled_at
+     *
+     * @param mixed|null $scheduled_at scheduled_at
+     *
+     * @return self
+     */
+    public function setScheduledAt($scheduled_at)
+    {
+        if (is_null($scheduled_at)) {
+            array_push($this->openAPINullablesSetToNull, 'scheduled_at');
+        } else {
+            $nullablesSetToNull = $this->getOpenAPINullablesSetToNull();
+            $index = array_search('scheduled_at', $nullablesSetToNull);
+            if ($index !== FALSE) {
+                unset($nullablesSetToNull[$index]);
+                $this->setOpenAPINullablesSetToNull($nullablesSetToNull);
+            }
+        }
+        $this->container['scheduled_at'] = $scheduled_at;
+
+        return $this;
+    }
+
+    /**
+     * Gets cancelled_at
+     *
+     * @return mixed|null
+     */
+    public function getCancelledAt()
+    {
+        return $this->container['cancelled_at'];
+    }
+
+    /**
+     * Sets cancelled_at
+     *
+     * @param mixed|null $cancelled_at cancelled_at
+     *
+     * @return self
+     */
+    public function setCancelledAt($cancelled_at)
+    {
+        if (is_null($cancelled_at)) {
+            array_push($this->openAPINullablesSetToNull, 'cancelled_at');
+        } else {
+            $nullablesSetToNull = $this->getOpenAPINullablesSetToNull();
+            $index = array_search('cancelled_at', $nullablesSetToNull);
+            if ($index !== FALSE) {
+                unset($nullablesSetToNull[$index]);
+                $this->setOpenAPINullablesSetToNull($nullablesSetToNull);
+            }
+        }
+        $this->container['cancelled_at'] = $cancelled_at;
+
+        return $this;
+    }
+
+    /**
+     * Gets provider_message_id
+     *
+     * @return string|null
+     */
+    public function getProviderMessageId()
+    {
+        return $this->container['provider_message_id'];
+    }
+
+    /**
+     * Sets provider_message_id
+     *
+     * @param string|null $provider_message_id provider_message_id
+     *
+     * @return self
+     */
+    public function setProviderMessageId($provider_message_id)
+    {
+        if (is_null($provider_message_id)) {
+            array_push($this->openAPINullablesSetToNull, 'provider_message_id');
+        } else {
+            $nullablesSetToNull = $this->getOpenAPINullablesSetToNull();
+            $index = array_search('provider_message_id', $nullablesSetToNull);
+            if ($index !== FALSE) {
+                unset($nullablesSetToNull[$index]);
+                $this->setOpenAPINullablesSetToNull($nullablesSetToNull);
+            }
+        }
+        $this->container['provider_message_id'] = $provider_message_id;
 
         return $this;
     }
