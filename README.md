@@ -53,11 +53,11 @@ identity is redacted; no real recipients or credentials are shown.
 
 ## Container image
 
-After the full `main` CI gate passes, PaperBoy publishes a public ARM64 image as `ghcr.io/jusso-dev/paperboy:main`, `:latest`, and `:sha-<full commit SHA>`. Pulls require no registry credentials:
+After the full `main` CI gate passes, PaperBoy publishes a public ARM64 image as `ghcr.io/yumaitau/paperboy:main`, `:latest`, and `:sha-<full commit SHA>`. Pulls require no registry credentials:
 
 ```sh
-docker pull --platform linux/arm64 ghcr.io/jusso-dev/paperboy:main
-docker run --rm --platform linux/arm64 --env-file /path/to/protected.env -p 3000:3000 ghcr.io/jusso-dev/paperboy:main
+docker pull --platform linux/arm64 ghcr.io/yumaitau/paperboy:main
+docker run --rm --platform linux/arm64 --env-file /path/to/protected.env -p 3000:3000 ghcr.io/yumaitau/paperboy:main
 ```
 
 The image runs Next.js and the remote MCP server on Bun as a non-root user with `TZ=Australia/Sydney` and `PAPERBOY_DEFAULT_TIME_ZONE=Australia/Sydney`. Run BullMQ jobs from the same immutable image digest as a separately supervised process by overriding the command with `bun run jobs`; local MCP clients can use `bun run mcp:stdio`. Each signed-in user can choose their IANA timezone in Settings; stored instants and public protocol timestamps remain UTC.
