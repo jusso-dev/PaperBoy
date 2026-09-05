@@ -2,11 +2,13 @@ import "server-only";
 
 import {
   and,
+  count,
   desc,
   eq,
   gte,
   inArray,
   lt,
+  sql,
 } from "drizzle-orm";
 import { db } from "@/db";
 import { events, messages } from "@/db/schema";
@@ -123,9 +125,6 @@ export async function getPaperBoyDashboard(input: {
   const now = input.now ?? new Date();
   const today = localDateKey(now, timeZone);
   const window = dashboardWindow({ range: input.range, today });
-  const currentStart = window.currentStartKey
-    ? rangeBoundary(window.currentStartKey, timeZone)
-    : null;
   const previousStart = window.previousStartKey
     ? rangeBoundary(window.previousStartKey, timeZone)
     : null;
@@ -137,10 +136,13 @@ export async function getPaperBoyDashboard(input: {
     orgId: input.orgId,
   });
 
+  // Aggregate before crossing the database boundary; work scales with days, not events.
+  const eventDate = sql<string>`to_char(${events.createdAt} at time zone ${timeZone}, 'YYYY-MM-DD')`;
   const [eventRows, recentRows] = await Promise.all([
     db
       .select({
-        createdAt: events.createdAt,
+        dateKey: eventDate.as("date_key"),
+        count: count(),
         type: events.type,
       })
       .from(events)
@@ -153,7 +155,7 @@ export async function getPaperBoyDashboard(input: {
           lt(events.createdAt, end),
         ),
       )
-      .orderBy(desc(events.createdAt), desc(events.sequence)),
+      .groupBy(sql`date_key`, events.type),
     db
       .select({
         createdAt: messages.createdAt,
@@ -169,7 +171,7 @@ export async function getPaperBoyDashboard(input: {
   ]);
 
   const firstDateKey = eventRows.reduce<string | null>((earliest, event) => {
-    const key = localDateKey(event.createdAt, timeZone);
+    const key = event.dateKey;
     return earliest === null || key < earliest ? key : earliest;
   }, null);
   const plan = dashboardSeriesPlan({
@@ -177,29 +179,25 @@ export async function getPaperBoyDashboard(input: {
     range: input.range,
     today,
   });
-  const currentCounts = Object.fromEntries(
-    EVENT_TYPES.map((type) => [type, 0]),
-  ) as Record<DashboardEventType, number>;
-  const previousCounts = Object.fromEntries(
-    EVENT_TYPES.map((type) => [type, 0]),
-  ) as Record<DashboardEventType, number>;
+  const currentCounts = emptyBucketCounts();
+  const previousCounts = emptyBucketCounts();
   const bucketCounts = new Map(
     plan.keys.map((key) => [key, emptyBucketCounts()]),
   );
 
   for (const event of eventRows) {
-    if (!EVENT_TYPES.includes(event.type as DashboardEventType)) continue;
     const type = event.type as DashboardEventType;
-    const dateKey = localDateKey(event.createdAt, timeZone);
+    const dateKey = event.dateKey;
     const bucketKey = plan.bucket === "month" ? dateKey.slice(0, 7) : dateKey;
-    const inCurrent = currentStart === null || event.createdAt >= currentStart;
+    const inCurrent =
+      window.currentStartKey === null || dateKey >= window.currentStartKey;
 
     if (inCurrent) {
-      currentCounts[type] += 1;
+      currentCounts[type] += event.count;
       const bucket = bucketCounts.get(bucketKey);
-      if (bucket) bucket[type] += 1;
+      if (bucket) bucket[type] += event.count;
     } else {
-      previousCounts[type] += 1;
+      previousCounts[type] += event.count;
     }
   }
 
@@ -280,10 +278,9 @@ export async function getPaperBoyDashboard(input: {
   const recentIds = recentRows.map((message) => message.id);
   const recentEventRows = recentIds.length
     ? await db
-        .select({ messageId: events.messageId, type: events.type })
+        .selectDistinct({ messageId: events.messageId, type: events.type })
         .from(events)
         .where(inArray(events.messageId, recentIds))
-        .orderBy(desc(events.createdAt), desc(events.sequence))
     : [];
   const eventTypesByMessage = new Map<string, string[]>();
 

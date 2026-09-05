@@ -9,7 +9,7 @@ import {
   Pencil,
   Send,
 } from "lucide-react";
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { CopyBroadcastHtml } from "@/components/broadcasts/copy-broadcast-html";
 import { NaturalLanguageScheduleField } from "@/components/broadcasts/natural-language-schedule-field";
 import { SandboxedHtmlPreview } from "@/components/broadcasts/sandboxed-html-preview";
@@ -83,7 +83,10 @@ export function BroadcastPreviewWorkspace({
   const [htmlValue, setHtmlValue] = useState(html ?? "");
   const [fromValue, setFromValue] = useState(from);
   const [subjectValue, setSubjectValue] = useState(subject);
-  const previewDocument = templateBrowserPreviewDocument(htmlValue);
+  const previewDocument = useMemo(
+    () => templateBrowserPreviewDocument(htmlValue),
+    [htmlValue],
+  );
   const [bounds, setBounds] = useState<WindowBounds>({
     height: 800,
     width: 1200,
@@ -102,7 +105,7 @@ export function BroadcastPreviewWorkspace({
     INITIAL_TEST_STATE,
   );
   const source = htmlValue || "<!-- This broadcast has no HTML body. -->";
-  const sourceLines = source.split("\n");
+  const sourceLines = useMemo(() => source.split("\n"), [source]);
   const focused = zOrder[zOrder.length - 1];
 
   useEffect(() => {

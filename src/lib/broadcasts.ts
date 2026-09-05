@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, lte } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
   apiKeys,
@@ -160,25 +160,35 @@ async function requireOrganizationPermission(input: {
   return input.actorUserId;
 }
 
-async function broadcastProgress(broadcastId: string): Promise<BroadcastProgress> {
+async function broadcastProgress(
+  broadcastIds: string[],
+): Promise<Map<string, BroadcastProgress>> {
+  const progressById = new Map<string, BroadcastProgress>();
+  if (!broadcastIds.length) return progressById;
+
   const rows = await db
-    .select({ count: count(), status: broadcastRecipients.status })
+    .select({
+      broadcastId: broadcastRecipients.broadcastId,
+      count: count(),
+      status: broadcastRecipients.status,
+    })
     .from(broadcastRecipients)
-    .where(eq(broadcastRecipients.broadcastId, broadcastId))
-    .groupBy(broadcastRecipients.status);
-  const progress = emptyProgress();
+    .where(inArray(broadcastRecipients.broadcastId, broadcastIds))
+    .groupBy(broadcastRecipients.broadcastId, broadcastRecipients.status);
 
   for (const row of rows) {
-    const value = Number(row.count);
-    progress[row.status] = value;
-    progress.total += value;
+    const progress = progressById.get(row.broadcastId) ?? emptyProgress();
+    progress[row.status] = row.count;
+    progress.total += row.count;
+    progressById.set(row.broadcastId, progress);
   }
 
-  return progress;
+  return progressById;
 }
 
 async function recordFromRow(
   row: typeof broadcasts.$inferSelect,
+  progress?: BroadcastProgress,
 ): Promise<BroadcastRecord> {
   return {
     cancelledAt: row.cancelledAt,
@@ -189,7 +199,8 @@ async function recordFromRow(
     id: row.id,
     name: row.name,
     pausedAt: row.pausedAt,
-    progress: await broadcastProgress(row.id),
+    progress:
+      progress ?? (await broadcastProgress([row.id])).get(row.id) ?? emptyProgress(),
     scheduledFor: row.scheduledFor,
     sourceAudienceId: row.sourceAudienceId,
     sourceTemplateId: row.sourceTemplateId,
@@ -905,7 +916,10 @@ export async function listBroadcasts(input: {
     .where(eq(broadcasts.orgId, input.orgId))
     .orderBy(desc(broadcasts.createdAt), desc(broadcasts.id));
 
-  return Promise.all(rows.map(recordFromRow));
+  const progressById = await broadcastProgress(rows.map((row) => row.id));
+  return Promise.all(
+    rows.map((row) => recordFromRow(row, progressById.get(row.id) ?? emptyProgress())),
+  );
 }
 
 export async function getBroadcast(input: {
