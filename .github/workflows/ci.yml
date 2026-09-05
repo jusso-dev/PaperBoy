@@ -173,10 +173,9 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.title=PaperBoy
 
-      - name: Verify public ARM64 image
+      - name: Verify ARM64 image
         shell: bash
         run: |
-          docker logout ghcr.io
           manifest="$(docker buildx imagetools inspect "${IMAGE_NAME}:sha-${GITHUB_SHA}")"
           printf '%s\n' "$manifest"
           grep -q 'Platform:.*linux/arm64' <<< "$manifest"

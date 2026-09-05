@@ -53,9 +53,10 @@ identity is redacted; no real recipients or credentials are shown.
 
 ## Container image
 
-After the full `main` CI gate passes, PaperBoy publishes a public ARM64 image as `ghcr.io/yumaitau/paperboy:main`, `:latest`, and `:sha-<full commit SHA>`. Pulls require no registry credentials:
+After the full `main` CI gate passes, PaperBoy publishes an ARM64 image as `ghcr.io/yumaitau/paperboy:main`, `:latest`, and `:sha-<full commit SHA>`. The organization's package policy keeps this image private. Sign in to GHCR with an account that has package access and a personal access token with `read:packages` before pulling:
 
 ```sh
+docker login ghcr.io
 docker pull --platform linux/arm64 ghcr.io/yumaitau/paperboy:main
 docker run --rm --platform linux/arm64 --env-file /path/to/protected.env -p 3000:3000 ghcr.io/yumaitau/paperboy:main
 ```
