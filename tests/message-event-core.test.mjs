@@ -14,11 +14,14 @@ test("the event catalog is bounded to message lifecycle outcomes", () => {
     "bounced",
     "complained",
     "opened",
+    "clicked",
   ]);
 });
 
 test("opened events require persisted opt-in while lifecycle events do not", () => {
-  for (const type of MESSAGE_EVENT_TYPES.filter((type) => type !== "opened")) {
+  for (const type of MESSAGE_EVENT_TYPES.filter(
+    (type) => type !== "opened" && type !== "clicked",
+  )) {
     assert.doesNotThrow(() =>
       requireMessageEventAllowed({ openTrackingEnabled: false, type }),
     );
@@ -36,5 +39,26 @@ test("opened events require persisted opt-in while lifecycle events do not", () 
   );
   assert.doesNotThrow(() =>
     requireMessageEventAllowed({ openTrackingEnabled: true, type: "opened" }),
+  );
+});
+
+test("clicked events require persisted click opt-in", () => {
+  assert.throws(
+    () =>
+      requireMessageEventAllowed({
+        clickTrackingEnabled: false,
+        openTrackingEnabled: false,
+        type: "clicked",
+      }),
+    (error) =>
+      error instanceof MessageEventError &&
+      error.code === "CLICK_TRACKING_DISABLED",
+  );
+  assert.doesNotThrow(() =>
+    requireMessageEventAllowed({
+      clickTrackingEnabled: true,
+      openTrackingEnabled: false,
+      type: "clicked",
+    }),
   );
 });

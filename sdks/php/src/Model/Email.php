@@ -73,6 +73,7 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'next_attempt_at' => 'mixed',
         'object' => 'string',
         'open_tracking_enabled' => 'bool',
+        'click_tracking_enabled' => 'bool',
         'provider' => '\PaperBoy\OpenApi\Model\MessageOutboundProvider',
         'sent_at' => 'mixed',
         'status' => 'string',
@@ -107,6 +108,7 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'next_attempt_at' => null,
         'object' => null,
         'open_tracking_enabled' => null,
+        'click_tracking_enabled' => null,
         'provider' => null,
         'sent_at' => null,
         'status' => null,
@@ -139,6 +141,7 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'next_attempt_at' => true,
         'object' => false,
         'open_tracking_enabled' => false,
+        'click_tracking_enabled' => false,
         'provider' => false,
         'sent_at' => true,
         'status' => false,
@@ -251,6 +254,7 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'next_attempt_at' => 'next_attempt_at',
         'object' => 'object',
         'open_tracking_enabled' => 'open_tracking_enabled',
+        'click_tracking_enabled' => 'click_tracking_enabled',
         'provider' => 'provider',
         'sent_at' => 'sent_at',
         'status' => 'status',
@@ -283,6 +287,7 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'next_attempt_at' => 'setNextAttemptAt',
         'object' => 'setObject',
         'open_tracking_enabled' => 'setOpenTrackingEnabled',
+        'click_tracking_enabled' => 'setClickTrackingEnabled',
         'provider' => 'setProvider',
         'sent_at' => 'setSentAt',
         'status' => 'setStatus',
@@ -315,6 +320,7 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'next_attempt_at' => 'getNextAttemptAt',
         'object' => 'getObject',
         'open_tracking_enabled' => 'getOpenTrackingEnabled',
+        'click_tracking_enabled' => 'getClickTrackingEnabled',
         'provider' => 'getProvider',
         'sent_at' => 'getSentAt',
         'status' => 'getStatus',
@@ -460,6 +466,7 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         $this->setIfExists('next_attempt_at', $data ?? [], null);
         $this->setIfExists('object', $data ?? [], null);
         $this->setIfExists('open_tracking_enabled', $data ?? [], null);
+        $this->setIfExists('click_tracking_enabled', $data ?? [], null);
         $this->setIfExists('provider', $data ?? [], null);
         $this->setIfExists('sent_at', $data ?? [], null);
         $this->setIfExists('status', $data ?? [], null);
@@ -575,6 +582,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
 
         if ($this->container['open_tracking_enabled'] === null) {
             $invalidProperties[] = "'open_tracking_enabled' can't be null";
+        }
+        if ($this->container['click_tracking_enabled'] === null) {
+            $invalidProperties[] = "'click_tracking_enabled' can't be null";
         }
         if ($this->container['provider'] === null) {
             $invalidProperties[] = "'provider' can't be null";
@@ -1139,6 +1149,33 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
             throw new \InvalidArgumentException('non-nullable open_tracking_enabled cannot be null');
         }
         $this->container['open_tracking_enabled'] = $open_tracking_enabled;
+
+        return $this;
+    }
+
+    /**
+     * Gets click_tracking_enabled
+     *
+     * @return bool
+     */
+    public function getClickTrackingEnabled()
+    {
+        return $this->container['click_tracking_enabled'];
+    }
+
+    /**
+     * Sets click_tracking_enabled
+     *
+     * @param bool $click_tracking_enabled click_tracking_enabled
+     *
+     * @return self
+     */
+    public function setClickTrackingEnabled($click_tracking_enabled)
+    {
+        if (is_null($click_tracking_enabled)) {
+            throw new \InvalidArgumentException('non-nullable click_tracking_enabled cannot be null');
+        }
+        $this->container['click_tracking_enabled'] = $click_tracking_enabled;
 
         return $this;
     }

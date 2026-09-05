@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  domains,
   emailSuppressions,
   messageAttachments,
   messages,
@@ -32,6 +33,7 @@ import {
   appendOpenTrackingPixel,
   createOpenTrackingUrl,
 } from "@/lib/open-tracking-core";
+import { rewriteHtmlLinksForMessage } from "@/lib/click-tracking-core";
 import {
   isOutboundProvider,
   type OutboundProvider,
@@ -303,8 +305,25 @@ export async function queueEmail(input: {
       if (!organization) {
         throw new Error("Message organization is unavailable.");
       }
+      let domainClickEnabled = false;
+      if (domain.domainId) {
+        const [domainRow] = await tx
+          .select({ enabled: domains.clickTrackingEnabled })
+          .from(domains)
+          .where(eq(domains.id, domain.domainId))
+          .limit(1);
+        domainClickEnabled = domainRow?.enabled === true;
+      }
       const messageId = randomUUID();
       let html = email.html;
+      let clickTrackingEnabled = false;
+      if (domainClickEnabled && html !== null) {
+        const rewritten = rewriteHtmlLinksForMessage({ html, messageId });
+        if (rewritten.rewritten > 0) {
+          html = rewritten.html;
+          clickTrackingEnabled = true;
+        }
+      }
       let openTrackingEnabled = false;
       if (organization.openTrackingEnabled && html !== null) {
         html = appendOpenTrackingPixel({
@@ -318,6 +337,7 @@ export async function queueEmail(input: {
         .insert(messages)
         .values({
           apiKeyId,
+          clickTrackingEnabled,
           deliveryMode: domain.mode,
           domainId: domain.domainId,
           environment: input.principal.environment,

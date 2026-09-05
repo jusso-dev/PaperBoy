@@ -416,6 +416,42 @@ paths:
             A deployment edge rejected malformed HTTP before the request
             reached PaperBoy. The application handler itself masks token and
             message validity behind the 200 GIF response.
+  /c/{messageId}/{signature}:
+    get:
+      operationId: recordClick
+      tags: [Open tracking]
+      summary: Follow a signed first-party click redirect
+      security: []
+      description: >-
+        Verifies the message-bound signature and target URL, records at most
+        one clicked event per message, then redirects to the original http(s)
+        URL. Invalid or untracked links return 404 without revealing message
+        state.
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: signature
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{43}$'
+        - name: u
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+            maxLength: 2048
+      responses:
+        '302':
+          description: Verified click recorded; redirect to the original URL.
+        '404':
+          description: Invalid signature, untracked message, or disallowed target.
   /api/v1/providers:
     get:
       operationId: getOutboundProviders
@@ -2377,6 +2413,7 @@ components:
         - last_error_code
         - next_attempt_at
         - object
+        - click_tracking_enabled
         - open_tracking_enabled
         - provider
         - sent_at
@@ -2426,6 +2463,8 @@ components:
           type: string
           const: email
         open_tracking_enabled:
+          type: boolean
+        click_tracking_enabled:
           type: boolean
         provider:
           $ref: '#/components/schemas/MessageOutboundProvider'
@@ -2480,7 +2519,7 @@ components:
           format: uuid
         type:
           type: string
-          enum: [queued, delivered, deferred, bounced, complained, opened]
+          enum: [queued, delivered, deferred, bounced, complained, opened, clicked]
     WebhookConfigurationInput:
       type: object
       additionalProperties: false
@@ -2567,6 +2606,7 @@ components:
             - email.bounced
             - email.complained
             - email.opened
+            - email.clicked
     EmailBatchEnvelope:
       type: object
       additionalProperties: false

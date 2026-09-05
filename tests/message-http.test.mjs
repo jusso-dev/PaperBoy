@@ -46,6 +46,7 @@ function detail() {
     leaseExpiresAt: null,
     nextAttemptAt: null,
     openTrackingEnabled: false,
+    clickTrackingEnabled: false,
     provider: "test-sink",
     sentAt: new Date("2026-08-23T10:01:00.000Z"),
     status: "sent",

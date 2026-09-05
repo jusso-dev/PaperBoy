@@ -438,6 +438,10 @@ export const domains = pgTable(
       .references(() => orgs.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     outboundProvider: text("outbound_provider").$type<LiveOutboundProvider>(),
+    clickTrackingEnabled: boolean("click_tracking_enabled")
+      .default(false)
+      .notNull(),
+    clickTrackingSubdomain: text("click_tracking_subdomain"),
     status: text("status").default("pending").notNull(),
     verificationToken: uuid("verification_token")
       .defaultRandom()
@@ -803,6 +807,9 @@ export const messages = pgTable(
     openTrackingEnabled: boolean("open_tracking_enabled")
       .default(false)
       .notNull(),
+    clickTrackingEnabled: boolean("click_tracking_enabled")
+      .default(false)
+      .notNull(),
     idempotencyKey: text("idempotency_key"),
     requestHash: text("request_hash"),
     status: text("status").$type<MessageStatus>().default("queued").notNull(),
@@ -1063,6 +1070,7 @@ export const events = pgTable(
         | "bounced"
         | "complained"
         | "opened"
+        | "clicked"
       >()
       .notNull(),
     data: bunJsonb("data")
@@ -1082,9 +1090,12 @@ export const events = pgTable(
     uniqueIndex("events_message_id_opened_unique")
       .on(table.messageId)
       .where(sql`${table.type} = 'opened'`),
+    uniqueIndex("events_message_id_clicked_unique")
+      .on(table.messageId)
+      .where(sql`${table.type} = 'clicked'`),
     check(
       "events_type_check",
-      sql`${table.type} in ('queued', 'delivered', 'deferred', 'bounced', 'complained', 'opened')`,
+      sql`${table.type} in ('queued', 'delivered', 'deferred', 'bounced', 'complained', 'opened', 'clicked')`,
     ),
     check(
       "events_data_object_check",

@@ -113,6 +113,12 @@ When enabled, queue creation adds one signed first-party pixel to future HTML me
 
 The pixel is part of provider-neutral stored HTML before delivery. Self-hosted SMTP and Cloudflare Email Service therefore receive the same signed URL and body while Cloudflare remains responsible for its provider-owned DKIM and ARC signatures. Events are stored and exposed in UTC; the console formats them in fixed `Australia/Sydney` time. Rotating the signing key invalidates outstanding pixels. See the [open-tracking privacy, API, MCP, timezone, and Cloudflare guide](docs/open-tracking.md).
 
+## Click tracking
+
+Click tracking is a per-domain setting and is off by default. Owners and admins toggle it per sending domain in the Organization console, with an optional tracking subdomain recorded for future dedicated-link use. It reuses the `PAPERBOY_PUBLIC_URL` origin and `PAPERBOY_OPEN_TRACKING_SIGNING_KEY` already required for open tracking; no additional secrets are needed.
+
+When enabled on the sending domain, queue creation rewrites each absolute http(s) link in future HTML messages through a signed first-party `/c/:messageId/:signature?u=` redirect and snapshots that choice on the message. Plain-text messages are never rewritten, and default sends leave hrefs untouched. Following a valid link records at most one `clicked` event per message, emits `email.clicked` through the same signed webhook path, then redirects with HTTP 302. Invalid or untracked links return 404 without revealing message state. Rotating the signing key invalidates outstanding click links.
+
 ## Console test send
 
 The signed-in console at `/app/send` lets owners and admins compose one provider test from a verified domain. It enters the same live queue used by `POST /api/v1/emails` and `paperboy_send_email`, including domain/DKIM authorisation, suppressions, organization rate limits, delivery events, and logs. Members can inspect delivery records but cannot queue a console send. Success timestamps render in fixed `Australia/Sydney` time; stored and protocol timestamps remain UTC.

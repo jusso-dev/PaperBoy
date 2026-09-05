@@ -19,6 +19,8 @@ import {
 } from "@/lib/organizations";
 import { requireOrganization } from "@/lib/session";
 import { normalizeSendingDomain } from "@/lib/domain-core";
+import { listDomains } from "@/lib/domains";
+import { updateDomainClickTrackingAction } from "@/app/app/domains/actions";
 import { getOpenTrackingSettings } from "@/lib/open-tracking";
 import {
   openTrackingPublicUrl,
@@ -52,6 +54,8 @@ const errorMessages: Record<string, string> = {
   invalid_rate_limits:
     "Use whole-number limits, with the test limit higher than the live limit.",
   invalid_open_tracking: "Choose whether open tracking is enabled.",
+  invalid_click_tracking:
+    "Enter a valid click-tracking setting and optional subdomain.",
   invalid_provider_settings: "Choose a supported outbound provider.",
   invitation_not_found: "That invitation is no longer available.",
   accept_url_unavailable:
@@ -84,6 +88,7 @@ const successMessages: Record<string, string> = {
   renamed: "Organization renamed.",
   "rate-limits": "Organization rate limits saved.",
   "open-tracking": "Organization open-tracking setting saved.",
+  "click-tracking": "Domain click-tracking setting saved.",
   "outbound-provider": "Organisation default outbound provider saved.",
   "domain-provider": "Domain outbound-provider override saved.",
   "provider-tested": "Provider connection test passed.",
@@ -104,6 +109,7 @@ export default async function OrganizationPage({
     rateLimits,
     openTracking,
     outboundProviders,
+    sendingDomains,
   ] = await Promise.all([
       listUserOrganizations(session.user.id),
       listOrganizationMembers(organization.id),
@@ -121,7 +127,9 @@ export default async function OrganizationPage({
         actorUserId: session.user.id,
         orgId: organization.id,
       }),
+      listDomains({ actorUserId: session.user.id, orgId: organization.id }),
     ]);
+  const canVerifyDomains = can(organization.role, "domains.verify");
   const canInvite = can(organization.role, "members.invite");
   const canRename = can(organization.role, "organizations.rename");
   const canRemove = can(organization.role, "members.remove");
@@ -489,6 +497,97 @@ export default async function OrganizationPage({
         ) : (
           <p>Owners and admins manage open tracking.</p>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Click tracking</h2>
+        <p>
+          Privacy-first and off by default. When enabled on a sending domain,
+          PaperBoy rewrites http(s) links in future HTML messages through a
+          signed first-party redirect and records at most one clicked event
+          per message. Plain-text messages are never rewritten.
+        </p>
+        {sendingDomains.length === 0 ? (
+          <p>No sending domains yet. Add one before enabling click tracking.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Status</th>
+                  <th>Click tracking</th>
+                  {canVerifyDomains ? <th>Action</th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {sendingDomains.map((domain) => (
+                  <tr key={domain.id}>
+                    <td>{domain.name}</td>
+                    <td>
+                      <span className="pill pill-muted">{domain.status}</span>
+                    </td>
+                    <td>
+                      {domain.clickTrackingEnabled
+                        ? `On${domain.clickTrackingSubdomain ? ` · ${domain.clickTrackingSubdomain}` : ""}`
+                        : "Off"}
+                    </td>
+                    {canVerifyDomains ? (
+                      <td>
+                        <form
+                          action={updateDomainClickTrackingAction}
+                          className="inline-form"
+                        >
+                          <input
+                            name="domainId"
+                            type="hidden"
+                            value={domain.id}
+                          />
+                          <label
+                            className="confirmation-control"
+                            htmlFor={`click-${domain.id}`}
+                          >
+                            <input
+                              defaultChecked={domain.clickTrackingEnabled}
+                              disabled={!openTrackingOrigin}
+                              id={`click-${domain.id}`}
+                              name="enabled"
+                              type="checkbox"
+                            />{" "}
+                            Track clicks
+                          </label>
+                          <input
+                            aria-label={`Tracking subdomain for ${domain.name}`}
+                            defaultValue={domain.clickTrackingSubdomain ?? ""}
+                            maxLength={253}
+                            name="trackingSubdomain"
+                            placeholder="click.example.com (optional)"
+                            type="text"
+                          />
+                          <button
+                            className="btn btn-compact"
+                            disabled={!openTrackingOrigin}
+                            type="submit"
+                          >
+                            Save
+                          </button>
+                        </form>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!openTrackingOrigin ? (
+          <p className="field-help">
+            Public URL and signing key are deployment secrets managed in Coolify.
+          </p>
+        ) : null}
+        {!canVerifyDomains ? (
+          <p>Owners and admins manage click tracking.</p>
+        ) : null}
       </div>
 
       <div className="card">

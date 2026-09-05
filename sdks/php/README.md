@@ -100,6 +100,7 @@ Class | Method | HTTP request | Description
 *EmailsApi* | [**sendEmailBatch**](docs/Api/EmailsApi.md#sendemailbatch) | **POST** /api/v1/emails/batch | Queue one to 100 emails
 *EventsApi* | [**listEmailEvents**](docs/Api/EventsApi.md#listemailevents) | **GET** /api/v1/emails/{emailId}/events | List one email&#39;s events
 *OpenTrackingApi* | [**getOpenTracking**](docs/Api/OpenTrackingApi.md#getopentracking) | **GET** /api/v1/open-tracking | Read organization open tracking
+*OpenTrackingApi* | [**recordClick**](docs/Api/OpenTrackingApi.md#recordclick) | **GET** /c/{messageId}/{signature} | Follow a signed first-party click redirect
 *OpenTrackingApi* | [**recordOpen**](docs/Api/OpenTrackingApi.md#recordopen) | **GET** /o/{messageId}/{signature}.gif | Fetch the signed first-party open pixel
 *OpenTrackingApi* | [**updateOpenTracking**](docs/Api/OpenTrackingApi.md#updateopentracking) | **PATCH** /api/v1/open-tracking | Update organization open tracking
 *OutboundProvidersApi* | [**getOutboundProviders**](docs/Api/OutboundProvidersApi.md#getoutboundproviders) | **GET** /api/v1/providers | Read outbound-provider routing

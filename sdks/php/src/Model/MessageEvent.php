@@ -258,6 +258,7 @@ class MessageEvent implements ModelInterface, ArrayAccess, \JsonSerializable
     public const TYPE_BOUNCED = 'bounced';
     public const TYPE_COMPLAINED = 'complained';
     public const TYPE_OPENED = 'opened';
+    public const TYPE_CLICKED = 'clicked';
 
     /**
      * Gets allowable values of the enum
@@ -273,6 +274,7 @@ class MessageEvent implements ModelInterface, ArrayAccess, \JsonSerializable
             self::TYPE_BOUNCED,
             self::TYPE_COMPLAINED,
             self::TYPE_OPENED,
+            self::TYPE_CLICKED,
         ];
     }
 

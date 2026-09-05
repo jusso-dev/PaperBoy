@@ -15,6 +15,8 @@ import {
   deleteDomain,
   verifyDomain,
 } from "@/lib/domains";
+import { ClickTrackingError } from "@/lib/click-tracking-core";
+import { updateDomainClickTracking } from "@/lib/click-tracking";
 import { requireOrganization } from "@/lib/session";
 
 function domainErrorMessage(error: unknown): string {
@@ -38,8 +40,15 @@ function domainErrorMessage(error: unknown): string {
     return "That domain action is no longer available.";
   }
 
-  if (error instanceof DkimError) {
-    if (error.code === "CONFIGURATION_INVALID") {
+  if (error instanceof ClickTrackingError) {
+    if (error.code === "VALIDATION_ERROR") {
+      return "Enter a valid click-tracking setting and optional subdomain.";
+    }
+
+    return "That domain action is no longer available.";
+  }
+
+  if (error instanceof DkimError) {    if (error.code === "CONFIGURATION_INVALID") {
       return "The operator must set a valid PAPERBOY_DKIM_ENCRYPTION_KEY before managing DKIM.";
     }
 
@@ -167,4 +176,25 @@ export async function finalizeDkimRotationAction(formData: FormData) {
 
   revalidatePath("/app/domains");
   redirect("/app/domains?saved=rotation-finalised");
+}
+
+export async function updateDomainClickTrackingAction(formData: FormData) {
+  const { organization, session } = await requireOrganization();
+
+  try {
+    await updateDomainClickTracking({
+      actorUserId: session.user.id,
+      domainId: String(formData.get("domainId")),
+      orgId: organization.id,
+      payload: {
+        enabled: formData.get("enabled") === "on",
+        tracking_subdomain: String(formData.get("trackingSubdomain") ?? ""),
+      },
+    });
+  } catch (error) {
+    errorRedirect(error);
+  }
+
+  revalidatePath("/app/organization");
+  redirect("/app/organization?saved=click-tracking");
 }
