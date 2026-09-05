@@ -82,6 +82,7 @@ const attachment = z
   })
   .strict();
 const headers = z.record(z.string(), z.string()).optional();
+const scheduledAt = z.string().datetime({ offset: true }).optional();
 
 const templateData = z.record(z.string(), z.unknown());
 
@@ -135,6 +136,7 @@ const sendEmailPayloadSchema = z
     headers,
     html: z.string().max(2 * 1024 * 1024).optional(),
     reply_to: z.union([address, z.array(address).min(1).max(50)]).optional(),
+    scheduled_at: scheduledAt,
     subject: z.string().min(1).max(998).optional(),
     tags: z.array(tag).max(75).optional(),
     template_id: z.string().uuid().optional(),
@@ -163,6 +165,7 @@ const sendEmailInputSchema = z
         "API-key-scoped for 24 hours; an identical replay returns the original message without provider resubmission.",
       )
       .optional(),
+    scheduled_at: scheduledAt,
     subject: z.string().min(1).max(998).optional(),
     tags: z.array(tag).max(75).optional(),
     template_id: z.string().uuid().optional(),

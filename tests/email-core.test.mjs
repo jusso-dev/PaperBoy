@@ -28,6 +28,7 @@ test("Resend-shaped email input is normalized without building MIME", () => {
     headers: {},
     html: "<p>Hello</p>",
     replyTo: [],
+    scheduledAt: null,
     subject: "Morning edition",
     tags: [{ name: "edition", value: "morning_1" }],
     text: "Hello",
@@ -43,6 +44,7 @@ test("Resend-shaped email input is normalized without building MIME", () => {
     "headers",
     "html",
     "replyTo",
+    "scheduledAt",
     "subject",
     "tags",
     "text",
@@ -119,6 +121,7 @@ test("idempotency keys and canonical request hashes are deterministic", () => {
           cc: first.cc,
           bcc: first.bcc,
           headers: first.headers,
+          scheduledAt: first.scheduledAt?.toISOString() ?? null,
           subject: first.subject,
           tags: first.tags,
           text: first.text,
@@ -177,8 +180,7 @@ test("cc, bcc, and custom headers are accepted with a combined recipient cap", (
   );
 });
 
-test("reserved and malformed headers are rejected", () => {
-  for (const headers of [
+test("reserved and malformed headers are rejected", () => {  for (const headers of [
     { Bcc: "smuggled@example.com" },
     { Subject: "override" },
     { "X-PaperBoy-Internal": "nope" },
@@ -195,6 +197,58 @@ test("reserved and malformed headers are rejected", () => {
           to: "reader@example.com",
         }),
       EmailError,
+    );
+  }
+});
+
+test("scheduled_at accepts a future ISO instant and normalises the past", () => {
+  const now = new Date("2026-09-05T07:00:00.000Z");
+  const future = parseSendEmailInput(
+    {
+      from: "sender@example.com",
+      scheduled_at: "2026-09-06T01:30:00Z",
+      subject: "Hello",
+      text: "Body",
+      to: "reader@example.com",
+    },
+    { now },
+  );
+  assert.equal(future.scheduledAt?.toISOString(), "2026-09-06T01:30:00.000Z");
+
+  const past = parseSendEmailInput(
+    {
+      from: "sender@example.com",
+      scheduled_at: "2026-09-04T01:30:00Z",
+      subject: "Hello",
+      text: "Body",
+      to: "reader@example.com",
+    },
+    { now },
+  );
+  assert.equal(past.scheduledAt, null);
+
+  for (const scheduled_at of [
+    "tomorrow at noon",
+    "2026-09-06 01:30:00",
+    "not a date",
+    123,
+    "2028-09-06T01:30:00Z",
+  ]) {
+    assert.throws(
+      () =>
+        parseSendEmailInput(
+          {
+            from: "sender@example.com",
+            scheduled_at,
+            subject: "Hello",
+            text: "Body",
+            to: "reader@example.com",
+          },
+          { now },
+        ),
+      (error) =>
+        error instanceof EmailError &&
+        error.issues.some((issue) => issue.field === "scheduled_at"),
     );
   }
 });

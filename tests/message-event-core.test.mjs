@@ -15,6 +15,8 @@ test("the event catalog is bounded to message lifecycle outcomes", () => {
     "complained",
     "opened",
     "clicked",
+    "scheduled",
+    "cancelled",
   ]);
 });
 

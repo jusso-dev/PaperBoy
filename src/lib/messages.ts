@@ -355,13 +355,13 @@ export async function queueEmail(input: {
           from: email.from,
           headers: email.headers,
           html,
-          replyTo: email.replyTo,
-          id: messageId,
           idempotencyKey,
+          nextAttemptAt: email.scheduledAt ?? undefined,
           openTrackingEnabled,
           orgId: input.principal.orgId,
           outboundProvider: domain.provider,
           requestHash: idempotencyKey ? requestHash : null,
+          scheduledAt: email.scheduledAt,
           subject: email.subject,
           tags: email.tags,
           textBody: email.text,
@@ -388,6 +388,15 @@ export async function queueEmail(input: {
         messageId: inserted.id,
         type: "queued",
       });
+
+      if (email.scheduledAt) {
+        await insertMessageEvent(tx, {
+          createdAt: inserted.createdAt,
+          data: { scheduled_at: email.scheduledAt.toISOString() },
+          messageId: inserted.id,
+          type: "scheduled",
+        });
+      }
 
       for (const [position, attachment] of email.attachments.entries()) {
         const attachmentId = randomUUID();

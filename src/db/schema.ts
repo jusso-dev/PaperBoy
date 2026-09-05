@@ -818,6 +818,7 @@ export const messages = pgTable(
       .notNull(),
     idempotencyKey: text("idempotency_key"),
     requestHash: text("request_hash"),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
     status: text("status").$type<MessageStatus>().default("queued").notNull(),
     attemptCount: integer("attempt_count").default(0).notNull(),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
@@ -828,6 +829,7 @@ export const messages = pgTable(
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     failedAt: timestamp("failed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     lastErrorCode: text("last_error_code"),
     failureReason: text("failure_reason"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -870,7 +872,7 @@ export const messages = pgTable(
     ),
     check(
       "messages_status_check",
-      sql`${table.status} in ('queued', 'sending', 'sent', 'failed')`,
+      sql`${table.status} in ('queued', 'sending', 'sent', 'failed', 'cancelled')`,
     ),
     check(
       "messages_environment_check",
@@ -951,6 +953,10 @@ export const messages = pgTable(
     check(
       "messages_failed_state_check",
       sql`(${table.status} = 'failed' and ${table.failedAt} is not null and ${table.failureReason} is not null) or (${table.status} <> 'failed' and ${table.failedAt} is null)`,
+    ),
+    check(
+      "messages_cancelled_state_check",
+      sql`(${table.status} = 'cancelled' and ${table.cancelledAt} is not null and ${table.sentAt} is null and ${table.failedAt} is null) or (${table.status} <> 'cancelled' and ${table.cancelledAt} is null)`,
     ),
   ],
 );
@@ -1094,6 +1100,8 @@ export const events = pgTable(
         | "complained"
         | "opened"
         | "clicked"
+        | "scheduled"
+        | "cancelled"
       >()
       .notNull(),
     data: bunJsonb("data")
@@ -1118,7 +1126,7 @@ export const events = pgTable(
       .where(sql`${table.type} = 'clicked'`),
     check(
       "events_type_check",
-      sql`${table.type} in ('queued', 'delivered', 'deferred', 'bounced', 'complained', 'opened', 'clicked')`,
+      sql`${table.type} in ('queued', 'delivered', 'deferred', 'bounced', 'complained', 'opened', 'clicked', 'scheduled', 'cancelled')`,
     ),
     check(
       "events_data_object_check",

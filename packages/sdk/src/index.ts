@@ -27,6 +27,7 @@ type SendEmailEnvelope = {
   from: string;
   headers?: Record<string, string>;
   reply_to?: string | string[];
+  scheduled_at?: string;
   tags?: EmailTag[];
   to: string | string[];
 };
@@ -70,6 +71,7 @@ export type Email = {
   attachments: StoredAttachment[];
   attempt_count: number;
   bcc: string[];
+  cancelled_at: string | null;
   cc: string[];
   created_at: string;
   delivery_mode: PaperBoyDeliveryMode;
@@ -88,6 +90,8 @@ export type Email = {
   open_tracking_enabled: boolean;
   click_tracking_enabled: boolean;
   provider: PaperBoyOutboundProvider;
+  provider_message_id: string | null;
+  scheduled_at: string | null;
   sent_at: string | null;
   status: PaperBoyMessageStatus;
   subject: string;

@@ -92,6 +92,50 @@ x-paperboy-mcp:
     importSuppressions: paperboy_import_suppressions
 paths:
   /api/v1/emails:
+    get:
+      operationId: listEmails
+      tags: [Emails]
+      summary: List emails
+      description: >-
+        Lists messages in the organization and environment selected by the
+        bearer key, newest first. Timestamps are RFC 3339 UTC. Attachment
+        bytes, hashes, and storage keys are never returned.
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: One page of message summaries and the matching total.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       operationId: sendEmail
       tags: [Emails]
@@ -103,7 +147,8 @@ paths:
         default or domain override. Provider choice is snapshotted on the queued
         message. Cloudflare Email Service remains responsible for provider-owned
         DKIM and ARC signatures. Idempotency may be supplied in the header or JSON
-        body and is active for 24 hours per API key.
+        body and is active for 24 hours per API key. A future scheduled_at
+        holds the message until its time; past values send immediately.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -273,6 +318,72 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: rescheduleEmail
+      tags: [Emails]
+      summary: Reschedule a queued email
+      description: >-
+        Moves a still-queued message to a new scheduled_at instant. Only
+        queued messages can be rescheduled; sent, failed, and cancelled
+        messages are rejected. Past values make the message due immediately.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleEmailInput'
+      responses:
+        '200':
+          description: Rescheduled message state and semantic content.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Email'
+        '400':
+          $ref: '#/components/responses/InvalidJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/emails/{emailId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/EmailId'
+    post:
+      operationId: cancelEmail
+      tags: [Emails]
+      summary: Cancel a queued email
+      description: >-
+        Marks a still-queued message cancelled so the worker never hands it
+        to the provider. Cancelling after send is rejected.
+      responses:
+        '200':
+          description: Cancelled message state and semantic content.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Email'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '500':
           $ref: '#/components/responses/InternalError'
   /api/v1/emails/{emailId}/events:
@@ -2202,6 +2313,8 @@ components:
           $ref: '#/components/schemas/Recipients'
         headers:
           $ref: '#/components/schemas/EmailHeaders'
+        scheduled_at:
+          $ref: '#/components/schemas/ScheduledAt'
     TemplateEmailInput:
       type: object
       additionalProperties: false
@@ -2232,6 +2345,8 @@ components:
           $ref: '#/components/schemas/Recipients'
         headers:
           $ref: '#/components/schemas/EmailHeaders'
+        scheduled_at:
+          $ref: '#/components/schemas/ScheduledAt'
     Sender:
       type: string
       minLength: 3
@@ -2282,6 +2397,12 @@ components:
         maxLength: 998
         pattern: '^[^\r\n]*$'
       default: {}
+    ScheduledAt:
+      type: string
+      format: date-time
+      description: ISO 8601 instant. Future values queue the message for later delivery; past values send immediately.
+      examples:
+        - '2026-09-06T01:30:00Z'
     EmailAttachments:
       type: array
       maxItems: 100
@@ -2442,10 +2563,13 @@ components:
         - next_attempt_at
         - object
         - bcc
+        - cancelled_at
         - cc
         - click_tracking_enabled
         - headers
         - open_tracking_enabled
+        - provider_message_id
+        - scheduled_at
         - provider
         - sent_at
         - status
@@ -2507,13 +2631,19 @@ components:
           type: boolean
         click_tracking_enabled:
           type: boolean
+        scheduled_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        cancelled_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        provider_message_id:
+          type: [string, 'null']
         provider:
           $ref: '#/components/schemas/MessageOutboundProvider'
         sent_at:
           $ref: '#/components/schemas/NullableUtcDateTime'
         status:
           type: string
-          enum: [queued, sending, sent, failed]
+          enum: [queued, sending, sent, failed, cancelled]
         subject:
           type: string
         tags:
@@ -2526,6 +2656,89 @@ components:
             type: string
         updated_at:
           $ref: '#/components/schemas/UtcDateTime'
+    RescheduleEmailInput:
+      type: object
+      additionalProperties: false
+      required: [scheduled_at]
+      properties:
+        scheduled_at:
+          $ref: '#/components/schemas/ScheduledAt'
+    EmailSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - cancelled_at
+        - created_at
+        - domain_id
+        - environment
+        - from
+        - id
+        - object
+        - provider
+        - provider_message_id
+        - scheduled_at
+        - sent_at
+        - status
+        - subject
+        - to
+        - updated_at
+      properties:
+        cancelled_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        created_at:
+          $ref: '#/components/schemas/UtcDateTime'
+        domain_id:
+          type: [string, 'null']
+          format: uuid
+        environment:
+          type: string
+          enum: [live, test]
+        from:
+          type: string
+        id:
+          type: string
+          format: uuid
+        object:
+          type: string
+          const: email
+        provider:
+          $ref: '#/components/schemas/MessageOutboundProvider'
+        provider_message_id:
+          type: [string, 'null']
+        scheduled_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        sent_at:
+          $ref: '#/components/schemas/NullableUtcDateTime'
+        status:
+          type: string
+          enum: [queued, sending, sent, failed, cancelled]
+        subject:
+          type: string
+        to:
+          type: array
+          items:
+            type: string
+        updated_at:
+          $ref: '#/components/schemas/UtcDateTime'
+    EmailListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, limit, page, total]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailSummary'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        page:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
     StoredAttachment:
       type: object
       additionalProperties: false
@@ -2563,7 +2776,7 @@ components:
           format: uuid
         type:
           type: string
-          enum: [queued, delivered, deferred, bounced, complained, opened, clicked]
+          enum: [queued, delivered, deferred, bounced, complained, opened, clicked, scheduled, cancelled]
     WebhookConfigurationInput:
       type: object
       additionalProperties: false
@@ -2651,6 +2864,8 @@ components:
             - email.complained
             - email.opened
             - email.clicked
+            - email.scheduled
+            - email.cancelled
     EmailBatchEnvelope:
       type: object
       additionalProperties: false

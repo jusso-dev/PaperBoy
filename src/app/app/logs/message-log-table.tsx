@@ -28,7 +28,7 @@ export type MessageLogRow = {
   to: string[];
   stateLabel: string;
   stateTime: string | null;
-  status: "failed" | "queued" | "sending" | "sent";
+  status: "cancelled" | "failed" | "queued" | "sending" | "sent";
 };
 
 function byteSize(value: number): string {

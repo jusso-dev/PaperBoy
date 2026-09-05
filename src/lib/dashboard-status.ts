@@ -1,5 +1,6 @@
 export type DashboardEmailStatus =
   | "bounced"
+  | "cancelled"
   | "complained"
   | "deferred"
   | "delivered"
@@ -11,6 +12,7 @@ export type DashboardEmailStatus =
 
 const STATUS_PRIORITY: Record<DashboardEmailStatus, number> = {
   bounced: 11,
+  cancelled: 3,
   complained: 12,
   deferred: 5,
   delivered: 6,

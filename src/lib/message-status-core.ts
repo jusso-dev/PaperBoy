@@ -6,6 +6,7 @@ import type { OutboundProvider } from "@/lib/outbound-provider-core";
 
 export type MessageDeliveryStatusRecord = {
   attemptCount: number;
+  cancelledAt: Date | null;
   createdAt: Date;
   deliveryMode: MessageDeliveryMode;
   domainId: string | null;
@@ -18,12 +19,15 @@ export type MessageDeliveryStatusRecord = {
   leaseExpiresAt: Date | null;
   nextAttemptAt: Date | null;
   provider: OutboundProvider;
+  providerMessageId: string | null;
+  scheduledAt: Date | null;
   sentAt: Date | null;
   status: MessageStatus;
   updatedAt: Date;
 };
 
 export type MessageDeliveryOverviewRecord = MessageDeliveryStatusRecord & {
+  from: string;
   subject: string;
   to: string[];
 };
