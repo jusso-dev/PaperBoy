@@ -105,12 +105,15 @@ export function serializeMessage(message: MessageDetailRecord) {
 
   return {
     attachments: message.attachments.map((attachment) => ({
+      content_id: attachment.contentId,
       content_type: attachment.contentType,
       filename: attachment.filename,
       id: attachment.id,
       size: attachment.size,
     })),
     attempt_count: message.attemptCount,
+    bcc: message.bcc,
+    cc: message.cc,
     created_at: message.createdAt.toISOString(),
     delivery_mode: message.deliveryMode,
     domain_id: message.domainId,
@@ -118,6 +121,7 @@ export function serializeMessage(message: MessageDetailRecord) {
     failed_at: timestamp(message.failedAt),
     failure_reason: message.failureReason,
     from: message.from,
+    headers: message.headers,
     html: message.html,
     id: message.id,
     last_attempt_at: timestamp(message.lastAttemptAt),

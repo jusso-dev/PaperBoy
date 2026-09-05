@@ -164,6 +164,9 @@ function messageFilters(
           sql`${messages.subject} ilike ${pattern} escape '\\'`,
           sql`${messages.from} ilike ${pattern} escape '\\'`,
           sql`${messages.to}::text ilike ${pattern} escape '\\'`,
+          sql`${messages.cc}::text ilike ${pattern} escape '\\'`,
+          sql`${messages.bcc}::text ilike ${pattern} escape '\\'`,
+          sql`${messages.tags}::text ilike ${pattern} escape '\\'`,
         )
       : undefined,
   );

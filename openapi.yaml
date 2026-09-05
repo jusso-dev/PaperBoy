@@ -2196,6 +2196,12 @@ components:
           $ref: '#/components/schemas/EmailAttachments'
         reply_to:
           $ref: '#/components/schemas/Recipients'
+        cc:
+          $ref: '#/components/schemas/Recipients'
+        bcc:
+          $ref: '#/components/schemas/Recipients'
+        headers:
+          $ref: '#/components/schemas/EmailHeaders'
     TemplateEmailInput:
       type: object
       additionalProperties: false
@@ -2220,6 +2226,12 @@ components:
           $ref: '#/components/schemas/EmailAttachments'
         reply_to:
           $ref: '#/components/schemas/Recipients'
+        cc:
+          $ref: '#/components/schemas/Recipients'
+        bcc:
+          $ref: '#/components/schemas/Recipients'
+        headers:
+          $ref: '#/components/schemas/EmailHeaders'
     Sender:
       type: string
       minLength: 3
@@ -2260,6 +2272,16 @@ components:
           minLength: 1
           maxLength: 256
           pattern: '^[A-Za-z0-9_-]+$'
+    EmailHeaders:
+      type: object
+      description: Custom MIME headers. Delivery headers such as From, To, Cc, Bcc, Subject, and Date are reserved.
+      maxProperties: 50
+      additionalProperties:
+        type: string
+        minLength: 1
+        maxLength: 998
+        pattern: '^[^\r\n]*$'
+      default: {}
     EmailAttachments:
       type: array
       maxItems: 100
@@ -2277,6 +2299,12 @@ components:
           minLength: 1
           contentEncoding: base64
           description: Canonical Base64 file bytes.
+        content_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[^\\s<>,;]+$'
+          description: 'Optional CID reference for inline images used as cid: URIs in HTML.'
         filename:
           type: string
           minLength: 1
@@ -2413,7 +2441,10 @@ components:
         - last_error_code
         - next_attempt_at
         - object
+        - bcc
+        - cc
         - click_tracking_enabled
+        - headers
         - open_tracking_enabled
         - provider
         - sent_at
@@ -2439,6 +2470,16 @@ components:
         domain_id:
           type: [string, 'null']
           format: uuid
+        cc:
+          type: array
+          items:
+            type: string
+        bcc:
+          type: array
+          items:
+            type: string
+        headers:
+          $ref: '#/components/schemas/EmailHeaders'
         environment:
           type: string
           enum: [live, test]
@@ -2490,6 +2531,9 @@ components:
       additionalProperties: false
       required: [content_type, filename, id, size]
       properties:
+        content_id:
+          type: [string, 'null']
+          description: CID reference for inline images, or null for regular attachments.
         content_type:
           type: string
         filename:

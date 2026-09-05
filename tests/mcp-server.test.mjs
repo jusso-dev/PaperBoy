@@ -839,8 +839,11 @@ test("initializes and publishes versioned tool schemas", async () => {
       paperboy_rotate_domain_dkim: ["domainId"],
       paperboy_send_email: [
         "attachments",
+        "bcc",
+        "cc",
         "data",
         "from",
+        "headers",
         "html",
         "reply_to",
         "idempotencyKey",

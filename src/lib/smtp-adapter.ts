@@ -361,7 +361,11 @@ export function createSmtpAdapter(
 
       const envelopeFrom =
         bounceAddress ?? normalizeEmailAddress(message.from);
-      const envelopeTo = message.to.map(normalizeEmailAddress);
+      const envelopeTo = [
+        ...message.to,
+        ...(message.cc ?? []),
+        ...(message.bcc ?? []),
+      ].map(normalizeEmailAddress);
 
       if (!envelopeFrom || envelopeTo.some((address) => !address)) {
         throw new OutboundDeliveryError({
@@ -375,7 +379,7 @@ export function createSmtpAdapter(
       const raw = await buildSmtpMimeMessage({
         ...message,
         date: now(),
-        headers: { "X-PaperBoy-Message-ID": message.id },
+        extraHeaders: { "X-PaperBoy-Message-ID": message.id },
         messageId: `<${message.id}@${senderDomain}>`,
       });
       if (

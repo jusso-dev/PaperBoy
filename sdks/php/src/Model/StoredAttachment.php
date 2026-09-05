@@ -57,6 +57,7 @@ class StoredAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $openAPITypes = [
+        'content_id' => 'string',
         'content_type' => 'string',
         'filename' => 'string',
         'id' => 'string',
@@ -71,6 +72,7 @@ class StoredAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      * @psalm-var array<string, string|null>
      */
     protected static $openAPIFormats = [
+        'content_id' => null,
         'content_type' => null,
         'filename' => null,
         'id' => 'uuid',
@@ -83,6 +85,7 @@ class StoredAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var boolean[]
      */
     protected static array $openAPINullables = [
+        'content_id' => true,
         'content_type' => false,
         'filename' => false,
         'id' => false,
@@ -175,6 +178,7 @@ class StoredAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $attributeMap = [
+        'content_id' => 'content_id',
         'content_type' => 'content_type',
         'filename' => 'filename',
         'id' => 'id',
@@ -187,6 +191,7 @@ class StoredAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $setters = [
+        'content_id' => 'setContentId',
         'content_type' => 'setContentType',
         'filename' => 'setFilename',
         'id' => 'setId',
@@ -199,6 +204,7 @@ class StoredAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $getters = [
+        'content_id' => 'getContentId',
         'content_type' => 'getContentType',
         'filename' => 'getFilename',
         'id' => 'getId',
@@ -262,6 +268,7 @@ class StoredAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     public function __construct(?array $data = null)
     {
+        $this->setIfExists('content_id', $data ?? [], null);
         $this->setIfExists('content_type', $data ?? [], null);
         $this->setIfExists('filename', $data ?? [], null);
         $this->setIfExists('id', $data ?? [], null);
@@ -329,6 +336,40 @@ class StoredAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
         return count($this->listInvalidProperties()) === 0;
     }
 
+
+    /**
+     * Gets content_id
+     *
+     * @return string|null
+     */
+    public function getContentId()
+    {
+        return $this->container['content_id'];
+    }
+
+    /**
+     * Sets content_id
+     *
+     * @param string|null $content_id CID reference for inline images, or null for regular attachments.
+     *
+     * @return self
+     */
+    public function setContentId($content_id)
+    {
+        if (is_null($content_id)) {
+            array_push($this->openAPINullablesSetToNull, 'content_id');
+        } else {
+            $nullablesSetToNull = $this->getOpenAPINullablesSetToNull();
+            $index = array_search('content_id', $nullablesSetToNull);
+            if ($index !== FALSE) {
+                unset($nullablesSetToNull[$index]);
+                $this->setOpenAPINullablesSetToNull($nullablesSetToNull);
+            }
+        }
+        $this->container['content_id'] = $content_id;
+
+        return $this;
+    }
 
     /**
      * Gets content_type

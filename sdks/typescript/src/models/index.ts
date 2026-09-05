@@ -613,6 +613,24 @@ export interface Email {
     domain_id: string | null;
     /**
      * 
+     * @type {Array<string>}
+     * @memberof Email
+     */
+    cc: Array<string>;
+    /**
+     * 
+     * @type {Array<string>}
+     * @memberof Email
+     */
+    bcc: Array<string>;
+    /**
+     * Custom MIME headers. Delivery headers such as From, To, Cc, Bcc, Subject, and Date are reserved.
+     * @type {{ [key: string]: string; }}
+     * @memberof Email
+     */
+    headers: { [key: string]: string; };
+    /**
+     * 
      * @type {EmailEnvironmentEnum}
      * @memberof Email
      */
@@ -783,6 +801,12 @@ export interface EmailAttachment {
      * @memberof EmailAttachment
      */
     content: string;
+    /**
+     * Optional CID reference for inline images used as cid: URIs in HTML.
+     * @type {string}
+     * @memberof EmailAttachment
+     */
+    content_id?: string;
     /**
      * At most 255 UTF-8 bytes; paths and control characters are rejected.
      * @type {string}
@@ -974,6 +998,24 @@ export interface InlineEmailInput {
      * @memberof InlineEmailInput
      */
     reply_to?: Recipients;
+    /**
+     * 
+     * @type {Recipients}
+     * @memberof InlineEmailInput
+     */
+    cc?: Recipients;
+    /**
+     * 
+     * @type {Recipients}
+     * @memberof InlineEmailInput
+     */
+    bcc?: Recipients;
+    /**
+     * Custom MIME headers. Delivery headers such as From, To, Cc, Bcc, Subject, and Date are reserved.
+     * @type {{ [key: string]: string; }}
+     * @memberof InlineEmailInput
+     */
+    headers?: { [key: string]: string; };
 }
 /**
  * 
@@ -1988,6 +2030,12 @@ export type SendEmailInput = InlineEmailInput | TemplateEmailInput;
  */
 export interface StoredAttachment {
     /**
+     * CID reference for inline images, or null for regular attachments.
+     * @type {string}
+     * @memberof StoredAttachment
+     */
+    content_id?: string | null;
+    /**
      * 
      * @type {string}
      * @memberof StoredAttachment
@@ -2244,6 +2292,24 @@ export interface TemplateEmailInput {
      * @memberof TemplateEmailInput
      */
     reply_to?: Recipients;
+    /**
+     * 
+     * @type {Recipients}
+     * @memberof TemplateEmailInput
+     */
+    cc?: Recipients;
+    /**
+     * 
+     * @type {Recipients}
+     * @memberof TemplateEmailInput
+     */
+    bcc?: Recipients;
+    /**
+     * Custom MIME headers. Delivery headers such as From, To, Cc, Bcc, Subject, and Date are reserved.
+     * @type {{ [key: string]: string; }}
+     * @memberof TemplateEmailInput
+     */
+    headers?: { [key: string]: string; };
 }
 /**
  * 

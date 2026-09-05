@@ -65,7 +65,10 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'text' => 'string',
         'tags' => '\PaperBoy\OpenApi\Model\EmailTag[]',
         'attachments' => '\PaperBoy\OpenApi\Model\EmailAttachment[]',
-        'reply_to' => '\PaperBoy\OpenApi\Model\Recipients'
+        'reply_to' => '\PaperBoy\OpenApi\Model\Recipients',
+        'cc' => '\PaperBoy\OpenApi\Model\Recipients',
+        'bcc' => '\PaperBoy\OpenApi\Model\Recipients',
+        'headers' => 'array<string,string>'
     ];
 
     /**
@@ -84,7 +87,10 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'text' => null,
         'tags' => null,
         'attachments' => null,
-        'reply_to' => null
+        'reply_to' => null,
+        'cc' => null,
+        'bcc' => null,
+        'headers' => null
     ];
 
     /**
@@ -101,7 +107,10 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'text' => false,
         'tags' => false,
         'attachments' => false,
-        'reply_to' => false
+        'reply_to' => false,
+        'cc' => false,
+        'bcc' => false,
+        'headers' => false
     ];
 
     /**
@@ -198,7 +207,10 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'text' => 'text',
         'tags' => 'tags',
         'attachments' => 'attachments',
-        'reply_to' => 'reply_to'
+        'reply_to' => 'reply_to',
+        'cc' => 'cc',
+        'bcc' => 'bcc',
+        'headers' => 'headers'
     ];
 
     /**
@@ -215,7 +227,10 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'text' => 'setText',
         'tags' => 'setTags',
         'attachments' => 'setAttachments',
-        'reply_to' => 'setReplyTo'
+        'reply_to' => 'setReplyTo',
+        'cc' => 'setCc',
+        'bcc' => 'setBcc',
+        'headers' => 'setHeaders'
     ];
 
     /**
@@ -232,7 +247,10 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         'text' => 'getText',
         'tags' => 'getTags',
         'attachments' => 'getAttachments',
-        'reply_to' => 'getReplyTo'
+        'reply_to' => 'getReplyTo',
+        'cc' => 'getCc',
+        'bcc' => 'getBcc',
+        'headers' => 'getHeaders'
     ];
 
     /**
@@ -301,6 +319,9 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
         $this->setIfExists('tags', $data ?? [], null);
         $this->setIfExists('attachments', $data ?? [], null);
         $this->setIfExists('reply_to', $data ?? [], null);
+        $this->setIfExists('cc', $data ?? [], null);
+        $this->setIfExists('bcc', $data ?? [], null);
+        $this->setIfExists('headers', $data ?? [], null);
     }
 
     /**
@@ -385,6 +406,10 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
 
         if (!is_null($this->container['attachments']) && (count($this->container['attachments']) > 100)) {
             $invalidProperties[] = "invalid value for 'attachments', number of items must be less than or equal to 100.";
+        }
+
+        if (!is_null($this->container['headers']) && (count($this->container['headers']) > 50)) {
+            $invalidProperties[] = "invalid value for 'headers', number of items must be less than or equal to 50.";
         }
 
         return $invalidProperties;
@@ -682,6 +707,90 @@ class InlineEmailInput implements ModelInterface, ArrayAccess, \JsonSerializable
             throw new \InvalidArgumentException('non-nullable reply_to cannot be null');
         }
         $this->container['reply_to'] = $reply_to;
+
+        return $this;
+    }
+
+    /**
+     * Gets cc
+     *
+     * @return \PaperBoy\OpenApi\Model\Recipients|null
+     */
+    public function getCc()
+    {
+        return $this->container['cc'];
+    }
+
+    /**
+     * Sets cc
+     *
+     * @param \PaperBoy\OpenApi\Model\Recipients|null $cc cc
+     *
+     * @return self
+     */
+    public function setCc($cc)
+    {
+        if (is_null($cc)) {
+            throw new \InvalidArgumentException('non-nullable cc cannot be null');
+        }
+        $this->container['cc'] = $cc;
+
+        return $this;
+    }
+
+    /**
+     * Gets bcc
+     *
+     * @return \PaperBoy\OpenApi\Model\Recipients|null
+     */
+    public function getBcc()
+    {
+        return $this->container['bcc'];
+    }
+
+    /**
+     * Sets bcc
+     *
+     * @param \PaperBoy\OpenApi\Model\Recipients|null $bcc bcc
+     *
+     * @return self
+     */
+    public function setBcc($bcc)
+    {
+        if (is_null($bcc)) {
+            throw new \InvalidArgumentException('non-nullable bcc cannot be null');
+        }
+        $this->container['bcc'] = $bcc;
+
+        return $this;
+    }
+
+    /**
+     * Gets headers
+     *
+     * @return array<string,string>|null
+     */
+    public function getHeaders()
+    {
+        return $this->container['headers'];
+    }
+
+    /**
+     * Sets headers
+     *
+     * @param array<string,string>|null $headers Custom MIME headers. Delivery headers such as From, To, Cc, Bcc, Subject, and Date are reserved.
+     *
+     * @return self
+     */
+    public function setHeaders($headers)
+    {
+        if (is_null($headers)) {
+            throw new \InvalidArgumentException('non-nullable headers cannot be null');
+        }
+        if ((count($headers) > 50)) {
+            throw new \InvalidArgumentException('invalid value for $headers when calling InlineEmailInput., number of items must be less than or equal to 50.');
+        }
+        $this->container['headers'] = $headers;
 
         return $this;
     }

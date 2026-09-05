@@ -66,12 +66,16 @@ export async function buildOwnerMessageMime(input: {
   return buildSmtpMimeMessage({
     attachments: attachments.map((attachment) => ({
       content: attachment.content,
+      contentId: attachment.contentId,
       contentType: attachment.contentType,
       filename: attachment.filename,
     })),
+    bcc: message.bcc,
+    cc: message.cc,
     date: message.lastAttemptAt ?? message.createdAt,
+    extraHeaders: { "X-PaperBoy-Message-ID": message.id },
     from: message.from,
-    headers: { "X-PaperBoy-Message-ID": message.id },
+    headers: message.headers,
     html: message.html,
     messageId: `<${message.id}@${senderDomain}>`,
     subject: message.subject,

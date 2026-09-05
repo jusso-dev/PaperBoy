@@ -96,6 +96,22 @@ function safeProviderValue(value: unknown): string | null {
 }
 
 function normalizedRecipients(message: OutboundDeliveryMessage): string[] {
+  const recipients = [
+    ...message.to,
+    ...(message.cc ?? []),
+    ...(message.bcc ?? []),
+  ].map(normalizeEmailAddress);
+  if (recipients.some((recipient) => !recipient)) {
+    throw new OutboundDeliveryError({
+      code: "invalid_envelope",
+      reason: "The queued Amazon SES envelope is invalid.",
+      retryable: false,
+    });
+  }
+  return recipients as string[];
+}
+
+function normalizedToRecipients(message: OutboundDeliveryMessage): string[] {
   const recipients = message.to.map(normalizeEmailAddress);
   if (recipients.some((recipient) => !recipient)) {
     throw new OutboundDeliveryError({
@@ -190,11 +206,24 @@ function bulkCompatibility(messages: OutboundDeliveryMessage[]): void {
   const attachmentKey = attachmentFingerprint(first);
   for (const message of messages) {
     requireSesMessage(message);
-    if (normalizedRecipients(message).length !== 1) {
+    if (normalizedToRecipients(message).length !== 1) {
       throw new OutboundDeliveryError({
         code: "aws_ses_single_recipient_required",
         reason:
           "Amazon SES delivery requires one recipient per message so quotas, failures, and suppressions remain recipient-specific.",
+        retryable: false,
+      });
+    }
+    if (
+      (message.cc ?? []).length > 0 ||
+      (message.bcc ?? []).length > 0 ||
+      Object.keys(message.headers ?? {}).length > 0 ||
+      message.attachments.some((attachment) => attachment.contentId)
+    ) {
+      throw new OutboundDeliveryError({
+        code: "aws_ses_incompatible_batch",
+        reason:
+          "Amazon SES bulk entries cannot carry cc, bcc, custom headers, or inline images; send those messages individually.",
         retryable: false,
       });
     }
@@ -679,7 +708,7 @@ export function createAwsSesAdapter(
     provider: "aws-ses",
     async send(message) {
       requireSesMessage(message);
-      const to = normalizedRecipients(message);
+      const to = normalizedToRecipients(message);
       if (to.length !== 1) {
         throw new OutboundDeliveryError({
           code: "aws_ses_single_recipient_required",
@@ -703,7 +732,7 @@ export function createAwsSesAdapter(
       const raw = await buildSmtpMimeMessage({
         ...message,
         date: now(),
-        headers: { "X-PaperBoy-Message-ID": message.id },
+        extraHeaders: { "X-PaperBoy-Message-ID": message.id },
         messageId: `<${message.id}@${senderDomain}>`,
       });
       try {
@@ -713,7 +742,23 @@ export function createAwsSesAdapter(
               ? { ConfigurationSetName: configurationSet }
               : {}),
             Content: { Raw: { Data: raw } },
-            Destination: { ToAddresses: to },
+            Destination: {
+              ...((message.cc ?? []).length > 0
+                ? {
+                    CcAddresses: (message.cc ?? []).map(
+                      (address) => normalizeEmailAddress(address) as string,
+                    ),
+                  }
+                : {}),
+              ...((message.bcc ?? []).length > 0
+                ? {
+                    BccAddresses: (message.bcc ?? []).map(
+                      (address) => normalizeEmailAddress(address) as string,
+                    ),
+                  }
+                : {}),
+              ToAddresses: to,
+            },
             EmailTags: [
               { Name: AWS_SES_MESSAGE_ID_TAG, Value: message.id },
             ],

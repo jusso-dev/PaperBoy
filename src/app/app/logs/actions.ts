@@ -26,18 +26,22 @@ export type MessageDrawerResult =
       }[];
       message: {
         attachments: {
+          contentId: string | null;
           contentType: string;
           filename: string;
           id: string;
           size: number;
         }[];
         attemptCount: number;
+        bcc: string[];
+        cc: string[];
         createdAt: string;
         deliveryMode: string;
         domainId: string | null;
         environment: string;
         failureReason: string | null;
         from: string;
+        headers: Record<string, string>;
         html: string | null;
         id: string;
         lastErrorCode: string | null;
@@ -104,18 +108,22 @@ export async function getMessageDrawerAction(
       })),
       message: {
         attachments: message.attachments.map((attachment) => ({
+          contentId: attachment.contentId,
           contentType: attachment.contentType,
           filename: attachment.filename,
           id: attachment.id,
           size: attachment.size,
         })),
         attemptCount: message.attemptCount,
+        bcc: message.bcc,
+        cc: message.cc,
         createdAt: formatDateTime(message.createdAt, session.user.timezone),
         deliveryMode: message.deliveryMode,
         domainId: message.domainId,
         environment: message.environment,
         failureReason: message.failureReason,
         from: message.from,
+        headers: message.headers,
         html: message.html,
         id: message.id,
         lastErrorCode: message.lastErrorCode,

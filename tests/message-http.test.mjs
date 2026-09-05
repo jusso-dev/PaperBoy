@@ -24,6 +24,7 @@ function detail() {
   return {
     attachments: [
       {
+        contentId: null,
         contentType: "application/pdf",
         filename: "invoice.pdf",
         id: "33333333-3333-4333-8333-333333333333",
@@ -31,6 +32,8 @@ function detail() {
         size: 123,
       },
     ],
+    bcc: [],
+    cc: [],
     attemptCount: 1,
     createdAt: new Date("2026-08-23T10:00:00.000Z"),
     deliveryMode: "test-sink",
@@ -39,6 +42,7 @@ function detail() {
     failedAt: null,
     failureReason: null,
     from: "PaperBoy <news@example.com>",
+    headers: { "X-Edition": "morning" },
     html: "<p>Edition</p>",
     id: messageId,
     lastAttemptAt: new Date("2026-08-23T10:01:00.000Z"),
@@ -111,12 +115,16 @@ test("GET email returns tenant service data with explicit UTC timestamps", async
   assert.equal(body.provider, "test-sink");
   assert.deepEqual(body.attachments, [
     {
+      content_id: null,
       content_type: "application/pdf",
       filename: "invoice.pdf",
       id: "33333333-3333-4333-8333-333333333333",
       size: 123,
     },
   ]);
+  assert.deepEqual(body.cc, []);
+  assert.deepEqual(body.bcc, []);
+  assert.deepEqual(body.headers, { "X-Edition": "morning" });
   assert.equal(JSON.stringify(body).includes("storageKey"), false);
 });
 
