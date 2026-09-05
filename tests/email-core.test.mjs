@@ -180,7 +180,8 @@ test("cc, bcc, and custom headers are accepted with a combined recipient cap", (
   );
 });
 
-test("reserved and malformed headers are rejected", () => {  for (const headers of [
+test("reserved and malformed headers are rejected", () => {
+  for (const headers of [
     { Bcc: "smuggled@example.com" },
     { Subject: "override" },
     { "X-PaperBoy-Internal": "nope" },

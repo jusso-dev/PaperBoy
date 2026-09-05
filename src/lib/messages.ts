@@ -355,6 +355,8 @@ export async function queueEmail(input: {
           from: email.from,
           headers: email.headers,
           html,
+          replyTo: email.replyTo,
+          id: messageId,
           idempotencyKey,
           nextAttemptAt: email.scheduledAt ?? undefined,
           openTrackingEnabled,

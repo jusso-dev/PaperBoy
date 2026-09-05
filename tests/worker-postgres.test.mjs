@@ -183,6 +183,7 @@ test(
         orgId,
       });
       assert.deepEqual(overview.counts, {
+        cancelled: 0,
         failed: 1,
         queued: 1,
         sending: 0,
