@@ -82,8 +82,82 @@ test("PDF and PNG attachments decode canonically and affect idempotency", async 
   assert.notEqual(emailRequestHash(parsed), emailRequestHash(changed));
 });
 
-test("attachment validation rejects paths, malformed MIME types, and bad Base64", () => {
+test("content_id marks one attachment as an inline CID image", async () => {
+  const png = await fixture("sample.png");
+  const parsed = parseSendEmailInput(
+    input([
+      {
+        content: png.toString("base64"),
+        content_id: "hero@example",
+        content_type: "image/png",
+        filename: "hero.png",
+      },
+    ]),
+  );
+
+  assert.equal(parsed.attachments[0].contentId, "hero@example");
+
+  const raw = await buildSmtpMimeMessage({
+    attachments: parsed.attachments.map((attachment) => ({
+      content: attachment.content,
+      contentId: attachment.contentId,
+      contentType: attachment.contentType,
+      filename: attachment.filename,
+    })),
+    bcc: [],
+    cc: [],
+    from: "PaperBoy <sender@example.com>",
+    headers: {},
+    html: '<p>See <img src="cid:hero@example" alt="" /></p>',
+    subject: "Inline",
+    text: "See the image.",
+    to: ["reader@example.net"],
+  });
+  const mime = raw.toString();
+  assert.match(mime, /Content-ID: <?hero@example>?/);
+  assert.match(mime, /Content-Disposition: inline/);
+
+  const payload = prepareCloudflareEmailMessage({
+    attachments: parsed.attachments.map((attachment) => ({
+      content: attachment.content,
+      contentId: attachment.contentId,
+      contentType: attachment.contentType,
+      filename: attachment.filename,
+    })),
+    bcc: [],
+    cc: [],
+    from: "sender@example.com",
+    headers: {},
+    html: "<p>See</p>",
+    subject: "Inline",
+    text: null,
+    to: ["reader@example.net"],
+  });
+  assert.deepEqual(payload.attachments[0], {
+    content: png.toString("base64"),
+    content_id: "hero@example",
+    disposition: "inline",
+    filename: "hero.png",
+    type: "image/png",
+  });
+
   assert.throws(
+    () =>
+      parseSendEmailInput(
+        input([
+          {
+            content: png.toString("base64"),
+            content_id: "not a cid",
+            content_type: "image/png",
+            filename: "hero.png",
+          },
+        ]),
+      ),
+    EmailError,
+  );
+});
+
+test("attachment validation rejects paths, malformed MIME types, and bad Base64", () => {  assert.throws(
     () =>
       parseSendEmailInput(
         input([

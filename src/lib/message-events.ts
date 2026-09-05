@@ -21,6 +21,7 @@ import { MessageStatusError } from "@/lib/message-status-core";
 import { webhookEventBody } from "@/lib/webhook-core";
 
 export type MessageAttachmentMetadata = {
+  contentId: string | null;
   contentType: string;
   filename: string;
   id: string;
@@ -30,8 +31,11 @@ export type MessageAttachmentMetadata = {
 
 export type MessageDetailRecord = MessageDeliveryStatusRecord & {
   attachments: MessageAttachmentMetadata[];
+  bcc: string[];
+  cc: string[];
   clickTrackingEnabled: boolean;
   from: string;
+  headers: Record<string, string>;
   html: string | null;
   openTrackingEnabled: boolean;
   subject: string;
@@ -143,8 +147,11 @@ export async function getMessageDetail(
   const [rows, attachments] = await Promise.all([
     db
       .select({
+        bcc: messages.bcc,
+        cc: messages.cc,
         clickTrackingEnabled: messages.clickTrackingEnabled,
         from: messages.from,
+        headers: messages.headers,
         html: messages.html,
         openTrackingEnabled: messages.openTrackingEnabled,
         subject: messages.subject,
@@ -163,6 +170,7 @@ export async function getMessageDetail(
       .limit(1),
     db
       .select({
+        contentId: messageAttachments.contentId,
         contentType: messageAttachments.contentType,
         filename: messageAttachments.filename,
         id: messageAttachments.id,

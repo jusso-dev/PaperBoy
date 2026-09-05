@@ -19,6 +19,7 @@ export type EmailTag = {
 
 export type EmailAttachment = {
   content: Buffer;
+  contentId: string | null;
   contentSha256: string;
   contentType: string;
   filename: string;
@@ -27,9 +28,12 @@ export type EmailAttachment = {
 
 export type SendEmailInput = {
   attachments: EmailAttachment[];
+  bcc: string[];
+  cc: string[];
   from: string;
   fromAddress: string;
   fromDomain: string;
+  headers: Record<string, string>;
   html: string | null;
   replyTo: string[];
   subject: string;
@@ -67,9 +71,16 @@ const MAX_RECIPIENTS = 50;
 const MAX_SUBJECT_LENGTH = 998;
 const MAX_TAGS = 75;
 const MAX_TAG_LENGTH = 256;
+const MAX_HEADERS = 50;
+const MAX_HEADER_NAME_LENGTH = 128;
+const MAX_HEADER_VALUE_LENGTH = 998;
+const MAX_CONTENT_ID_LENGTH = 256;
 const SEND_FIELDS = new Set([
   "attachments",
+  "bcc",
+  "cc",
   "from",
+  "headers",
   "to",
   "reply_to",
   "subject",
@@ -79,6 +90,28 @@ const SEND_FIELDS = new Set([
 ]);
 const LOCAL_PART_PATTERN = /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/i;
 const TAG_PATTERN = /^[A-Z0-9_-]+$/i;
+const HEADER_NAME_PATTERN = /^[\x21-\x39\x3b-\x7e]+$/;
+const CONTENT_ID_PATTERN = /^[^\s<>,;]+$/;
+const RESERVED_HEADER_NAMES = new Set([
+  "bcc",
+  "cc",
+  "content-transfer-encoding",
+  "content-type",
+  "date",
+  "dkim-signature",
+  "domainkey-signature",
+  "from",
+  "message-id",
+  "mime-version",
+  "received",
+  "reply-to",
+  "return-path",
+  "return-receipt-to",
+  "sender",
+  "subject",
+  "to",
+  "x-paperboy-message-id",
+]);
 const CONTENT_TYPE_PATTERN =
   /^[A-Z0-9!#$&^_.+-]+\/[A-Z0-9!#$&^_.+-]+$/i;
 const MAX_ATTACHMENT_BASE64_LENGTH =
@@ -274,6 +307,64 @@ function parseTags(
   return tags;
 }
 
+function parseHeaders(
+  value: unknown,
+  issues: EmailValidationIssue[],
+): Record<string, string> {
+  if (value === undefined) {
+    return {};
+  }
+
+  if (!isRecord(value)) {
+    issues.push({ field: "headers", message: "Must be an object." });
+    return {};
+  }
+
+  const entries = Object.entries(value);
+
+  if (entries.length > MAX_HEADERS) {
+    issues.push({
+      field: "headers",
+      message: `Must contain at most ${MAX_HEADERS} headers.`,
+    });
+  }
+
+  const headers: Record<string, string> = {};
+
+  entries.slice(0, MAX_HEADERS).forEach(([name, headerValue]) => {
+    if (
+      name.length === 0 ||
+      name.length > MAX_HEADER_NAME_LENGTH ||
+      !HEADER_NAME_PATTERN.test(name) ||
+      RESERVED_HEADER_NAMES.has(name.toLowerCase()) ||
+      name.toLowerCase().startsWith("x-paperboy-")
+    ) {
+      issues.push({
+        field: `headers.${name}`,
+        message: "Use a custom header name; delivery headers are reserved.",
+      });
+      return;
+    }
+
+    if (
+      typeof headerValue !== "string" ||
+      headerValue.length === 0 ||
+      headerValue.length > MAX_HEADER_VALUE_LENGTH ||
+      /[\r\n]/.test(headerValue)
+    ) {
+      issues.push({
+        field: `headers.${name}`,
+        message: "Use a single-line value of at most 998 characters.",
+      });
+      return;
+    }
+
+    headers[name] = headerValue;
+  });
+
+  return headers;
+}
+
 function parseAttachments(
   value: unknown,
   issues: EmailValidationIssue[],
@@ -303,18 +394,21 @@ function parseAttachments(
       Object.keys(candidate).some(
         (key) =>
           key !== "content" &&
+          key !== "content_id" &&
           key !== "content_type" &&
           key !== "filename",
       )
     ) {
       issues.push({
         field: `attachments.${index}`,
-        message: "Must contain only content, content_type, and filename.",
+        message:
+          "Must contain only content, content_id, content_type, and filename.",
       });
       return;
     }
 
     const content = candidate.content;
+    const contentId = candidate.content_id;
     const contentType = candidate.content_type;
     const filename = candidate.filename;
     let decoded: Buffer | null = null;
@@ -368,6 +462,24 @@ function parseAttachments(
       });
     }
 
+    let normalizedContentId: string | null = null;
+
+    if (contentId === undefined || contentId === null || contentId === "") {
+      normalizedContentId = null;
+    } else if (
+      typeof contentId !== "string" ||
+      contentId.length > MAX_CONTENT_ID_LENGTH ||
+      !CONTENT_ID_PATTERN.test(contentId)
+    ) {
+      issues.push({
+        field: `attachments.${index}.content_id`,
+        message:
+          "Use a CID reference without spaces, angle brackets, commas, or semicolons.",
+      });
+    } else {
+      normalizedContentId = contentId;
+    }
+
     if (
       decoded &&
       typeof filename === "string" &&
@@ -381,6 +493,7 @@ function parseAttachments(
 
       attachments.push({
         content: decoded,
+        contentId: normalizedContentId,
         contentSha256: createHash("sha256").update(decoded).digest("hex"),
         contentType: contentType.toLowerCase(),
         filename,
@@ -487,6 +600,16 @@ export function parseSendEmailInput(
 
   const tags = parseTags(value.tags, issues);
   const replyTo = parseAddressList(value.reply_to, "reply_to", issues);
+  const cc = parseAddressList(value.cc, "cc", issues);
+  const bcc = parseAddressList(value.bcc, "bcc", issues);
+  const headers = parseHeaders(value.headers, issues);
+
+  if (recipients.length + cc.length + bcc.length > MAX_RECIPIENTS) {
+    issues.push({
+      field: "to",
+      message: "Provide at most 50 recipients across to, cc, and bcc.",
+    });
+  }
 
   if (issues.length > 0 || !parsedFrom || typeof subject !== "string") {
     throw new EmailError("VALIDATION_ERROR", issues);
@@ -494,9 +617,12 @@ export function parseSendEmailInput(
 
   return {
     attachments,
+    bcc,
+    cc,
     from: parsedFrom.formatted,
     fromAddress: parsedFrom.address,
     fromDomain: parsedFrom.domain,
+    headers,
     html,
     replyTo,
     subject,
@@ -538,6 +664,9 @@ export function emailRequestHash(input: SendEmailInput): string {
         from: input.from,
         html: input.html,
         replyTo: input.replyTo,
+        cc: input.cc,
+        bcc: input.bcc,
+        headers: input.headers,
         subject: input.subject,
         tags: input.tags,
         text: input.text,
@@ -546,6 +675,7 @@ export function emailRequestHash(input: SendEmailInput): string {
           ? {}
           : {
               attachments: input.attachments.map((attachment) => ({
+                contentId: attachment.contentId,
                 contentSha256: attachment.contentSha256,
                 contentType: attachment.contentType,
                 filename: attachment.filename,

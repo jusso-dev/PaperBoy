@@ -786,6 +786,12 @@ export const messages = pgTable(
     }),
     from: text("from").notNull(),
     to: bunJsonb("to").$type<string[]>().notNull(),
+    cc: bunJsonb("cc").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+    bcc: bunJsonb("bcc").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+    headers: bunJsonb("headers")
+      .$type<Record<string, string>>()
+      .default(sql`'{}'::jsonb`)
+      .notNull(),
     replyTo: bunJsonb("reply_to").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
     subject: text("subject").notNull(),
     html: text("html"),
@@ -885,6 +891,18 @@ export const messages = pgTable(
     check(
       "messages_to_array_check",
       sql`jsonb_typeof(${table.to}) = 'array'`,
+    ),
+    check(
+      "messages_cc_array_check",
+      sql`jsonb_typeof(${table.cc}) = 'array'`,
+    ),
+    check(
+      "messages_bcc_array_check",
+      sql`jsonb_typeof(${table.bcc}) = 'array'`,
+    ),
+    check(
+      "messages_headers_object_check",
+      sql`jsonb_typeof(${table.headers}) = 'object'`,
     ),
     check(
       "messages_reply_to_array_check",
@@ -1015,6 +1033,7 @@ export const messageAttachments = pgTable(
     position: integer("position").notNull(),
     filename: text("filename").notNull(),
     contentType: text("content_type").notNull(),
+    contentId: text("content_id"),
     byteSize: integer("byte_size").notNull(),
     contentSha256: text("content_sha256").notNull(),
     storageKey: text("storage_key").notNull(),
@@ -1050,6 +1069,10 @@ export const messageAttachments = pgTable(
     check(
       "message_attachments_content_type_check",
       sql`${table.contentType} ~ '^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$'`,
+    ),
+    check(
+      "message_attachments_content_id_check",
+      sql`${table.contentId} is null or (char_length(${table.contentId}) between 1 and 256 and ${table.contentId} !~ '[[:space:]<>,;]')`,
     ),
   ],
 );

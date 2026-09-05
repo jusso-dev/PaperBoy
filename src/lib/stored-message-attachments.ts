@@ -9,6 +9,7 @@ import {
 
 export type LoadedMessageAttachment = {
   content: Buffer;
+  contentId: string | null;
   contentSha256: string;
   contentType: string;
   filename: string;
@@ -24,6 +25,7 @@ export async function loadMessageAttachments(input: {
   const attachmentStore = input.attachmentStore ?? configuredAttachmentStore;
   const rows = await db
     .select({
+      contentId: messageAttachments.contentId,
       contentSha256: messageAttachments.contentSha256,
       contentType: messageAttachments.contentType,
       filename: messageAttachments.filename,
@@ -48,6 +50,7 @@ export async function loadMessageAttachments(input: {
 
       return {
         content,
+        contentId: row.contentId,
         contentSha256: row.contentSha256,
         contentType: row.contentType,
         filename: row.filename,

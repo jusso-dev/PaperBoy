@@ -15,13 +15,18 @@ export type EmailTag = {
 
 export type EmailAttachment = {
   content: string;
+  content_id?: string;
   content_type: string;
   filename: string;
 };
 
 type SendEmailEnvelope = {
   attachments?: EmailAttachment[];
+  bcc?: string | string[];
+  cc?: string | string[];
   from: string;
+  headers?: Record<string, string>;
+  reply_to?: string | string[];
   tags?: EmailTag[];
   to: string | string[];
 };
@@ -54,6 +59,7 @@ export type QueuedEmail = {
 };
 
 export type StoredAttachment = {
+  content_id: string | null;
   content_type: string;
   filename: string;
   id: string;
@@ -63,6 +69,8 @@ export type StoredAttachment = {
 export type Email = {
   attachments: StoredAttachment[];
   attempt_count: number;
+  bcc: string[];
+  cc: string[];
   created_at: string;
   delivery_mode: PaperBoyDeliveryMode;
   domain_id: string | null;
@@ -70,6 +78,7 @@ export type Email = {
   failed_at: string | null;
   failure_reason: string | null;
   from: string;
+  headers: Record<string, string>;
   html: string | null;
   id: string;
   last_attempt_at: string | null;

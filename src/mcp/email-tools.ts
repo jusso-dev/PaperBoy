@@ -67,6 +67,12 @@ const attachment = z
       .string()
       .min(1)
       .max(Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4),
+    content_id: z
+      .string()
+      .min(1)
+      .max(256)
+      .regex(/^[^\s<>,;]+$/)
+      .optional(),
     content_type: z
       .string()
       .min(3)
@@ -75,6 +81,7 @@ const attachment = z
     filename: z.string().min(1).max(255),
   })
   .strict();
+const headers = z.record(z.string(), z.string()).optional();
 
 const templateData = z.record(z.string(), z.unknown());
 
@@ -121,8 +128,11 @@ function validateSendMode(
 
 const sendEmailPayloadSchema = z
   .object({
+    bcc: z.union([address, z.array(address).min(1).max(50)]).optional(),
+    cc: z.union([address, z.array(address).min(1).max(50)]).optional(),
     data: templateData.optional(),
     from: address,
+    headers,
     html: z.string().max(2 * 1024 * 1024).optional(),
     reply_to: z.union([address, z.array(address).min(1).max(50)]).optional(),
     subject: z.string().min(1).max(998).optional(),
@@ -137,8 +147,11 @@ const sendEmailPayloadSchema = z
 const sendEmailInputSchema = z
   .object({
     attachments: z.array(attachment).max(100).optional(),
+    bcc: z.union([address, z.array(address).min(1).max(50)]).optional(),
+    cc: z.union([address, z.array(address).min(1).max(50)]).optional(),
     data: templateData.optional(),
     from: address,
+    headers,
     html: z.string().max(2 * 1024 * 1024).optional(),
     reply_to: z.union([address, z.array(address).min(1).max(50)]).optional(),
     idempotencyKey: z

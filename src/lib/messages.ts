@@ -108,34 +108,37 @@ type RecipientSuppression = {
 };
 
 function requireRecipientsNotSuppressed(
-  recipients: string[],
+  recipients: { bcc: string[]; cc: string[]; to: string[] },
   suppressions: RecipientSuppression[],
 ): void {
   if (suppressions.length === 0) return;
   const reasons = new Map(
     suppressions.map((suppression) => [suppression.email, suppression.reason]),
   );
-  throw new EmailError(
-    "RECIPIENT_SUPPRESSED",
-    recipients.flatMap((recipient, index) => {
+  const reasonMessage = (reason: RecipientSuppression["reason"]) =>
+    reason === "bounced"
+      ? "Recipient is suppressed after a permanent bounce."
+      : reason === "complained"
+        ? "Recipient is suppressed after a complaint."
+        : reason === "unsubscribed"
+          ? "Recipient unsubscribed from organization mail."
+          : "Recipient is on the organization suppression list.";
+  const issues = (
+    [
+      ["to", recipients.to],
+      ["cc", recipients.cc],
+      ["bcc", recipients.bcc],
+    ] as const
+  ).flatMap(([field, addresses]) =>
+    addresses.flatMap((recipient, index) => {
       const reason = reasons.get(normalizeEmailAddress(recipient) ?? "");
-
       if (!reason) return [];
-      return [
-        {
-          field: `to.${index}`,
-          message:
-            reason === "bounced"
-              ? "Recipient is suppressed after a permanent bounce."
-              : reason === "complained"
-                ? "Recipient is suppressed after a complaint."
-                : reason === "unsubscribed"
-                  ? "Recipient unsubscribed from organization mail."
-                : "Recipient is on the organization suppression list.",
-        },
-      ];
+      return [{ field: `${field}.${index}`, message: reasonMessage(reason) }];
     }),
   );
+  if (issues.length > 0) {
+    throw new EmailError("RECIPIENT_SUPPRESSED", issues);
+  }
 }
 
 async function findIdempotentMessage(apiKeyId: string, key: string) {
@@ -206,7 +209,7 @@ export async function queueEmail(input: {
     throw new Error("Idempotency keys require an API-key queue principal.");
   }
   const requestHash = emailRequestHash(email);
-  const normalizedRecipients = email.to.flatMap(
+  const normalizedRecipients = [...email.to, ...email.cc, ...email.bcc].flatMap(
     (recipient) => normalizeEmailAddress(recipient) ?? [],
   );
 
@@ -230,7 +233,10 @@ export async function queueEmail(input: {
             inArray(emailSuppressions.email, normalizedRecipients),
           ),
         );
-      requireRecipientsNotSuppressed(email.to, suppressions);
+      requireRecipientsNotSuppressed(
+        { bcc: email.bcc, cc: email.cc, to: email.to },
+        suppressions,
+      );
       return replay;
     }
   }
@@ -295,7 +301,10 @@ export async function queueEmail(input: {
           ),
         );
 
-      requireRecipientsNotSuppressed(email.to, suppressions);
+      requireRecipientsNotSuppressed(
+        { bcc: email.bcc, cc: email.cc, to: email.to },
+        suppressions,
+      );
 
       const [organization] = await tx
         .select({ openTrackingEnabled: orgs.openTrackingEnabled })
@@ -337,11 +346,14 @@ export async function queueEmail(input: {
         .insert(messages)
         .values({
           apiKeyId,
+          bcc: email.bcc,
+          cc: email.cc,
           clickTrackingEnabled,
           deliveryMode: domain.mode,
           domainId: domain.domainId,
           environment: input.principal.environment,
           from: email.from,
+          headers: email.headers,
           html,
           replyTo: email.replyTo,
           id: messageId,
@@ -393,6 +405,7 @@ export async function queueEmail(input: {
 
         await tx.insert(messageAttachments).values({
           byteSize: attachment.size,
+          contentId: attachment.contentId,
           contentSha256: attachment.contentSha256,
           contentType: attachment.contentType,
           filename: attachment.filename,

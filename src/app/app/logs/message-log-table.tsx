@@ -279,6 +279,32 @@ export function MessageLogTable({
                     <dt>To</dt>
                     <dd>{result.message.to.join(", ")}</dd>
                   </div>
+                  {result.message.cc.length > 0 ? (
+                    <div>
+                      <dt>Cc</dt>
+                      <dd>{result.message.cc.join(", ")}</dd>
+                    </div>
+                  ) : null}
+                  {result.message.bcc.length > 0 ? (
+                    <div>
+                      <dt>Bcc</dt>
+                      <dd>{result.message.bcc.join(", ")}</dd>
+                    </div>
+                  ) : null}
+                  {Object.keys(result.message.headers).length > 0 ? (
+                    <div>
+                      <dt>Headers</dt>
+                      <dd>
+                        {Object.entries(result.message.headers).map(
+                          ([name, value]) => (
+                            <div key={name}>
+                              <code>{name}</code>: {value}
+                            </div>
+                          ),
+                        )}
+                      </dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt>Subject</dt>
                     <dd>{result.message.subject.trim() || "(no subject)"}</dd>

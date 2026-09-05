@@ -97,9 +97,12 @@ export const postgresWorkerStore: WorkerStore = {
         .where(eq(messages.id, candidate.id))
         .returning({
           attemptCount: messages.attemptCount,
+          bcc: messages.bcc,
+          cc: messages.cc,
           deliveryMode: messages.deliveryMode,
           environment: messages.environment,
           from: messages.from,
+          headers: messages.headers,
           html: messages.html,
           id: messages.id,
           replyTo: messages.replyTo,
@@ -127,6 +130,7 @@ export const postgresWorkerStore: WorkerStore = {
     const attachments = await loadMessageAttachments({ messageId });
     return attachments.map((attachment) => ({
       content: attachment.content,
+      contentId: attachment.contentId,
       contentType: attachment.contentType,
       filename: attachment.filename,
     }));

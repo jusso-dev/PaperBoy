@@ -20,9 +20,12 @@ test("Resend-shaped email input is normalized without building MIME", () => {
 
   assert.deepEqual(parsed, {
     attachments: [],
+    bcc: [],
+    cc: [],
     from: "PaperBoy <News@xn--mnchen-3ya.example>",
     fromAddress: "News@xn--mnchen-3ya.example",
     fromDomain: "xn--mnchen-3ya.example",
+    headers: {},
     html: "<p>Hello</p>",
     replyTo: [],
     subject: "Morning edition",
@@ -32,9 +35,12 @@ test("Resend-shaped email input is normalized without building MIME", () => {
   });
   assert.deepEqual(Object.keys(parsed).sort(), [
     "attachments",
+    "bcc",
+    "cc",
     "from",
     "fromAddress",
     "fromDomain",
+    "headers",
     "html",
     "replyTo",
     "subject",
@@ -110,6 +116,9 @@ test("idempotency keys and canonical request hashes are deterministic", () => {
           from: first.from,
           html: first.html,
           replyTo: first.replyTo,
+          cc: first.cc,
+          bcc: first.bcc,
+          headers: first.headers,
           subject: first.subject,
           tags: first.tags,
           text: first.text,
@@ -132,4 +141,60 @@ test("reply_to accepts a plus-address used by support desks", () => {
   });
 
   assert.deepEqual(parsed.replyTo, ["reply+abc123@mail.snagspot.test"]);
+});
+
+test("cc, bcc, and custom headers are accepted with a combined recipient cap", () => {
+  const parsed = parseSendEmailInput({
+    bcc: "audit@example.com",
+    cc: ["Desk <desk@example.com>", "second@example.com"],
+    from: "sender@example.com",
+    headers: { "X-Campaign": "morning", "List-Unsubscribe": "<https://example.com/unsub>" },
+    subject: "Hello",
+    text: "Body",
+    to: "reader@example.com",
+  });
+
+  assert.deepEqual(parsed.cc, ["Desk <desk@example.com>", "second@example.com"]);
+  assert.deepEqual(parsed.bcc, ["audit@example.com"]);
+  assert.deepEqual(parsed.headers, {
+    "X-Campaign": "morning",
+    "List-Unsubscribe": "<https://example.com/unsub>",
+  });
+
+  assert.throws(
+    () =>
+      parseSendEmailInput({
+        bcc: Array.from({ length: 25 }, (_, index) => `b${index}@example.com`),
+        cc: Array.from({ length: 25 }, (_, index) => `c${index}@example.com`),
+        from: "sender@example.com",
+        subject: "Hello",
+        text: "Body",
+        to: ["a@example.com"],
+      }),
+    (error) =>
+      error instanceof EmailError &&
+      error.issues.some((issue) => issue.field === "to"),
+  );
+});
+
+test("reserved and malformed headers are rejected", () => {
+  for (const headers of [
+    { Bcc: "smuggled@example.com" },
+    { Subject: "override" },
+    { "X-PaperBoy-Internal": "nope" },
+    { "Bad Header": "space in name" },
+    { "X-Ok": "line one\r\nline two" },
+  ]) {
+    assert.throws(
+      () =>
+        parseSendEmailInput({
+          from: "sender@example.com",
+          headers,
+          subject: "Hello",
+          text: "Body",
+          to: "reader@example.com",
+        }),
+      EmailError,
+    );
+  }
 });
