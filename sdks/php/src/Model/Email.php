@@ -62,6 +62,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'created_at' => '\DateTime',
         'delivery_mode' => 'string',
         'domain_id' => 'string',
+        'cc' => 'string[]',
+        'bcc' => 'string[]',
+        'headers' => 'array<string,string>',
         'environment' => 'string',
         'failed_at' => 'mixed',
         'failure_reason' => 'string',
@@ -97,6 +100,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'created_at' => 'date-time',
         'delivery_mode' => null,
         'domain_id' => 'uuid',
+        'cc' => null,
+        'bcc' => null,
+        'headers' => null,
         'environment' => null,
         'failed_at' => null,
         'failure_reason' => null,
@@ -130,6 +136,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'created_at' => false,
         'delivery_mode' => false,
         'domain_id' => true,
+        'cc' => false,
+        'bcc' => false,
+        'headers' => false,
         'environment' => false,
         'failed_at' => true,
         'failure_reason' => true,
@@ -243,6 +252,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'created_at' => 'created_at',
         'delivery_mode' => 'delivery_mode',
         'domain_id' => 'domain_id',
+        'cc' => 'cc',
+        'bcc' => 'bcc',
+        'headers' => 'headers',
         'environment' => 'environment',
         'failed_at' => 'failed_at',
         'failure_reason' => 'failure_reason',
@@ -276,6 +288,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'created_at' => 'setCreatedAt',
         'delivery_mode' => 'setDeliveryMode',
         'domain_id' => 'setDomainId',
+        'cc' => 'setCc',
+        'bcc' => 'setBcc',
+        'headers' => 'setHeaders',
         'environment' => 'setEnvironment',
         'failed_at' => 'setFailedAt',
         'failure_reason' => 'setFailureReason',
@@ -309,6 +324,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         'created_at' => 'getCreatedAt',
         'delivery_mode' => 'getDeliveryMode',
         'domain_id' => 'getDomainId',
+        'cc' => 'getCc',
+        'bcc' => 'getBcc',
+        'headers' => 'getHeaders',
         'environment' => 'getEnvironment',
         'failed_at' => 'getFailedAt',
         'failure_reason' => 'getFailureReason',
@@ -455,6 +473,9 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         $this->setIfExists('created_at', $data ?? [], null);
         $this->setIfExists('delivery_mode', $data ?? [], null);
         $this->setIfExists('domain_id', $data ?? [], null);
+        $this->setIfExists('cc', $data ?? [], null);
+        $this->setIfExists('bcc', $data ?? [], null);
+        $this->setIfExists('headers', $data ?? [], null);
         $this->setIfExists('environment', $data ?? [], null);
         $this->setIfExists('failed_at', $data ?? [], null);
         $this->setIfExists('failure_reason', $data ?? [], null);
@@ -532,6 +553,19 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
         if ($this->container['domain_id'] === null && !$this->isNullableSetToNull('domain_id')) {
             $invalidProperties[] = "'domain_id' is required";
         }
+        if ($this->container['cc'] === null) {
+            $invalidProperties[] = "'cc' can't be null";
+        }
+        if ($this->container['bcc'] === null) {
+            $invalidProperties[] = "'bcc' can't be null";
+        }
+        if ($this->container['headers'] === null) {
+            $invalidProperties[] = "'headers' can't be null";
+        }
+        if ((count($this->container['headers']) > 50)) {
+            $invalidProperties[] = "invalid value for 'headers', number of items must be less than or equal to 50.";
+        }
+
         if ($this->container['environment'] === null) {
             $invalidProperties[] = "'environment' can't be null";
         }
@@ -790,6 +824,90 @@ class Email implements ModelInterface, ArrayAccess, \JsonSerializable
             }
         }
         $this->container['domain_id'] = $domain_id;
+
+        return $this;
+    }
+
+    /**
+     * Gets cc
+     *
+     * @return string[]
+     */
+    public function getCc()
+    {
+        return $this->container['cc'];
+    }
+
+    /**
+     * Sets cc
+     *
+     * @param string[] $cc cc
+     *
+     * @return self
+     */
+    public function setCc($cc)
+    {
+        if (is_null($cc)) {
+            throw new \InvalidArgumentException('non-nullable cc cannot be null');
+        }
+        $this->container['cc'] = $cc;
+
+        return $this;
+    }
+
+    /**
+     * Gets bcc
+     *
+     * @return string[]
+     */
+    public function getBcc()
+    {
+        return $this->container['bcc'];
+    }
+
+    /**
+     * Sets bcc
+     *
+     * @param string[] $bcc bcc
+     *
+     * @return self
+     */
+    public function setBcc($bcc)
+    {
+        if (is_null($bcc)) {
+            throw new \InvalidArgumentException('non-nullable bcc cannot be null');
+        }
+        $this->container['bcc'] = $bcc;
+
+        return $this;
+    }
+
+    /**
+     * Gets headers
+     *
+     * @return array<string,string>
+     */
+    public function getHeaders()
+    {
+        return $this->container['headers'];
+    }
+
+    /**
+     * Sets headers
+     *
+     * @param array<string,string> $headers Custom MIME headers. Delivery headers such as From, To, Cc, Bcc, Subject, and Date are reserved.
+     *
+     * @return self
+     */
+    public function setHeaders($headers)
+    {
+        if (is_null($headers)) {
+            throw new \InvalidArgumentException('non-nullable headers cannot be null');
+        }
+        if ((count($headers) > 50)) {
+            throw new \InvalidArgumentException('invalid value for $headers when calling Email., number of items must be less than or equal to 50.');
+        }
+        $this->container['headers'] = $headers;
 
         return $this;
     }

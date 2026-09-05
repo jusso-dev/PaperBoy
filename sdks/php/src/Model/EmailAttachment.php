@@ -58,6 +58,7 @@ class EmailAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     protected static $openAPITypes = [
         'content' => 'string',
+        'content_id' => 'string',
         'filename' => 'string',
         'content_type' => 'string'
     ];
@@ -71,6 +72,7 @@ class EmailAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     protected static $openAPIFormats = [
         'content' => null,
+        'content_id' => null,
         'filename' => null,
         'content_type' => null
     ];
@@ -82,6 +84,7 @@ class EmailAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     protected static array $openAPINullables = [
         'content' => false,
+        'content_id' => false,
         'filename' => false,
         'content_type' => false
     ];
@@ -173,6 +176,7 @@ class EmailAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     protected static $attributeMap = [
         'content' => 'content',
+        'content_id' => 'content_id',
         'filename' => 'filename',
         'content_type' => 'content_type'
     ];
@@ -184,6 +188,7 @@ class EmailAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     protected static $setters = [
         'content' => 'setContent',
+        'content_id' => 'setContentId',
         'filename' => 'setFilename',
         'content_type' => 'setContentType'
     ];
@@ -195,6 +200,7 @@ class EmailAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     protected static $getters = [
         'content' => 'getContent',
+        'content_id' => 'getContentId',
         'filename' => 'getFilename',
         'content_type' => 'getContentType'
     ];
@@ -257,6 +263,7 @@ class EmailAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
     public function __construct(?array $data = null)
     {
         $this->setIfExists('content', $data ?? [], null);
+        $this->setIfExists('content_id', $data ?? [], null);
         $this->setIfExists('filename', $data ?? [], null);
         $this->setIfExists('content_type', $data ?? [], null);
     }
@@ -293,6 +300,18 @@ class EmailAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
         }
         if ((mb_strlen($this->container['content']) < 1)) {
             $invalidProperties[] = "invalid value for 'content', the character length must be bigger than or equal to 1.";
+        }
+
+        if (!is_null($this->container['content_id']) && (mb_strlen($this->container['content_id']) > 256)) {
+            $invalidProperties[] = "invalid value for 'content_id', the character length must be smaller than or equal to 256.";
+        }
+
+        if (!is_null($this->container['content_id']) && (mb_strlen($this->container['content_id']) < 1)) {
+            $invalidProperties[] = "invalid value for 'content_id', the character length must be bigger than or equal to 1.";
+        }
+
+        if (!is_null($this->container['content_id']) && !preg_match("/^[^\\\\s<>,;]+$/", $this->container['content_id'])) {
+            $invalidProperties[] = "invalid value for 'content_id', must be conform to the pattern /^[^\\\\s<>,;]+$/.";
         }
 
         if ($this->container['filename'] === null) {
@@ -360,6 +379,43 @@ class EmailAttachment implements ModelInterface, ArrayAccess, \JsonSerializable
         }
 
         $this->container['content'] = $content;
+
+        return $this;
+    }
+
+    /**
+     * Gets content_id
+     *
+     * @return string|null
+     */
+    public function getContentId()
+    {
+        return $this->container['content_id'];
+    }
+
+    /**
+     * Sets content_id
+     *
+     * @param string|null $content_id Optional CID reference for inline images used as cid: URIs in HTML.
+     *
+     * @return self
+     */
+    public function setContentId($content_id)
+    {
+        if (is_null($content_id)) {
+            throw new \InvalidArgumentException('non-nullable content_id cannot be null');
+        }
+        if ((mb_strlen($content_id) > 256)) {
+            throw new \InvalidArgumentException('invalid length for $content_id when calling EmailAttachment., must be smaller than or equal to 256.');
+        }
+        if ((mb_strlen($content_id) < 1)) {
+            throw new \InvalidArgumentException('invalid length for $content_id when calling EmailAttachment., must be bigger than or equal to 1.');
+        }
+        if ((!preg_match("/^[^\\\\s<>,;]+$/", ObjectSerializer::toString($content_id)))) {
+            throw new \InvalidArgumentException("invalid value for \$content_id when calling EmailAttachment., must conform to the pattern /^[^\\\\s<>,;]+$/.");
+        }
+
+        $this->container['content_id'] = $content_id;
 
         return $this;
     }
