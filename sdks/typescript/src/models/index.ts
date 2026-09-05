@@ -679,6 +679,12 @@ export interface Email {
     open_tracking_enabled: boolean;
     /**
      * 
+     * @type {boolean}
+     * @memberof Email
+     */
+    click_tracking_enabled: boolean;
+    /**
+     * 
      * @type {MessageOutboundProvider}
      * @memberof Email
      */
@@ -1056,7 +1062,8 @@ export const MessageEventTypeEnum = {
     deferred: 'deferred',
     bounced: 'bounced',
     complained: 'complained',
-    opened: 'opened'
+    opened: 'opened',
+    clicked: 'clicked'
 } as const;
 export type MessageEventTypeEnum = typeof MessageEventTypeEnum[keyof typeof MessageEventTypeEnum];
 
@@ -2487,7 +2494,8 @@ export const WebhookEventTypeEnum = {
     email_deferred: 'email.deferred',
     email_bounced: 'email.bounced',
     email_complained: 'email.complained',
-    email_opened: 'email.opened'
+    email_opened: 'email.opened',
+    email_clicked: 'email.clicked'
 } as const;
 export type WebhookEventTypeEnum = typeof WebhookEventTypeEnum[keyof typeof WebhookEventTypeEnum];
 

@@ -246,6 +246,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
     public const TYPE_EMAIL_BOUNCED = 'email.bounced';
     public const TYPE_EMAIL_COMPLAINED = 'email.complained';
     public const TYPE_EMAIL_OPENED = 'email.opened';
+    public const TYPE_EMAIL_CLICKED = 'email.clicked';
 
     /**
      * Gets allowable values of the enum
@@ -261,6 +262,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
             self::TYPE_EMAIL_BOUNCED,
             self::TYPE_EMAIL_COMPLAINED,
             self::TYPE_EMAIL_OPENED,
+            self::TYPE_EMAIL_CLICKED,
         ];
     }
 

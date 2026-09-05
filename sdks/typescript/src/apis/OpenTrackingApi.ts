@@ -19,6 +19,12 @@ import type {
     OpenTrackingUpdateInput,
 } from '../models/index';
 
+export interface RecordClickRequest {
+    messageId: string;
+    signature: string;
+    u: string;
+}
+
 export interface RecordOpenRequest {
     messageId: string;
     signature: string;
@@ -78,6 +84,71 @@ export class OpenTrackingApi extends runtime.BaseAPI {
     async getOpenTracking(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<OpenTrackingSettings> {
         const response = await this.getOpenTrackingRaw(initOverrides);
         return await response.value();
+    }
+
+    /**
+     * Creates request options for recordClick without sending the request
+     */
+    async recordClickRequestOpts(requestParameters: RecordClickRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['messageId'] == null) {
+            throw new runtime.RequiredError(
+                'messageId',
+                'Required parameter "messageId" was null or undefined when calling recordClick().'
+            );
+        }
+
+        if (requestParameters['signature'] == null) {
+            throw new runtime.RequiredError(
+                'signature',
+                'Required parameter "signature" was null or undefined when calling recordClick().'
+            );
+        }
+
+        if (requestParameters['u'] == null) {
+            throw new runtime.RequiredError(
+                'u',
+                'Required parameter "u" was null or undefined when calling recordClick().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['u'] != null) {
+            queryParameters['u'] = requestParameters['u'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/c/{messageId}/{signature}`;
+        urlPath = urlPath.replace('{messageId}', encodeURIComponent(String(requestParameters['messageId'])));
+        urlPath = urlPath.replace('{signature}', encodeURIComponent(String(requestParameters['signature'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Verifies the message-bound signature and target URL, records at most one clicked event per message, then redirects to the original http(s) URL. Invalid or untracked links return 404 without revealing message state.
+     * Follow a signed first-party click redirect
+     */
+    async recordClickRaw(requestParameters: RecordClickRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+        const requestOptions = await this.recordClickRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     * Verifies the message-bound signature and target URL, records at most one clicked event per message, then redirects to the original http(s) URL. Invalid or untracked links return 404 without revealing message state.
+     * Follow a signed first-party click redirect
+     */
+    async recordClick(requestParameters: RecordClickRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+        await this.recordClickRaw(requestParameters, initOverrides);
     }
 
     /**
