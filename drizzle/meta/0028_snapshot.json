@@ -1,5 +1,5 @@
 {
-  "id": "ab150fa6-c7db-4878-8090-61ca5c6fff7f",
+  "id": "7bb54a93-2b3a-4dcd-ac6f-767e1eeb2b41",
   "prevId": "96e524dc-801b-41c5-acb1-5144c1f0ba28",
   "version": "7",
   "dialect": "postgresql",
@@ -2395,7 +2395,7 @@
         },
         "message_attachments_content_id_check": {
           "name": "message_attachments_content_id_check",
-          "value": "\"message_attachments\".\"content_id\" is null or (char_length(\"message_attachments\".\"content_id\") between 1 and 256 and \"message_attachments\".\"content_id\" !~ '[[:space:]<>,;]')"
+          "value": "\"message_attachments\".\"content_id\" is null or (char_length(\"message_attachments\".\"content_id\") between 1 and 256 and \"message_attachments\".\"content_id\" !~ '[[:space:]<>,]')"
         }
       },
       "isRLSEnabled": false

@@ -1072,7 +1072,7 @@ export const messageAttachments = pgTable(
     ),
     check(
       "message_attachments_content_id_check",
-      sql`${table.contentId} is null or (char_length(${table.contentId}) between 1 and 256 and ${table.contentId} !~ '[[:space:]<>,;]')`,
+      sql`${table.contentId} is null or (char_length(${table.contentId}) between 1 and 256 and ${table.contentId} !~ '[[:space:]<>,]')`,
     ),
   ],
 );
