@@ -49,7 +49,7 @@ identity is redacted; no real recipients or credentials are shown.
 - Redis + BullMQ for delayed, retrying, and concurrent jobs
 - Better Auth
 - First-class MCP server over the same domain services as HTTP and the console
-- CI on GitHub's native Linux ARM64 runner with isolated PostgreSQL, Redis, and Mailpit service containers, the fixed `Australia/Sydney` application timezone, and read-only repository permissions. Fork pull requests are skipped; same-repository pull requests and `main` pushes run the full gate, while `main` also builds and publicly verifies the ARM64 GHCR image.
+- CI on GitHub's native Linux ARM64 runner with isolated PostgreSQL, Redis, and Mailpit service containers, the fixed `Australia/Sydney` application timezone, and read-only repository permissions. Fork pull requests are skipped; same-repository pull requests and `main` pushes run the full gate, while `main` also builds and verifies the ARM64 GHCR image with authenticated registry access.
 
 ## Container image
 
