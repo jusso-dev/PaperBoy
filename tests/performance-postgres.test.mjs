@@ -46,7 +46,16 @@ test("dashboard aggregation preserves timezone totals; broadcast list uses const
     await db.insert(messages).values({ id: messageId, orgId, domainId, from: "sender@example.com", to: ["reader@example.com"], subject: "Performance", textBody: "Hello", createdAt: now });
     await db.insert(events).values(eventRows);
 
-    for (const timeZone of ["Australia/Sydney", "America/New_York", "Asia/Katmandu", "UTC"]) {
+    // ICU versions differ on Kathmandu's canonical spelling; use the runtime's
+    // accepted name so this exercises Nepal's UTC+05:45 offset, not the fallback.
+    const kathmanduTimeZone = Intl.supportedValuesOf("timeZone").find((timeZone) =>
+      timeZone === "Asia/Kathmandu" || timeZone === "Asia/Katmandu"
+    );
+    assert.ok(kathmanduTimeZone, "runtime must support Kathmandu");
+    assert.equal(localDateKey(new Date("2026-09-28T18:14:59.999Z"), kathmanduTimeZone), "2026-09-28");
+    assert.equal(localDateKey(new Date("2026-09-28T18:15:00Z"), kathmanduTimeZone), "2026-09-29");
+
+    for (const timeZone of ["Australia/Sydney", "America/New_York", kathmanduTimeZone, "UTC"]) {
       for (const range of [7, 14, 30, "all"]) {
         const dashboard = await getPaperBoyDashboard({ actorUserId, orgId, now, range, timeZone });
         const window = dashboardWindow({ range, today: localDateKey(now, timeZone) });
