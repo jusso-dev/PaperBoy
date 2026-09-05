@@ -16,6 +16,7 @@ import * as runtime from '../runtime';
 import type {
     Email,
     EmailBatchEnvelope,
+    EmailListEnvelope,
     ErrorEnvelope,
     QueuedEmail,
     RateLimitErrorEnvelope,
@@ -23,8 +24,13 @@ import type {
     ReceivedEmail,
     ReceivedEmailAccepted,
     ReceivedEmailDiscarded,
+    RescheduleEmailInput,
     SendEmailInput,
 } from '../models/index';
+
+export interface CancelEmailRequest {
+    emailId: string;
+}
 
 export interface GetEmailRequest {
     emailId: string;
@@ -34,8 +40,18 @@ export interface GetReceivedEmailRequest {
     emailId: string;
 }
 
+export interface ListEmailsRequest {
+    page?: number;
+    limit?: number;
+}
+
 export interface ReceiveInboundEmailRequest {
     receiveInboundEmailInput: ReceiveInboundEmailInput;
+}
+
+export interface RescheduleEmailRequest {
+    emailId: string;
+    rescheduleEmailInput: RescheduleEmailInput;
 }
 
 export interface SendEmailRequest {
@@ -51,6 +67,61 @@ export interface SendEmailBatchRequest {
  * 
  */
 export class EmailsApi extends runtime.BaseAPI {
+
+    /**
+     * Creates request options for cancelEmail without sending the request
+     */
+    async cancelEmailRequestOpts(requestParameters: CancelEmailRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['emailId'] == null) {
+            throw new runtime.RequiredError(
+                'emailId',
+                'Required parameter "emailId" was null or undefined when calling cancelEmail().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("bearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/api/v1/emails/{emailId}/cancel`;
+        urlPath = urlPath.replace('{emailId}', encodeURIComponent(String(requestParameters['emailId'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Marks a still-queued message cancelled so the worker never hands it to the provider. Cancelling after send is rejected.
+     * Cancel a queued email
+     */
+    async cancelEmailRaw(requestParameters: CancelEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Email>> {
+        const requestOptions = await this.cancelEmailRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response);
+    }
+
+    /**
+     * Marks a still-queued message cancelled so the worker never hands it to the provider. Cancelling after send is rejected.
+     * Cancel a queued email
+     */
+    async cancelEmail(requestParameters: CancelEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Email> {
+        const response = await this.cancelEmailRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * Creates request options for getEmail without sending the request
@@ -163,6 +234,61 @@ export class EmailsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Creates request options for listEmails without sending the request
+     */
+    async listEmailsRequestOpts(requestParameters: ListEmailsRequest): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['limit'] != null) {
+            queryParameters['limit'] = requestParameters['limit'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("bearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/api/v1/emails`;
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Lists messages in the organization and environment selected by the bearer key, newest first. Timestamps are RFC 3339 UTC. Attachment bytes, hashes, and storage keys are never returned.
+     * List emails
+     */
+    async listEmailsRaw(requestParameters: ListEmailsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<EmailListEnvelope>> {
+        const requestOptions = await this.listEmailsRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response);
+    }
+
+    /**
+     * Lists messages in the organization and environment selected by the bearer key, newest first. Timestamps are RFC 3339 UTC. Attachment bytes, hashes, and storage keys are never returned.
+     * List emails
+     */
+    async listEmails(requestParameters: ListEmailsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<EmailListEnvelope> {
+        const response = await this.listEmailsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Creates request options for receiveInboundEmail without sending the request
      */
     async receiveInboundEmailRequestOpts(requestParameters: ReceiveInboundEmailRequest): Promise<runtime.RequestOpts> {
@@ -220,6 +346,71 @@ export class EmailsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Creates request options for rescheduleEmail without sending the request
+     */
+    async rescheduleEmailRequestOpts(requestParameters: RescheduleEmailRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['emailId'] == null) {
+            throw new runtime.RequiredError(
+                'emailId',
+                'Required parameter "emailId" was null or undefined when calling rescheduleEmail().'
+            );
+        }
+
+        if (requestParameters['rescheduleEmailInput'] == null) {
+            throw new runtime.RequiredError(
+                'rescheduleEmailInput',
+                'Required parameter "rescheduleEmailInput" was null or undefined when calling rescheduleEmail().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("bearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/api/v1/emails/{emailId}`;
+        urlPath = urlPath.replace('{emailId}', encodeURIComponent(String(requestParameters['emailId'])));
+
+        return {
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: requestParameters['rescheduleEmailInput'],
+        };
+    }
+
+    /**
+     * Moves a still-queued message to a new scheduled_at instant. Only queued messages can be rescheduled; sent, failed, and cancelled messages are rejected. Past values make the message due immediately.
+     * Reschedule a queued email
+     */
+    async rescheduleEmailRaw(requestParameters: RescheduleEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Email>> {
+        const requestOptions = await this.rescheduleEmailRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response);
+    }
+
+    /**
+     * Moves a still-queued message to a new scheduled_at instant. Only queued messages can be rescheduled; sent, failed, and cancelled messages are rejected. Past values make the message due immediately.
+     * Reschedule a queued email
+     */
+    async rescheduleEmail(requestParameters: RescheduleEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Email> {
+        const response = await this.rescheduleEmailRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Creates request options for sendEmail without sending the request
      */
     async sendEmailRequestOpts(requestParameters: SendEmailRequest): Promise<runtime.RequestOpts> {
@@ -261,7 +452,7 @@ export class EmailsApi extends runtime.BaseAPI {
     }
 
     /**
-     * Validates and stores one provider-neutral message. Test keys always use the isolated test sink. Live keys require a verified organization domain, active DKIM state, and configured credentials for the resolved organization default or domain override. Provider choice is snapshotted on the queued message. Cloudflare Email Service remains responsible for provider-owned DKIM and ARC signatures. Idempotency may be supplied in the header or JSON body and is active for 24 hours per API key.
+     * Validates and stores one provider-neutral message. Test keys always use the isolated test sink. Live keys require a verified organization domain, active DKIM state, and configured credentials for the resolved organization default or domain override. Provider choice is snapshotted on the queued message. Cloudflare Email Service remains responsible for provider-owned DKIM and ARC signatures. Idempotency may be supplied in the header or JSON body and is active for 24 hours per API key. A future scheduled_at holds the message until its time; past values send immediately.
      * Queue one email
      */
     async sendEmailRaw(requestParameters: SendEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<QueuedEmail>> {
@@ -272,7 +463,7 @@ export class EmailsApi extends runtime.BaseAPI {
     }
 
     /**
-     * Validates and stores one provider-neutral message. Test keys always use the isolated test sink. Live keys require a verified organization domain, active DKIM state, and configured credentials for the resolved organization default or domain override. Provider choice is snapshotted on the queued message. Cloudflare Email Service remains responsible for provider-owned DKIM and ARC signatures. Idempotency may be supplied in the header or JSON body and is active for 24 hours per API key.
+     * Validates and stores one provider-neutral message. Test keys always use the isolated test sink. Live keys require a verified organization domain, active DKIM state, and configured credentials for the resolved organization default or domain override. Provider choice is snapshotted on the queued message. Cloudflare Email Service remains responsible for provider-owned DKIM and ARC signatures. Idempotency may be supplied in the header or JSON body and is active for 24 hours per API key. A future scheduled_at holds the message until its time; past values send immediately.
      * Queue one email
      */
     async sendEmail(requestParameters: SendEmailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<QueuedEmail> {

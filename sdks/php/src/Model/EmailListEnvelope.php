@@ -1,6 +1,6 @@
 <?php
 /**
- * WebhookEvent
+ * EmailListEnvelope
  *
  * PHP version 8.1
  *
@@ -32,7 +32,7 @@ use \ArrayAccess;
 use \PaperBoy\OpenApi\ObjectSerializer;
 
 /**
- * WebhookEvent Class Doc Comment
+ * EmailListEnvelope Class Doc Comment
  *
  * @category Class
  * @package  PaperBoy\OpenApi
@@ -40,7 +40,7 @@ use \PaperBoy\OpenApi\ObjectSerializer;
  * @link     https://openapi-generator.tech
  * @implements \ArrayAccess<string, mixed>
  */
-class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
+class EmailListEnvelope implements ModelInterface, ArrayAccess, \JsonSerializable
 {
     public const DISCRIMINATOR = null;
 
@@ -49,7 +49,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      *
      * @var string
      */
-    protected static $openAPIModelName = 'WebhookEvent';
+    protected static $openAPIModelName = 'EmailListEnvelope';
 
     /**
      * Array of property to type mappings. Used for (de)serialization
@@ -57,9 +57,10 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $openAPITypes = [
-        'created_at' => '\DateTime',
-        'data' => '\PaperBoy\OpenApi\Model\WebhookEventData',
-        'type' => 'string'
+        'data' => '\PaperBoy\OpenApi\Model\EmailSummary[]',
+        'limit' => 'int',
+        'page' => 'int',
+        'total' => 'int'
     ];
 
     /**
@@ -70,9 +71,10 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @psalm-var array<string, string|null>
      */
     protected static $openAPIFormats = [
-        'created_at' => 'date-time',
         'data' => null,
-        'type' => null
+        'limit' => null,
+        'page' => null,
+        'total' => null
     ];
 
     /**
@@ -81,9 +83,10 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var boolean[]
      */
     protected static array $openAPINullables = [
-        'created_at' => false,
         'data' => false,
-        'type' => false
+        'limit' => false,
+        'page' => false,
+        'total' => false
     ];
 
     /**
@@ -172,9 +175,10 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $attributeMap = [
-        'created_at' => 'created_at',
         'data' => 'data',
-        'type' => 'type'
+        'limit' => 'limit',
+        'page' => 'page',
+        'total' => 'total'
     ];
 
     /**
@@ -183,9 +187,10 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $setters = [
-        'created_at' => 'setCreatedAt',
         'data' => 'setData',
-        'type' => 'setType'
+        'limit' => 'setLimit',
+        'page' => 'setPage',
+        'total' => 'setTotal'
     ];
 
     /**
@@ -194,9 +199,10 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      * @var string[]
      */
     protected static $getters = [
-        'created_at' => 'getCreatedAt',
         'data' => 'getData',
-        'type' => 'getType'
+        'limit' => 'getLimit',
+        'page' => 'getPage',
+        'total' => 'getTotal'
     ];
 
     /**
@@ -240,35 +246,6 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
         return self::$openAPIModelName;
     }
 
-    public const TYPE_EMAIL_QUEUED = 'email.queued';
-    public const TYPE_EMAIL_DELIVERED = 'email.delivered';
-    public const TYPE_EMAIL_DEFERRED = 'email.deferred';
-    public const TYPE_EMAIL_BOUNCED = 'email.bounced';
-    public const TYPE_EMAIL_COMPLAINED = 'email.complained';
-    public const TYPE_EMAIL_OPENED = 'email.opened';
-    public const TYPE_EMAIL_CLICKED = 'email.clicked';
-    public const TYPE_EMAIL_SCHEDULED = 'email.scheduled';
-    public const TYPE_EMAIL_CANCELLED = 'email.cancelled';
-
-    /**
-     * Gets allowable values of the enum
-     *
-     * @return string[]
-     */
-    public function getTypeAllowableValues()
-    {
-        return [
-            self::TYPE_EMAIL_QUEUED,
-            self::TYPE_EMAIL_DELIVERED,
-            self::TYPE_EMAIL_DEFERRED,
-            self::TYPE_EMAIL_BOUNCED,
-            self::TYPE_EMAIL_COMPLAINED,
-            self::TYPE_EMAIL_OPENED,
-            self::TYPE_EMAIL_CLICKED,
-            self::TYPE_EMAIL_SCHEDULED,
-            self::TYPE_EMAIL_CANCELLED,
-        ];
-    }
 
     /**
      * Associative array for storing property values
@@ -285,9 +262,10 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
      */
     public function __construct(?array $data = null)
     {
-        $this->setIfExists('created_at', $data ?? [], null);
         $this->setIfExists('data', $data ?? [], null);
-        $this->setIfExists('type', $data ?? [], null);
+        $this->setIfExists('limit', $data ?? [], null);
+        $this->setIfExists('page', $data ?? [], null);
+        $this->setIfExists('total', $data ?? [], null);
     }
 
     /**
@@ -317,22 +295,32 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
     {
         $invalidProperties = [];
 
-        if ($this->container['created_at'] === null) {
-            $invalidProperties[] = "'created_at' can't be null";
-        }
         if ($this->container['data'] === null) {
             $invalidProperties[] = "'data' can't be null";
         }
-        if ($this->container['type'] === null) {
-            $invalidProperties[] = "'type' can't be null";
+        if ($this->container['limit'] === null) {
+            $invalidProperties[] = "'limit' can't be null";
         }
-        $allowedValues = $this->getTypeAllowableValues();
-        if (!is_null($this->container['type']) && !in_array($this->container['type'], $allowedValues, true)) {
-            $invalidProperties[] = sprintf(
-                "invalid value '%s' for 'type', must be one of '%s'",
-                $this->container['type'],
-                implode("', '", $allowedValues)
-            );
+        if (($this->container['limit'] > 100)) {
+            $invalidProperties[] = "invalid value for 'limit', must be smaller than or equal to 100.";
+        }
+
+        if (($this->container['limit'] < 1)) {
+            $invalidProperties[] = "invalid value for 'limit', must be bigger than or equal to 1.";
+        }
+
+        if ($this->container['page'] === null) {
+            $invalidProperties[] = "'page' can't be null";
+        }
+        if (($this->container['page'] < 1)) {
+            $invalidProperties[] = "invalid value for 'page', must be bigger than or equal to 1.";
+        }
+
+        if ($this->container['total'] === null) {
+            $invalidProperties[] = "'total' can't be null";
+        }
+        if (($this->container['total'] < 0)) {
+            $invalidProperties[] = "invalid value for 'total', must be bigger than or equal to 0.";
         }
 
         return $invalidProperties;
@@ -351,36 +339,9 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
 
 
     /**
-     * Gets created_at
-     *
-     * @return \DateTime
-     */
-    public function getCreatedAt()
-    {
-        return $this->container['created_at'];
-    }
-
-    /**
-     * Sets created_at
-     *
-     * @param \DateTime $created_at RFC 3339 UTC instant. PaperBoy serializes this with a trailing `Z`.
-     *
-     * @return self
-     */
-    public function setCreatedAt($created_at)
-    {
-        if (is_null($created_at)) {
-            throw new \InvalidArgumentException('non-nullable created_at cannot be null');
-        }
-        $this->container['created_at'] = $created_at;
-
-        return $this;
-    }
-
-    /**
      * Gets data
      *
-     * @return \PaperBoy\OpenApi\Model\WebhookEventData
+     * @return \PaperBoy\OpenApi\Model\EmailSummary[]
      */
     public function getData()
     {
@@ -390,7 +351,7 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
     /**
      * Sets data
      *
-     * @param \PaperBoy\OpenApi\Model\WebhookEventData $data data
+     * @param \PaperBoy\OpenApi\Model\EmailSummary[] $data data
      *
      * @return self
      */
@@ -405,38 +366,97 @@ class WebhookEvent implements ModelInterface, ArrayAccess, \JsonSerializable
     }
 
     /**
-     * Gets type
+     * Gets limit
      *
-     * @return string
+     * @return int
      */
-    public function getType()
+    public function getLimit()
     {
-        return $this->container['type'];
+        return $this->container['limit'];
     }
 
     /**
-     * Sets type
+     * Sets limit
      *
-     * @param string $type type
+     * @param int $limit limit
      *
      * @return self
      */
-    public function setType($type)
+    public function setLimit($limit)
     {
-        if (is_null($type)) {
-            throw new \InvalidArgumentException('non-nullable type cannot be null');
+        if (is_null($limit)) {
+            throw new \InvalidArgumentException('non-nullable limit cannot be null');
         }
-        $allowedValues = $this->getTypeAllowableValues();
-        if (!in_array($type, $allowedValues, true)) {
-            throw new \InvalidArgumentException(
-                sprintf(
-                    "Invalid value '%s' for 'type', must be one of '%s'",
-                    $type,
-                    implode("', '", $allowedValues)
-                )
-            );
+        if (($limit > 100)) {
+            throw new \InvalidArgumentException('invalid value for $limit when calling EmailListEnvelope., must be smaller than or equal to 100.');
         }
-        $this->container['type'] = $type;
+        if (($limit < 1)) {
+            throw new \InvalidArgumentException('invalid value for $limit when calling EmailListEnvelope., must be bigger than or equal to 1.');
+        }
+
+        $this->container['limit'] = $limit;
+
+        return $this;
+    }
+
+    /**
+     * Gets page
+     *
+     * @return int
+     */
+    public function getPage()
+    {
+        return $this->container['page'];
+    }
+
+    /**
+     * Sets page
+     *
+     * @param int $page page
+     *
+     * @return self
+     */
+    public function setPage($page)
+    {
+        if (is_null($page)) {
+            throw new \InvalidArgumentException('non-nullable page cannot be null');
+        }
+        if (($page < 1)) {
+            throw new \InvalidArgumentException('invalid value for $page when calling EmailListEnvelope., must be bigger than or equal to 1.');
+        }
+
+        $this->container['page'] = $page;
+
+        return $this;
+    }
+
+    /**
+     * Gets total
+     *
+     * @return int
+     */
+    public function getTotal()
+    {
+        return $this->container['total'];
+    }
+
+    /**
+     * Sets total
+     *
+     * @param int $total total
+     *
+     * @return self
+     */
+    public function setTotal($total)
+    {
+        if (is_null($total)) {
+            throw new \InvalidArgumentException('non-nullable total cannot be null');
+        }
+        if (($total < 0)) {
+            throw new \InvalidArgumentException('invalid value for $total when calling EmailListEnvelope., must be bigger than or equal to 0.');
+        }
+
+        $this->container['total'] = $total;
 
         return $this;
     }

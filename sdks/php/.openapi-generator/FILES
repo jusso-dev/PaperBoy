@@ -39,6 +39,8 @@ src/Model/Email.php
 src/Model/EmailAttachment.php
 src/Model/EmailBatchEnvelope.php
 src/Model/EmailBatchItem.php
+src/Model/EmailListEnvelope.php
+src/Model/EmailSummary.php
 src/Model/EmailTag.php
 src/Model/ErrorEnvelope.php
 src/Model/ErrorEnvelopeError.php
@@ -74,6 +76,7 @@ src/Model/ReceivedEmail.php
 src/Model/ReceivedEmailAccepted.php
 src/Model/ReceivedEmailDiscarded.php
 src/Model/Recipients.php
+src/Model/RescheduleEmailInput.php
 src/Model/SendEmailInput.php
 src/Model/StoredAttachment.php
 src/Model/Suppression.php

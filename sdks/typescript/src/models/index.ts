@@ -703,6 +703,24 @@ export interface Email {
     click_tracking_enabled: boolean;
     /**
      * 
+     * @type {any}
+     * @memberof Email
+     */
+    scheduled_at: any | null;
+    /**
+     * 
+     * @type {any}
+     * @memberof Email
+     */
+    cancelled_at: any | null;
+    /**
+     * 
+     * @type {string}
+     * @memberof Email
+     */
+    provider_message_id: string | null;
+    /**
+     * 
      * @type {MessageOutboundProvider}
      * @memberof Email
      */
@@ -785,7 +803,8 @@ export const EmailStatusEnum = {
     queued: 'queued',
     sending: 'sending',
     sent: 'sent',
-    failed: 'failed'
+    failed: 'failed',
+    cancelled: 'cancelled'
 } as const;
 export type EmailStatusEnum = typeof EmailStatusEnum[keyof typeof EmailStatusEnum];
 
@@ -852,6 +871,165 @@ export interface EmailBatchItem {
      */
     error?: { [key: string]: any; };
 }
+/**
+ * 
+ * @export
+ * @interface EmailListEnvelope
+ */
+export interface EmailListEnvelope {
+    /**
+     * 
+     * @type {Array<EmailSummary>}
+     * @memberof EmailListEnvelope
+     */
+    data: Array<EmailSummary>;
+    /**
+     * 
+     * @type {number}
+     * @memberof EmailListEnvelope
+     */
+    limit: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof EmailListEnvelope
+     */
+    page: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof EmailListEnvelope
+     */
+    total: number;
+}
+/**
+ * 
+ * @export
+ * @interface EmailSummary
+ */
+export interface EmailSummary {
+    /**
+     * 
+     * @type {any}
+     * @memberof EmailSummary
+     */
+    cancelled_at: any | null;
+    /**
+     * RFC 3339 UTC instant. PaperBoy serializes this with a trailing `Z`.
+     * @type {string}
+     * @memberof EmailSummary
+     */
+    created_at: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof EmailSummary
+     */
+    domain_id: string | null;
+    /**
+     * 
+     * @type {EmailSummaryEnvironmentEnum}
+     * @memberof EmailSummary
+     */
+    environment: EmailSummaryEnvironmentEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof EmailSummary
+     */
+    from: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof EmailSummary
+     */
+    id: string;
+    /**
+     * 
+     * @type {EmailSummaryObjectEnum}
+     * @memberof EmailSummary
+     */
+    object: EmailSummaryObjectEnum;
+    /**
+     * 
+     * @type {MessageOutboundProvider}
+     * @memberof EmailSummary
+     */
+    provider: MessageOutboundProvider;
+    /**
+     * 
+     * @type {string}
+     * @memberof EmailSummary
+     */
+    provider_message_id: string | null;
+    /**
+     * 
+     * @type {any}
+     * @memberof EmailSummary
+     */
+    scheduled_at: any | null;
+    /**
+     * 
+     * @type {any}
+     * @memberof EmailSummary
+     */
+    sent_at: any | null;
+    /**
+     * 
+     * @type {EmailSummaryStatusEnum}
+     * @memberof EmailSummary
+     */
+    status: EmailSummaryStatusEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof EmailSummary
+     */
+    subject: string;
+    /**
+     * 
+     * @type {Array<string>}
+     * @memberof EmailSummary
+     */
+    to: Array<string>;
+    /**
+     * RFC 3339 UTC instant. PaperBoy serializes this with a trailing `Z`.
+     * @type {string}
+     * @memberof EmailSummary
+     */
+    updated_at: string;
+}
+
+
+/**
+ * @export
+ */
+export const EmailSummaryEnvironmentEnum = {
+    live: 'live',
+    test: 'test'
+} as const;
+export type EmailSummaryEnvironmentEnum = typeof EmailSummaryEnvironmentEnum[keyof typeof EmailSummaryEnvironmentEnum];
+
+/**
+ * @export
+ */
+export const EmailSummaryObjectEnum = {
+    email: 'email'
+} as const;
+export type EmailSummaryObjectEnum = typeof EmailSummaryObjectEnum[keyof typeof EmailSummaryObjectEnum];
+
+/**
+ * @export
+ */
+export const EmailSummaryStatusEnum = {
+    queued: 'queued',
+    sending: 'sending',
+    sent: 'sent',
+    failed: 'failed',
+    cancelled: 'cancelled'
+} as const;
+export type EmailSummaryStatusEnum = typeof EmailSummaryStatusEnum[keyof typeof EmailSummaryStatusEnum];
+
 /**
  * 
  * @export
@@ -1016,6 +1194,12 @@ export interface InlineEmailInput {
      * @memberof InlineEmailInput
      */
     headers?: { [key: string]: string; };
+    /**
+     * ISO 8601 instant. Future values queue the message for later delivery; past values send immediately.
+     * @type {string}
+     * @memberof InlineEmailInput
+     */
+    scheduled_at?: string;
 }
 /**
  * 
@@ -1105,7 +1289,9 @@ export const MessageEventTypeEnum = {
     bounced: 'bounced',
     complained: 'complained',
     opened: 'opened',
-    clicked: 'clicked'
+    clicked: 'clicked',
+    scheduled: 'scheduled',
+    cancelled: 'cancelled'
 } as const;
 export type MessageEventTypeEnum = typeof MessageEventTypeEnum[keyof typeof MessageEventTypeEnum];
 
@@ -2018,6 +2204,19 @@ export type ReceivedEmailDiscardedReasonEnum = typeof ReceivedEmailDiscardedReas
  */
 export type Recipients = Array<string> | string;
 /**
+ * 
+ * @export
+ * @interface RescheduleEmailInput
+ */
+export interface RescheduleEmailInput {
+    /**
+     * ISO 8601 instant. Future values queue the message for later delivery; past values send immediately.
+     * @type {string}
+     * @memberof RescheduleEmailInput
+     */
+    scheduled_at: string;
+}
+/**
  * @type SendEmailInput
  * 
  * @export
@@ -2310,6 +2509,12 @@ export interface TemplateEmailInput {
      * @memberof TemplateEmailInput
      */
     headers?: { [key: string]: string; };
+    /**
+     * ISO 8601 instant. Future values queue the message for later delivery; past values send immediately.
+     * @type {string}
+     * @memberof TemplateEmailInput
+     */
+    scheduled_at?: string;
 }
 /**
  * 
@@ -2561,7 +2766,9 @@ export const WebhookEventTypeEnum = {
     email_bounced: 'email.bounced',
     email_complained: 'email.complained',
     email_opened: 'email.opened',
-    email_clicked: 'email.clicked'
+    email_clicked: 'email.clicked',
+    email_scheduled: 'email.scheduled',
+    email_cancelled: 'email.cancelled'
 } as const;
 export type WebhookEventTypeEnum = typeof WebhookEventTypeEnum[keyof typeof WebhookEventTypeEnum];
 

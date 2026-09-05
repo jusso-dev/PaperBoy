@@ -72,9 +72,12 @@ All URIs are relative to *http://localhost*
 *BroadcastsApi* | [**pauseBroadcast**](docs/BroadcastsApi.md#pausebroadcast) | **POST** /api/v1/broadcasts/{broadcastId}/pause | Pause a running broadcast
 *BroadcastsApi* | [**resumeBroadcast**](docs/BroadcastsApi.md#resumebroadcast) | **POST** /api/v1/broadcasts/{broadcastId}/resume | Resume a paused broadcast
 *BroadcastsApi* | [**updateBroadcast**](docs/BroadcastsApi.md#updatebroadcast) | **PATCH** /api/v1/broadcasts/{broadcastId} | Update a scheduled broadcast
+*EmailsApi* | [**cancelEmail**](docs/EmailsApi.md#cancelemail) | **POST** /api/v1/emails/{emailId}/cancel | Cancel a queued email
 *EmailsApi* | [**getEmail**](docs/EmailsApi.md#getemail) | **GET** /api/v1/emails/{emailId} | Get one email
 *EmailsApi* | [**getReceivedEmail**](docs/EmailsApi.md#getreceivedemail) | **GET** /api/v1/received-emails/{emailId} | Get one inbound email
+*EmailsApi* | [**listEmails**](docs/EmailsApi.md#listemails) | **GET** /api/v1/emails | List emails
 *EmailsApi* | [**receiveInboundEmail**](docs/EmailsApi.md#receiveinboundemail) | **POST** /api/v1/received-emails | Store one inbound email
+*EmailsApi* | [**rescheduleEmail**](docs/EmailsApi.md#rescheduleemail) | **PATCH** /api/v1/emails/{emailId} | Reschedule a queued email
 *EmailsApi* | [**sendEmail**](docs/EmailsApi.md#sendemail) | **POST** /api/v1/emails | Queue one email
 *EmailsApi* | [**sendEmailBatch**](docs/EmailsApi.md#sendemailbatch) | **POST** /api/v1/emails/batch | Queue one to 100 emails
 *EventsApi* | [**listEmailEvents**](docs/EventsApi.md#listemailevents) | **GET** /api/v1/emails/{emailId}/events | List one email\&#39;s events
@@ -125,6 +128,8 @@ All URIs are relative to *http://localhost*
 - [EmailAttachment](docs/EmailAttachment.md)
 - [EmailBatchEnvelope](docs/EmailBatchEnvelope.md)
 - [EmailBatchItem](docs/EmailBatchItem.md)
+- [EmailListEnvelope](docs/EmailListEnvelope.md)
+- [EmailSummary](docs/EmailSummary.md)
 - [EmailTag](docs/EmailTag.md)
 - [ErrorEnvelope](docs/ErrorEnvelope.md)
 - [ErrorEnvelopeError](docs/ErrorEnvelopeError.md)
@@ -159,6 +164,7 @@ All URIs are relative to *http://localhost*
 - [ReceivedEmailAccepted](docs/ReceivedEmailAccepted.md)
 - [ReceivedEmailDiscarded](docs/ReceivedEmailDiscarded.md)
 - [Recipients](docs/Recipients.md)
+- [RescheduleEmailInput](docs/RescheduleEmailInput.md)
 - [SendEmailInput](docs/SendEmailInput.md)
 - [StoredAttachment](docs/StoredAttachment.md)
 - [Suppression](docs/Suppression.md)
