@@ -77,6 +77,7 @@ export type Email = {
   next_attempt_at: string | null;
   object: "email";
   open_tracking_enabled: boolean;
+  click_tracking_enabled: boolean;
   provider: PaperBoyOutboundProvider;
   sent_at: string | null;
   status: PaperBoyMessageStatus;

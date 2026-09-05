@@ -30,6 +30,7 @@ export type MessageAttachmentMetadata = {
 
 export type MessageDetailRecord = MessageDeliveryStatusRecord & {
   attachments: MessageAttachmentMetadata[];
+  clickTrackingEnabled: boolean;
   from: string;
   html: string | null;
   openTrackingEnabled: boolean;
@@ -142,6 +143,7 @@ export async function getMessageDetail(
   const [rows, attachments] = await Promise.all([
     db
       .select({
+        clickTrackingEnabled: messages.clickTrackingEnabled,
         from: messages.from,
         html: messages.html,
         openTrackingEnabled: messages.openTrackingEnabled,
@@ -202,7 +204,10 @@ export async function recordMessageEvent(input: {
 }): Promise<MessageEventRecord> {
   return db.transaction(async (tx) => {
     const [message] = await tx
-      .select({ openTrackingEnabled: messages.openTrackingEnabled })
+      .select({
+        clickTrackingEnabled: messages.clickTrackingEnabled,
+        openTrackingEnabled: messages.openTrackingEnabled,
+      })
       .from(messages)
       .where(eq(messages.id, input.messageId))
       .limit(1)
@@ -213,18 +218,19 @@ export async function recordMessageEvent(input: {
     }
 
     requireMessageEventAllowed({
+      clickTrackingEnabled: message.clickTrackingEnabled,
       openTrackingEnabled: message.openTrackingEnabled,
       type: input.type,
     });
 
-    if (input.type === "opened") {
+    if (input.type === "opened" || input.type === "clicked") {
       const [existing] = await tx
         .select()
         .from(events)
         .where(
           and(
             eq(events.messageId, input.messageId),
-            eq(events.type, "opened"),
+            eq(events.type, input.type),
           ),
         )
         .limit(1);

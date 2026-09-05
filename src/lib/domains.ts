@@ -47,6 +47,8 @@ export { DomainError } from "@/lib/domain-core";
 export type { DomainErrorCode } from "@/lib/domain-core";
 
 export type SendingDomainRecord = {
+  clickTrackingEnabled: boolean;
+  clickTrackingSubdomain: string | null;
   createdAt: Date;
   dkimKeys: DkimKeyRecord[];
   dnsChecks: DomainDnsCheckSnapshot;
@@ -81,6 +83,8 @@ export function configuredSpfRecord(): string {
 
 function normalizeDomainRow(
   row: {
+    clickTrackingEnabled?: boolean | null;
+    clickTrackingSubdomain?: string | null;
     createdAt: Date;
     dnsChecks: unknown;
     id: string;
@@ -95,6 +99,8 @@ function normalizeDomainRow(
 ): SendingDomainRecord {
   return {
     ...row,
+    clickTrackingEnabled: row.clickTrackingEnabled === true,
+    clickTrackingSubdomain: row.clickTrackingSubdomain ?? null,
     dkimKeys,
     dnsChecks: normalizeDnsChecks(row.dnsChecks),
     status: isDomainStatus(row.status) ? row.status : "pending",
@@ -133,6 +139,8 @@ async function getDomainAccess(input: {
 }): Promise<DomainAccess> {
   const [row] = await db
     .select({
+      clickTrackingEnabled: domains.clickTrackingEnabled,
+      clickTrackingSubdomain: domains.clickTrackingSubdomain,
       createdAt: domains.createdAt,
       dnsChecks: domains.dnsChecks,
       id: domains.id,
@@ -270,6 +278,8 @@ export async function createDomain(input: {
         .insert(domains)
         .values({ id: domainId, name, orgId: input.orgId })
         .returning({
+          clickTrackingEnabled: domains.clickTrackingEnabled,
+          clickTrackingSubdomain: domains.clickTrackingSubdomain,
           createdAt: domains.createdAt,
           dnsChecks: domains.dnsChecks,
           id: domains.id,
@@ -319,6 +329,8 @@ export async function listDomains(input: {
 
   const rows = await db
     .select({
+      clickTrackingEnabled: domains.clickTrackingEnabled,
+      clickTrackingSubdomain: domains.clickTrackingSubdomain,
       createdAt: domains.createdAt,
       dnsChecks: domains.dnsChecks,
       id: domains.id,
@@ -495,6 +507,8 @@ export async function verifyDomain(input: {
         and(eq(domains.id, input.domainId), eq(domains.orgId, input.orgId)),
       )
       .returning({
+        clickTrackingEnabled: domains.clickTrackingEnabled,
+        clickTrackingSubdomain: domains.clickTrackingSubdomain,
         createdAt: domains.createdAt,
         dnsChecks: domains.dnsChecks,
         id: domains.id,
